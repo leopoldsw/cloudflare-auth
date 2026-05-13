@@ -8,7 +8,7 @@ Run on May 13, 2026 with Node v26.0.0:
 {
   "profile": "development-fast",
   "p50Ms": 25,
-  "p95Ms": 29
+  "p95Ms": 25
 }
 ```
 
