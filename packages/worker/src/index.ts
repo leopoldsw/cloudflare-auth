@@ -1443,15 +1443,67 @@ async function createAndSendToken(
         : "/password/reset";
   const url = `${runtime.publicOrigin}${runtime.config.basePath}${path}?token=${encodeURIComponent(token)}`;
   const input = { to, token, url, redirectTo, expiresAt: now + ttlMs };
-  if (rawPurpose === "magic")
-    await runtime.config.email.sendMagicLink(input, emailRuntime(runtime));
-  else if (rawPurpose === "verify")
-    await runtime.config.email.sendEmailVerification(
-      input,
-      emailRuntime(runtime),
-    );
-  else
-    await runtime.config.email.sendPasswordReset(input, emailRuntime(runtime));
+  try {
+    if (rawPurpose === "magic")
+      await runtime.config.email.sendMagicLink(input, emailRuntime(runtime));
+    else if (rawPurpose === "verify")
+      await runtime.config.email.sendEmailVerification(
+        input,
+        emailRuntime(runtime),
+      );
+    else
+      await runtime.config.email.sendPasswordReset(
+        input,
+        emailRuntime(runtime),
+      );
+  } catch (error) {
+    await recordEmailSendFailure(runtime, {
+      type,
+      userId,
+      normalizedEmail,
+      error,
+    });
+  }
+}
+
+async function recordEmailSendFailure(
+  runtime: RuntimeContext,
+  input: {
+    type: "magic_link" | "email_verification" | "password_reset";
+    userId: string | null;
+    normalizedEmail: string | null;
+    error: unknown;
+  },
+): Promise<void> {
+  const metadata = {
+    tokenType: input.type,
+    subjectType: input.userId
+      ? "user"
+      : input.normalizedEmail
+        ? "normalized_email"
+        : "unknown",
+    adapter: runtime.config.email.kind ?? "unknown",
+    errorCode:
+      input.error instanceof AuthCryptoError
+        ? input.error.code
+        : "email_send_failed",
+    errorName: input.error instanceof Error ? input.error.name : "UnknownError",
+  };
+  runtime.logger.error("email_send_failed", metadata);
+  try {
+    await runtime.repos.events.writeAuthEvent({
+      id: randomId("evt_"),
+      userId: input.userId,
+      eventType: "email_send_failed",
+      createdAt: Date.now(),
+      requestId: runtime.requestId,
+      metadataJson: JSON.stringify(metadata),
+    });
+  } catch (eventError) {
+    runtime.logger.error("email_send_failed_event_write_failed", {
+      errorName: eventError instanceof Error ? eventError.name : "UnknownError",
+    });
+  }
 }
 
 function tokenPage(

@@ -4,6 +4,7 @@ import { AuthCryptoError } from "@cf-auth/core";
 import { cloudflareEmail } from "@cf-auth/email-cloudflare";
 import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
 import {
+  type AuthEmailAdapter,
   createAuthHandler,
   defineAuthConfig,
   terminalEmail,
@@ -123,6 +124,81 @@ describe("email adapters and templates", () => {
       },
     });
     expect(sent[0]?.subject).toBe("Custom Cloudflare Auth");
+  });
+
+  it("records redacted email send failures and keeps request responses generic", async () => {
+    const db = createSqliteD1Database();
+    await applyD1Migrations(db, [
+      await readFile("migrations/0001_initial.sql", "utf8"),
+      await readFile("migrations/0002_indexes.sql", "utf8"),
+    ]);
+    const adapter: AuthEmailAdapter = {
+      kind: "failing-test",
+      async sendMagicLink() {
+        throw new Error(
+          "provider failed for person@example.com cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        );
+      },
+      async sendEmailVerification() {},
+      async sendPasswordReset() {},
+    };
+    const handler = createAuthHandler(
+      defineAuthConfig({
+        appName: "Email Failure Test",
+        basePath: "/auth",
+        email: adapter,
+        passwordHashing: {
+          profile: "development-fast",
+          maxConcurrentHashesPerIsolate: 1,
+        },
+      }),
+    );
+    const env = {
+      AUTH_DB: db,
+      AUTH_SECRET: authSecret,
+      AUTH_ENV: "development",
+      AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+    };
+
+    const signup = await handler.fetch(
+      new Request("http://localhost:8787/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:8787",
+        },
+        body: JSON.stringify({
+          email: "person@example.com",
+          password: "correct horse battery staple",
+        }),
+      }),
+      env,
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+    expect(signup?.status).toBe(200);
+
+    const request = await handler.fetch(
+      new Request("http://localhost:8787/auth/magic-link/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:8787",
+        },
+        body: JSON.stringify({ email: "person@example.com" }),
+      }),
+      env,
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+    expect(request?.status).toBe(200);
+    await expect(request?.json()).resolves.toEqual({ ok: true });
+    const event = await db
+      .prepare(
+        "SELECT event_type, metadata_json FROM auth_events ORDER BY created_at DESC LIMIT 1",
+      )
+      .first<{ event_type: string; metadata_json: string }>();
+    expect(event?.event_type).toBe("email_send_failed");
+    expect(event?.metadata_json).toContain('"tokenType":"magic_link"');
+    expect(event?.metadata_json).not.toMatch(/person@example\.com|cfauth\./);
   });
 });
 
