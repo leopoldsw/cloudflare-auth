@@ -10,12 +10,14 @@
 - `pnpm build`
 - `pnpm package:check`
 - `pnpm version-matrix:check`
+- `pnpm verify:migrations`
 - `pnpm verify:examples`
 - `pnpm benchmark:password`
 
 ## Prerelease
 
 - package names confirmed or fallback docs updated
+- release workflow `package_names_confirmed` gate set only after package names are verified
 - local clean-directory quickstart passes
 - `doctor --report` attached to the release issue
 - known limitations reviewed

@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      package_names_confirmed:
+        description: "I have confirmed npm package-name ownership or updated fallback docs."
+        required: true
+        type: boolean
 
 permissions:
   contents: write
@@ -12,6 +17,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Require package-name gate
+        if: ${{ !inputs.package_names_confirmed }}
+        run: |
+          echo "Set package_names_confirmed=true only after npm package names and public docs are verified."
+          exit 1
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v5
         with:
@@ -22,8 +32,16 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm build
       - run: pnpm package:check
+      - run: pnpm version-matrix:check
+      - run: pnpm verify:migrations
+      - run: pnpm verify:examples
+      - run: pnpm benchmark:password
       - run: pnpm changeset publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
