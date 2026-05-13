@@ -17,7 +17,8 @@
 | Terminal email reported in production          | Use `byEnvironment(...)` so only development selects `terminalEmail`, and preview/production select Cloudflare/custom email.     |
 | Sender/domain not ready                        | Follow `docs/cloudflare-email.md`.                                                                                               |
 | Cookie not set locally                         | Ensure the dev cookie is not `__Host-` on plain HTTP.                                                                            |
-| Cookie not set in production                   | Check HTTPS, `Secure`, `__Host-`, `Path=/`, and no `Domain`.                                                                     |
+| Cookie not set in production                   | Check HTTPS, `Secure`, `Path=/`, and either host-only `__Host-` with no `Domain` or cross-subdomain `__Secure-` with `Domain`.   |
+| Cross-subdomain cookie rejected                | Set `session.domain` to a leading-dot parent such as `.example.com`; do not include schemes, wildcards, paths, or IP addresses.  |
 | Cookie not sent                                | Check same-origin mode, SameSite, CORS, and fetch credentials.                                                                   |
 | Magic link opens but does not log in           | Submit the confirmation form; `GET` does not consume tokens.                                                                     |
 | Magic link redirect rejected                   | Add the origin/path to the redirect allowlist, not the request-origin allowlist.                                                 |

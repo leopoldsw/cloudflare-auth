@@ -252,12 +252,57 @@ describe("crypto, passwords, tokens, and sessions", () => {
       mode: "production",
       requestOrigin: "https://app.example.com",
       cookieName: "auto",
-      domain: ".example.com",
+      domain: ".Example.COM",
     });
     expect(cross).toMatchObject({
       name: "__Secure-cfauth-session",
       secure: true,
       domain: ".example.com",
     });
+  });
+
+  it("rejects unsafe session cookie names and domains", () => {
+    const base = {
+      mode: "production" as const,
+      requestOrigin: "https://app.example.com",
+    };
+    for (const domain of [
+      "example.com",
+      ".example.com.",
+      ".example..com",
+      "*.example.com",
+      ".127.0.0.1",
+      ".example.com/path",
+      ".example.com; Secure",
+    ]) {
+      expect(() => resolveSessionCookie({ ...base, domain })).toThrow(
+        AuthCryptoError,
+      );
+    }
+    for (const cookieName of ["", "bad name", "bad;name", "bad=name"]) {
+      expect(() => resolveSessionCookie({ ...base, cookieName })).toThrow(
+        AuthCryptoError,
+      );
+    }
+    expect(() =>
+      resolveSessionCookie({
+        mode: "development",
+        requestOrigin: "http://localhost:8787",
+        domain: ".example.test",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      resolveSessionCookie({
+        mode: "development",
+        requestOrigin: "http://localhost:8787",
+        cookieName: "__Secure-cfauth-session",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      resolveSessionCookie({
+        ...base,
+        sameSite: "none" as unknown as "lax",
+      }),
+    ).toThrow(AuthCryptoError);
   });
 });

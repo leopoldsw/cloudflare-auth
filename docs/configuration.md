@@ -9,6 +9,7 @@ Important keys:
 - `runtime.publicOrigin`: exact origin or `from-env`
 - `database.binding`: D1 binding name, default `AUTH_DB`
 - `session.cookieName`: `auto` or explicit cookie name
+- `session.domain`: optional leading-dot parent domain for cross-subdomain cookies
 - `security.allowedRequestOrigins`: request-origin allowlist
 - `redirects.allowedOrigins`: post-auth redirect allowlist
 - `request.maxBodyBytes`: default `16384`
@@ -22,3 +23,8 @@ The stable config surface is tracked in `docs/config-schema.md`.
 Request and redirect origin allowlists must contain exact origins only. Paths,
 queries, fragments, wildcards, credentials, and trailing slash variants are
 rejected during config validation.
+
+Session cookie names must be valid HTTP token names. `session.domain` is only
+for explicit cross-subdomain cookies and must look like `.example.com`; plain
+hostnames, wildcards, IP addresses, paths, schemes, and trailing-dot domains
+are rejected.

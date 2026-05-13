@@ -944,6 +944,49 @@ export interface ResolvedSessionCookie {
   domain?: string;
 }
 
+const cookieNamePattern = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/u;
+const cookieDomainLabelPattern =
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/u;
+
+export function assertValidSessionCookieName(name: string): string {
+  if (!name || !cookieNamePattern.test(name)) {
+    throw new AuthCryptoError(
+      "invalid session cookie name",
+      "invalid_cookie_config",
+    );
+  }
+  return name;
+}
+
+export function assertValidSessionCookieDomain(domain: string): string {
+  const trimmed = domain.trim();
+  if (
+    trimmed !== domain ||
+    trimmed.length > 254 ||
+    !trimmed.startsWith(".") ||
+    trimmed.endsWith(".") ||
+    /[\u0000-\u001F\u007F]/u.test(trimmed)
+  ) {
+    throw new AuthCryptoError(
+      "invalid session cookie Domain",
+      "invalid_cookie_config",
+    );
+  }
+  const hostname = trimmed.slice(1).toLowerCase();
+  const labels = hostname.split(".");
+  if (
+    labels.length < 2 ||
+    isIP(hostname) ||
+    labels.some((label) => !cookieDomainLabelPattern.test(label))
+  ) {
+    throw new AuthCryptoError(
+      "invalid session cookie Domain",
+      "invalid_cookie_config",
+    );
+  }
+  return `.${hostname}`;
+}
+
 export function resolveSessionCookie(input: {
   mode: "development" | "preview" | "production";
   requestOrigin: string;
@@ -952,21 +995,41 @@ export function resolveSessionCookie(input: {
   domain?: string;
 }): ResolvedSessionCookie {
   const origin = new URL(input.requestOrigin);
+  const domain = input.domain
+    ? assertValidSessionCookieDomain(input.domain)
+    : undefined;
   const localHttp =
     input.mode === "development" &&
     origin.protocol === "http:" &&
     ["localhost", "127.0.0.1"].includes(origin.hostname);
   const secure = !localHttp;
+  if (
+    input.sameSite !== undefined &&
+    input.sameSite !== "lax" &&
+    input.sameSite !== "strict"
+  ) {
+    throw new AuthCryptoError(
+      "unsupported SameSite mode",
+      "invalid_cookie_config",
+    );
+  }
+  if (domain && !secure) {
+    throw new AuthCryptoError(
+      "session cookie Domain requires HTTPS",
+      "invalid_cookie_config",
+    );
+  }
   const sameSite = input.sameSite === "strict" ? "Strict" : "Lax";
   const name =
-    input.cookieName && input.cookieName !== "auto"
+    input.cookieName !== undefined && input.cookieName !== "auto"
       ? input.cookieName
       : !secure
         ? "cfauth-session"
-        : input.domain
+        : domain
           ? "__Secure-cfauth-session"
           : "__Host-cfauth-session";
-  if (name.startsWith("__Host-") && (!secure || input.domain)) {
+  assertValidSessionCookieName(name);
+  if (name.startsWith("__Host-") && (!secure || domain)) {
     throw new AuthCryptoError(
       "__Host- cookies require Secure and no Domain",
       "invalid_cookie_config",
@@ -983,7 +1046,7 @@ export function resolveSessionCookie(input: {
     secure,
     sameSite,
     path: "/",
-    ...(input.domain ? { domain: input.domain } : {}),
+    ...(domain ? { domain } : {}),
   };
 }
 

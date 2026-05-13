@@ -17,6 +17,8 @@ import {
   type VerificationTokenRow,
   assertHmacTokenEnvelope,
   assertValidMetadataJson,
+  assertValidSessionCookieDomain,
+  assertValidSessionCookieName,
   assertVerificationTokenSubject,
   canonicalizeIp,
   deriveRateLimitKey,
@@ -809,6 +811,21 @@ function assertSessionOptions(config: AuthConfig): void {
   ) {
     throw new AuthCryptoError(
       "unsupported SameSite mode",
+      "invalid_cookie_config",
+    );
+  }
+  if (config.session.cookieName !== "auto") {
+    assertValidSessionCookieName(config.session.cookieName);
+  }
+  if (config.session.domain) {
+    assertValidSessionCookieDomain(config.session.domain);
+  }
+  if (
+    config.session.cookieName.startsWith("__Host-") &&
+    config.session.domain
+  ) {
+    throw new AuthCryptoError(
+      "__Host- cookies require Secure and no Domain",
       "invalid_cookie_config",
     );
   }

@@ -355,6 +355,71 @@ export default defineAuthConfig({
     );
   });
 
+  it("doctor detects invalid session cookie source config", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+import { cloudflareEmail } from "@cf-auth/email-cloudflare";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: cloudflareEmail({ from: "no-reply@example.com" }),
+  session: {
+    cookieName: "__Host-cfauth-session",
+    domain: ".example.com"
+  }
+});
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Session cookie source config is invalid",
+    );
+  });
+
+  it("doctor checks session cookie source config against local HTTP", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeFile(
+      join(cwd, ".dev.vars"),
+      `AUTH_SECRET=k_dev.${"A".repeat(43)}\n`,
+    );
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  session: {
+    cookieName: "__Secure-cfauth-session"
+  }
+});
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: localDoctorRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Session cookie source config is invalid for this environment",
+    );
+  });
+
   it("doctor accepts byEnvironment terminal email for development only", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);

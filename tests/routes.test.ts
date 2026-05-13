@@ -99,6 +99,30 @@ describe("auth HTTP runtime", () => {
         session: { sameSite: "none" } as unknown as AuthConfig["session"],
       }),
     ).toThrow(AuthCryptoError);
+    expect(() =>
+      defineAuthConfig({
+        appName: "Bad Cookie Name",
+        basePath: "/auth",
+        session: { cookieName: "bad name" } as AuthConfig["session"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      defineAuthConfig({
+        appName: "Bad Cookie Domain",
+        basePath: "/auth",
+        session: { domain: "example.com" } as AuthConfig["session"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      defineAuthConfig({
+        appName: "Bad Host Cookie Domain",
+        basePath: "/auth",
+        session: {
+          cookieName: "__Host-app",
+          domain: ".example.com",
+        } as AuthConfig["session"],
+      }),
+    ).toThrow(AuthCryptoError);
     expect(
       defineAuthConfig({
         appName: "Local Request Origin",

@@ -34,8 +34,13 @@ Environment keys:
 
 Defaults:
 
+- `session.cookieName` defaults to `auto`
+- `session.sameSite` defaults to `lax`
+- `session.domain` is unset unless cross-subdomain cookies are explicitly configured
 - `passwordHashing.profile` defaults to `workers-balanced`
 - `turnstile.mode` defaults to `disabled`
 - `turnstile.endpoints` defaults to `[]` and unknown endpoint names are rejected
+
+`session.domain` must be a leading-dot parent domain such as `.example.com`.
 
 Breaking config changes require an upgrade-guide entry and public API report update.

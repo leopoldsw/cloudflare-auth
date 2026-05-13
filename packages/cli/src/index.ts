@@ -10,6 +10,8 @@ import {
   normalizeEmail,
   type PasswordHashProfileName,
   parseAuthKeyRing,
+  assertValidSessionCookieDomain,
+  assertValidSessionCookieName,
   resolveSessionCookie,
 } from "@cf-auth/core";
 import cliPackageJson from "../package.json" with { type: "json" };
@@ -1113,6 +1115,10 @@ interface AuthSourceInspection {
   turnstileRequiresSecret: boolean;
   passwordHashProfile: PasswordHashProfileName;
   passwordHashConcurrency: number;
+  sessionCookieName: string | null;
+  sessionSameSite: string | null;
+  sessionDomain: string | null;
+  dynamicSessionProperties: string[];
   requireOriginOnUnsafeMethods: boolean;
   requestOrigins: Array<{ property: string; value: string }>;
   dynamicRequestOriginProperties: string[];
@@ -1134,12 +1140,22 @@ async function inspectAuthSource(cwd: string): Promise<AuthSourceInspection> {
     configText,
     "passwordHashing",
   );
+  const sessionText = extractObjectPropertyText(configText, "session");
   const requestText = extractObjectPropertyText(configText, "request");
   const parsedPasswordProfile = parsePasswordProfile(
     passwordHashingText
       ? extractStringProperty(passwordHashingText, "profile")
       : null,
   );
+  const sessionCookieName = sessionText
+    ? extractStringPropertyInspection(sessionText, "cookieName")
+    : { value: null, dynamic: false };
+  const sessionSameSite = sessionText
+    ? extractStringPropertyInspection(sessionText, "sameSite")
+    : { value: null, dynamic: false };
+  const sessionDomain = sessionText
+    ? extractStringPropertyInspection(sessionText, "domain")
+    : { value: null, dynamic: false };
   const byEnvironmentEmailText = extractCallArgumentText(
     configText,
     "byEnvironment",
@@ -1177,6 +1193,14 @@ async function inspectAuthSource(cwd: string): Promise<AuthSourceInspection> {
             "maxConcurrentHashesPerIsolate",
           )
         : null) ?? 1,
+    sessionCookieName: sessionCookieName.value,
+    sessionSameSite: sessionSameSite.value,
+    sessionDomain: sessionDomain.value,
+    dynamicSessionProperties: [
+      ...(sessionCookieName.dynamic ? ["session.cookieName"] : []),
+      ...(sessionSameSite.dynamic ? ["session.sameSite"] : []),
+      ...(sessionDomain.dynamic ? ["session.domain"] : []),
+    ],
     requireOriginOnUnsafeMethods:
       (requestText
         ? extractBooleanProperty(requestText, "requireOriginOnUnsafeMethods")
@@ -1300,6 +1324,8 @@ function checkAuthSource(
     }
   }
 
+  const sessionCookieCheck = checkSessionCookieSource(source, vars);
+  if (sessionCookieCheck) checks.push(sessionCookieCheck);
   const redirectCheck = checkRedirectOrigins(source, vars.AUTH_ENV);
   if (redirectCheck) checks.push(redirectCheck);
   const requestOriginCheck = checkRequestOrigins(source, vars.AUTH_ENV);
@@ -1314,6 +1340,92 @@ function checkAuthSource(
     });
   }
   return checks;
+}
+
+function checkSessionCookieSource(
+  source: AuthSourceInspection,
+  vars: Record<string, string>,
+): DoctorCheck | null {
+  const hasStaticSessionConfig =
+    source.sessionCookieName !== null ||
+    source.sessionSameSite !== null ||
+    source.sessionDomain !== null;
+  try {
+    if (
+      source.sessionCookieName !== null &&
+      source.sessionCookieName !== "auto"
+    ) {
+      assertValidSessionCookieName(source.sessionCookieName);
+    }
+    if (
+      source.sessionSameSite !== null &&
+      source.sessionSameSite !== "lax" &&
+      source.sessionSameSite !== "strict"
+    ) {
+      throw new Error("invalid SameSite");
+    }
+    if (source.sessionDomain !== null) {
+      assertValidSessionCookieDomain(source.sessionDomain);
+    }
+    if (
+      source.sessionCookieName?.startsWith("__Host-") &&
+      source.sessionDomain
+    ) {
+      throw new Error("invalid __Host- Domain combination");
+    }
+  } catch {
+    return {
+      id: "session_cookie_source",
+      status: "fail",
+      message: "Session cookie source config is invalid",
+      fix: "use cookieName auto or a valid token name, SameSite lax/strict, and a leading-dot parent Domain such as .example.com",
+    };
+  }
+  if (source.dynamicSessionProperties.length > 0) {
+    return {
+      id: "session_cookie_source",
+      status: "warn",
+      message: "Session cookie source config contains dynamic values",
+      fix: `verify ${source.dynamicSessionProperties.join(", ")} before deploy`,
+    };
+  }
+  const mode = vars.AUTH_ENV;
+  const origin = vars.AUTH_PUBLIC_ORIGIN;
+  if (!isAuthMode(mode) || !origin) {
+    return hasStaticSessionConfig
+      ? {
+          id: "session_cookie_source",
+          status: "warn",
+          message:
+            "Session cookie source config could not be checked against AUTH_PUBLIC_ORIGIN",
+          fix: "set AUTH_ENV and AUTH_PUBLIC_ORIGIN, then rerun doctor",
+        }
+      : null;
+  }
+  if (!hasStaticSessionConfig) return null;
+  try {
+    resolveSessionCookie({
+      mode,
+      requestOrigin: origin,
+      cookieName: source.sessionCookieName ?? "auto",
+      ...(source.sessionSameSite
+        ? { sameSite: source.sessionSameSite as "lax" | "strict" }
+        : {}),
+      ...(source.sessionDomain ? { domain: source.sessionDomain } : {}),
+    });
+  } catch {
+    return {
+      id: "session_cookie_source",
+      status: "fail",
+      message: "Session cookie source config is invalid for this environment",
+      fix: "check cookie prefix rules, HTTPS public origin, and Domain settings for the selected Wrangler environment",
+    };
+  }
+  return {
+    id: "session_cookie_source",
+    status: "pass",
+    message: "Session cookie source config is valid",
+  };
 }
 
 async function checkPasswordBenchmark(
@@ -1622,6 +1734,20 @@ function extractBooleanProperty(
   if (value === "true") return true;
   if (value === "false") return false;
   return null;
+}
+
+function extractStringPropertyInspection(
+  text: string,
+  property: string,
+): { value: string | null; dynamic: boolean } {
+  const expression = extractPropertyExpression(text, property);
+  if (expression === null) return { value: null, dynamic: false };
+  const literals = extractStringLiterals(expression);
+  const staticRemainder = stripCommentsAndStrings(expression).trim();
+  if (literals.length === 1 && staticRemainder === "") {
+    return { value: literals[0] ?? null, dynamic: false };
+  }
+  return { value: null, dynamic: true };
 }
 
 function parsePasswordProfile(
