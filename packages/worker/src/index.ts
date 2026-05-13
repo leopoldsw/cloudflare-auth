@@ -1455,6 +1455,11 @@ async function handleEmailVerifyConsume(
     });
   if (!consumed?.user_id)
     return errorResponse("Invalid token", 400, "invalid_token");
+  const userBeforeVerify = await runtime.repos.users.findUserById(
+    consumed.user_id,
+  );
+  if (!userBeforeVerify || userBeforeVerify.disabled_at !== null)
+    return errorResponse("Invalid token", 400, "invalid_token");
   await runtime.repos.users.markEmailVerified(consumed.user_id, Date.now());
   const user = await runtime.repos.users.findUserById(consumed.user_id);
   if (!user) return errorResponse("Invalid token", 400, "invalid_token");

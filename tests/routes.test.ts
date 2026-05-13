@@ -336,9 +336,11 @@ describe("auth HTTP runtime", () => {
     await expect(oldSession.json()).resolves.toEqual({ user: null });
   });
 
-  it("rejects password reset confirmation for disabled users", async () => {
+  it("rejects verification and reset confirmation for disabled users", async () => {
     const { authFetch, email, db } = await setup();
     await signup(authFetch, "disabled-reset@example.com");
+    const verify =
+      email.messages.find((item) => item.type === "verify")?.token ?? "";
     await authFetch("/auth/password/reset/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -354,6 +356,24 @@ describe("auth HTTP runtime", () => {
       .prepare("UPDATE users SET disabled_at = ? WHERE normalized_email = ?")
       .bind(Date.now(), "disabled-reset@example.com")
       .run();
+
+    const verifyResponse = await authFetch("/auth/email/verify/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: verify }),
+    });
+    expect(verifyResponse.status).toBe(400);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      error: { code: "invalid_token" },
+    });
+    await expect(
+      db
+        .prepare(
+          "SELECT email_verified_at FROM users WHERE normalized_email = ?",
+        )
+        .bind("disabled-reset@example.com")
+        .first("email_verified_at"),
+    ).resolves.toBeNull();
 
     const confirm = await authFetch("/auth/password/reset/confirm", {
       method: "POST",
