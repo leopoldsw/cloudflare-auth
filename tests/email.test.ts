@@ -17,15 +17,23 @@ const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 describe("email adapters and templates", () => {
   it("stores terminal emails in the dev outbox and rejects terminal sends outside development", async () => {
     const printed: string[] = [];
+    const logged: unknown[] = [];
     const adapter = terminalEmail({
       outbox: true,
       print: (line) => printed.push(line),
     });
-    await adapter.sendMagicLink(sampleEmail(), runtime("development"));
+    await adapter.sendMagicLink(sampleEmail(), {
+      ...runtime("development"),
+      logger: {
+        log: (_message, metadata) => logged.push(metadata),
+        error() {},
+      },
+    });
     expect(adapter.outbox).toHaveLength(1);
     expect(printed[0]).toContain(
       "cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     );
+    expect(JSON.stringify(logged)).not.toContain("person@example.com");
     await expect(
       adapter.sendMagicLink(sampleEmail(), runtime("production")),
     ).rejects.toThrow(AuthCryptoError);

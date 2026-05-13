@@ -783,7 +783,7 @@ export function terminalEmail(
     if (options.outbox) outbox.push(input);
     (options.print ?? console.log)(`[cf-auth dev email] ${input.url}`);
     runtime.logger.log("[cf-auth dev email sent]", {
-      to: input.to,
+      recipient: "present",
       expiresAt: input.expiresAt,
     });
   }
