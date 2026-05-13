@@ -93,7 +93,11 @@ export async function runCli(
         out(await commandMigrate(parsed, cwd));
         return 0;
       case "doctor": {
-        const result = await commandDoctor(parsed, cwd);
+        const result = await commandDoctor(
+          parsed,
+          cwd,
+          io.runCommand ?? runCommand,
+        );
         if (parsed.flags.report) {
           out(JSON.stringify(result.report, null, 2));
           return result.ok ? 0 : 1;
@@ -219,6 +223,7 @@ async function buildMigrateCommand(
 async function commandDoctor(
   parsed: ParsedArgs,
   cwd: string,
+  runner: CommandRunner,
 ): Promise<{ ok: boolean; lines: string[]; report: DoctorReport }> {
   const checks: DoctorCheck[] = [];
   let ok = true;
@@ -331,6 +336,8 @@ async function commandDoctor(
         message: "Cloudflare Email binding AUTH_EMAIL configured",
       });
     }
+    const secretCheck = checkRemoteSecret(envName, cwd, runner);
+    addCheck(secretCheck);
   }
   if (!existsSync(join(cwd, ".dev.vars")) && !envName) {
     addCheck({
@@ -410,7 +417,7 @@ async function commandDeploy(
       "Deploy without --env requires top-level vars.AUTH_ENV=production.",
     );
   }
-  const doctor = await commandDoctor(parsed, cwd);
+  const doctor = await commandDoctor(parsed, cwd, runner);
   if (!doctor.ok) {
     throw new Error(`doctor failed before deploy:\n${doctor.lines.join("\n")}`);
   }
@@ -494,6 +501,68 @@ function runCheckedCommand(
     .filter(Boolean)
     .join("\n");
   return output ? `${display}\n${output}` : display;
+}
+
+function checkRemoteSecret(
+  envName: string | undefined,
+  cwd: string,
+  runner: CommandRunner,
+): DoctorCheck {
+  const args = [
+    "secret",
+    "list",
+    "--format",
+    "json",
+    ...(envName ? ["--env", envName] : []),
+  ];
+  const result = runner("wrangler", args, { cwd });
+  if (result.status !== 0) {
+    return {
+      id: "remote_secret",
+      status: "fail",
+      message: "Remote AUTH_SECRET could not be verified",
+      fix: "run wrangler login, then npx cf-auth@latest rotate-secret --apply --env production",
+    };
+  }
+  const names = parseSecretNames(result.stdout);
+  if (!names.has("AUTH_SECRET")) {
+    return {
+      id: "remote_secret",
+      status: "fail",
+      message: "AUTH_SECRET is missing remotely",
+      fix: "npx cf-auth@latest rotate-secret --apply --env production",
+    };
+  }
+  return {
+    id: "remote_secret",
+    status: "pass",
+    message: "Remote AUTH_SECRET configured",
+  };
+}
+
+function parseSecretNames(text: string): Set<string> {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (
+            typeof item === "object" &&
+            item !== null &&
+            "name" in item &&
+            typeof item.name === "string"
+          ) {
+            return item.name;
+          }
+          return "";
+        })
+        .filter(Boolean),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 function displayCommand(command: string, args: string[]): string {

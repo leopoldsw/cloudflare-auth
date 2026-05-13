@@ -34,6 +34,10 @@ Required placeholders:
 - `AUTH_DB.database_id`: production D1 database ID
 - `AUTH_EMAIL`: Cloudflare Email binding when using Cloudflare Email
 
+`doctor --env production` checks remote Worker secret existence with
+`wrangler secret list --format json`; it can verify that `AUTH_SECRET` exists,
+but it cannot read back or validate the secret value.
+
 Deploying without `--env` fails unless `doctor` proves the top-level Wrangler config is intentionally production-safe.
 
 The Deploy to Cloudflare button readiness checklist is tracked in `docs/deploy-to-cloudflare.md`.

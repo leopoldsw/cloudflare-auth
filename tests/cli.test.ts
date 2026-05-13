@@ -157,6 +157,7 @@ describe("CLI MVP", () => {
     const code = await runCli(["doctor", "--env", "production"], {
       cwd,
       stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
     });
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain(
@@ -174,6 +175,7 @@ describe("CLI MVP", () => {
     const code = await runCli(["doctor", "--report", "--env", "production"], {
       cwd,
       stdout: (line) => output.push(line),
+      runCommand: remoteSecretRunner(),
     });
     const report = JSON.parse(output.join("\n")) as Record<string, unknown>;
     expect(code).toBe(0);
@@ -204,6 +206,7 @@ describe("CLI MVP", () => {
     await runCli(["deploy", "--dry-run", "--env", "production"], {
       cwd,
       stdout: (line) => deploy.push(line),
+      runCommand: remoteSecretRunner(),
     });
     expect(deploy.join("\n")).toContain("doctor --env production: ok");
     expect(deploy.join("\n")).toContain(
@@ -231,6 +234,21 @@ describe("CLI MVP", () => {
     expect(recovery.join("\n")).not.toMatch(/cfauth\.|cookie=.*cfauth/i);
   });
 
+  it("doctor reports missing remote production secrets", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: () => ({ status: 0, stdout: "[]", stderr: "" }),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("AUTH_SECRET is missing remotely");
+    expect(errors.join("\n")).not.toContain("k_dev.");
+  });
+
   it("executes deploy through Wrangler after doctor and migration status", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
@@ -243,7 +261,10 @@ describe("CLI MVP", () => {
         calls.push({ command, args, cwd: options.cwd });
         return {
           status: 0,
-          stdout: `ok ${command} ${args.join(" ")}`,
+          stdout:
+            args[0] === "secret"
+              ? JSON.stringify([{ name: "AUTH_SECRET" }])
+              : `ok ${command} ${args.join(" ")}`,
           stderr: "",
         };
       },
@@ -251,6 +272,11 @@ describe("CLI MVP", () => {
 
     expect(code).toBe(0);
     expect(calls).toEqual([
+      {
+        command: "wrangler",
+        args: ["secret", "list", "--format", "json", "--env", "production"],
+        cwd,
+      },
       {
         command: "wrangler",
         args: [
@@ -284,12 +310,20 @@ describe("CLI MVP", () => {
       cwd,
       runCommand: (command, args) => {
         calls.push([command, ...args].join(" "));
-        return { status: 0, stdout: "", stderr: "" };
+        return {
+          status: 0,
+          stdout:
+            args[0] === "secret"
+              ? JSON.stringify([{ name: "AUTH_SECRET" }])
+              : "",
+          stderr: "",
+        };
       },
     });
 
     expect(code).toBe(0);
     expect(calls).toEqual([
+      "wrangler secret list --format json --env production",
       "wrangler d1 migrations list app-auth --remote --env production",
       "wrangler d1 migrations apply app-auth --remote --env production",
       "wrangler deploy --env production",
@@ -371,6 +405,14 @@ async function writeWrangler(cwd: string) {
       2,
     ),
   );
+}
+
+function remoteSecretRunner() {
+  return () => ({
+    status: 0,
+    stdout: JSON.stringify([{ name: "AUTH_SECRET" }]),
+    stderr: "",
+  });
 }
 
 interface JsonSchema {
