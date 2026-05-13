@@ -144,6 +144,21 @@ describe("CLI MVP", () => {
     expect(errors.join("\n")).not.toMatch(/cfauth\.|AUTH_SECRET=/);
   });
 
+  it("doctor reports unavailable Wrangler before deployment checks", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: () => ({ status: 1, stdout: "", stderr: "not found" }),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("Wrangler is unavailable");
+    expect(errors.join("\n")).toContain("install wrangler 4.90.1");
+  });
+
   it("doctor reports missing production email binding", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
@@ -299,6 +314,11 @@ describe("CLI MVP", () => {
     expect(calls).toEqual([
       {
         command: "wrangler",
+        args: ["--version"],
+        cwd,
+      },
+      {
+        command: "wrangler",
         args: ["secret", "list", "--format", "json", "--env", "production"],
         cwd,
       },
@@ -348,6 +368,7 @@ describe("CLI MVP", () => {
 
     expect(code).toBe(0);
     expect(calls).toEqual([
+      "wrangler --version",
       "wrangler secret list --format json --env production",
       "wrangler d1 migrations list app-auth --remote --env production",
       "wrangler d1 migrations apply app-auth --remote --env production",
@@ -511,11 +532,16 @@ async function writeWrangler(cwd: string) {
 }
 
 function remoteSecretRunner() {
-  return () => ({
-    status: 0,
-    stdout: JSON.stringify([{ name: "AUTH_SECRET" }]),
-    stderr: "",
-  });
+  return (_command: string, args: string[]) => {
+    if (args[0] === "--version") {
+      return { status: 0, stdout: "4.90.1\n", stderr: "" };
+    }
+    return {
+      status: 0,
+      stdout: JSON.stringify([{ name: "AUTH_SECRET" }]),
+      stderr: "",
+    };
+  };
 }
 
 interface JsonSchema {

@@ -8,6 +8,7 @@ import cliPackageJson from "../package.json" with { type: "json" };
 
 export const cliPackageName = "@cf-auth/cli";
 const generatedPackageVersion = cliPackageJson.version;
+const supportedWranglerVersion = cliPackageJson.dependencies.wrangler;
 
 export interface CliIO {
   cwd?: string;
@@ -243,6 +244,7 @@ async function commandDoctor(
     checks.push(check);
     if (check.status === "fail") ok = false;
   };
+  addCheck(checkWranglerVersion(cwd, runner));
   try {
     config = await readWrangler(cwd);
     addCheck({
@@ -406,6 +408,41 @@ function buildDoctorReport(
       rawIps: "omitted",
       rawUserAgents: "omitted",
     },
+  };
+}
+
+function checkWranglerVersion(cwd: string, runner: CommandRunner): DoctorCheck {
+  const result = runner("wrangler", ["--version"], { cwd });
+  if (result.status !== 0) {
+    return {
+      id: "wrangler_version",
+      status: "fail",
+      message: "Wrangler is unavailable",
+      fix: `install wrangler ${supportedWranglerVersion} or run inside a project with Wrangler installed`,
+    };
+  }
+  const output = `${result.stdout}\n${result.stderr}`;
+  const version = output.match(/\b\d+\.\d+\.\d+\b/)?.[0];
+  if (!version) {
+    return {
+      id: "wrangler_version",
+      status: "warn",
+      message: "Wrangler version could not be parsed",
+      fix: "run wrangler --version and compare it with the supported version matrix",
+    };
+  }
+  if (version !== supportedWranglerVersion) {
+    return {
+      id: "wrangler_version",
+      status: "warn",
+      message: `Wrangler ${version} detected; supported version is ${supportedWranglerVersion}`,
+      fix: `install wrangler ${supportedWranglerVersion}`,
+    };
+  }
+  return {
+    id: "wrangler_version",
+    status: "pass",
+    message: `Wrangler ${version} available`,
   };
 }
 
