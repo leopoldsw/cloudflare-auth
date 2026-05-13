@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -12,6 +13,7 @@ export interface CliIO {
   cwd?: string;
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
+  runCommand?: CommandRunner;
 }
 
 interface ParsedArgs {
@@ -19,6 +21,22 @@ interface ParsedArgs {
   positionals: string[];
   flags: Record<string, string | boolean>;
 }
+
+interface CommandRunOptions {
+  cwd: string;
+}
+
+interface CommandRunResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+type CommandRunner = (
+  command: string,
+  args: string[],
+  options: CommandRunOptions,
+) => CommandRunResult;
 
 type DoctorCheckStatus = "pass" | "fail" | "warn";
 
@@ -84,7 +102,7 @@ export async function runCli(
         return result.ok ? 0 : 1;
       }
       case "deploy":
-        out(await commandDeploy(parsed, cwd));
+        out(await commandDeploy(parsed, cwd, io.runCommand ?? runCommand));
         return 0;
       case "generate":
         out(commandGenerate(parsed));
@@ -165,11 +183,17 @@ async function commandMigrate(
   parsed: ParsedArgs,
   cwd: string,
 ): Promise<string> {
+  const command = await buildMigrateCommand(parsed, cwd);
+  return displayCommand(command.command, command.args);
+}
+
+async function buildMigrateCommand(
+  parsed: ParsedArgs,
+  cwd: string,
+): Promise<{ command: string; args: string[] }> {
   const config = await readWrangler(cwd);
   const target = targetMode(parsed);
   const database = selectD1(config, parsed.flags.env as string | undefined);
-  const envFlag =
-    target.remote && parsed.flags.env ? ` --env ${parsed.flags.env}` : "";
   const status = parsed.flags.status ? "list" : "apply";
   const remoteFlag = target.remote ? "--remote" : "--local";
   if (target.remote && hasNamedEnvironments(config) && !parsed.flags.env) {
@@ -177,7 +201,19 @@ async function commandMigrate(
       "Remote migrations require --env when Wrangler config uses named environments.",
     );
   }
-  return `wrangler d1 migrations ${status} ${database.database_name} ${remoteFlag}${envFlag}`;
+  return {
+    command: "wrangler",
+    args: [
+      "d1",
+      "migrations",
+      status,
+      database.database_name,
+      remoteFlag,
+      ...(target.remote && parsed.flags.env
+        ? ["--env", String(parsed.flags.env)]
+        : []),
+    ],
+  };
 }
 
 async function commandDoctor(
@@ -356,24 +392,29 @@ function buildDoctorReport(
   };
 }
 
-async function commandDeploy(parsed: ParsedArgs, cwd: string): Promise<string> {
+async function commandDeploy(
+  parsed: ParsedArgs,
+  cwd: string,
+  runner: CommandRunner,
+): Promise<string> {
   const envName = parsed.flags.env as string | undefined;
-  if (!parsed.flags["dry-run"]) {
-    throw new Error(
-      "Only deploy --dry-run is implemented in this local CLI build.",
-    );
-  }
   const config = await readWrangler(cwd);
   if (hasNamedEnvironments(config) && !envName) {
     throw new Error(
       "Deploy requires --env when Wrangler config uses named environments.",
     );
   }
+  const selected = envName ? config.env?.[envName] : config;
+  if (!envName && selected?.vars?.AUTH_ENV !== "production") {
+    throw new Error(
+      "Deploy without --env requires top-level vars.AUTH_ENV=production.",
+    );
+  }
   const doctor = await commandDoctor(parsed, cwd);
   if (!doctor.ok) {
     throw new Error(`doctor failed before deploy:\n${doctor.lines.join("\n")}`);
   }
-  const migrationStatus = await commandMigrate(
+  const migrationStatus = await buildMigrateCommand(
     {
       command: "migrate",
       positionals: [],
@@ -386,11 +427,77 @@ async function commandDeploy(parsed: ParsedArgs, cwd: string): Promise<string> {
     cwd,
   );
   const envFlag = envName ? ` --env ${envName}` : "";
-  return [
+  const deployCommand = {
+    command: "wrangler",
+    args: ["deploy", ...(envName ? ["--env", envName] : [])],
+  };
+  const planned = [
     `doctor --env ${envName ?? "default"}: ok`,
-    migrationStatus,
-    `wrangler deploy${envFlag}`,
-  ].join("\n");
+    displayCommand(migrationStatus.command, migrationStatus.args),
+    displayCommand(deployCommand.command, deployCommand.args),
+  ];
+  if (parsed.flags["dry-run"]) return planned.join("\n");
+
+  const lines = [planned[0]];
+  lines.push(runCheckedCommand(migrationStatus, cwd, runner));
+  if (parsed.flags.migrate) {
+    const migrateApply = await buildMigrateCommand(
+      {
+        command: "migrate",
+        positionals: [],
+        flags: {
+          remote: true,
+          ...(envName ? { env: envName } : {}),
+        },
+      },
+      cwd,
+    );
+    lines.push(runCheckedCommand(migrateApply, cwd, runner));
+  }
+  lines.push(runCheckedCommand(deployCommand, cwd, runner));
+  lines.push(`deployed with wrangler${envFlag}`);
+  return lines.join("\n");
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  options: CommandRunOptions,
+): CommandRunResult {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
+
+function runCheckedCommand(
+  command: { command: string; args: string[] },
+  cwd: string,
+  runner: CommandRunner,
+): string {
+  const result = runner(command.command, command.args, { cwd });
+  const display = displayCommand(command.command, command.args);
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout).trim();
+    throw new Error(
+      detail
+        ? `Command failed: ${display}\n${detail}`
+        : `Command failed: ${display}`,
+    );
+  }
+  const output = [result.stdout.trim(), result.stderr.trim()]
+    .filter(Boolean)
+    .join("\n");
+  return output ? `${display}\n${output}` : display;
+}
+
+function displayCommand(command: string, args: string[]): string {
+  return [command, ...args].join(" ");
 }
 
 function commandGenerate(parsed: ParsedArgs): string {

@@ -230,6 +230,104 @@ describe("CLI MVP", () => {
     expect(recovery.join("\n")).toContain("Dry run only");
     expect(recovery.join("\n")).not.toMatch(/cfauth\.|cookie=.*cfauth/i);
   });
+
+  it("executes deploy through Wrangler after doctor and migration status", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const output: string[] = [];
+    const code = await runCli(["deploy", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: (command, args, options) => {
+        calls.push({ command, args, cwd: options.cwd });
+        return {
+          status: 0,
+          stdout: `ok ${command} ${args.join(" ")}`,
+          stderr: "",
+        };
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      {
+        command: "wrangler",
+        args: [
+          "d1",
+          "migrations",
+          "list",
+          "app-auth",
+          "--remote",
+          "--env",
+          "production",
+        ],
+        cwd,
+      },
+      {
+        command: "wrangler",
+        args: ["deploy", "--env", "production"],
+        cwd,
+      },
+    ]);
+    expect(output.join("\n")).toContain("doctor --env production: ok");
+    expect(output.join("\n")).toContain(
+      "deployed with wrangler --env production",
+    );
+  });
+
+  it("executes remote migrations before deploy when requested", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const calls: string[] = [];
+    const code = await runCli(["deploy", "--migrate", "--env", "production"], {
+      cwd,
+      runCommand: (command, args) => {
+        calls.push([command, ...args].join(" "));
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      "wrangler d1 migrations list app-auth --remote --env production",
+      "wrangler d1 migrations apply app-auth --remote --env production",
+      "wrangler deploy --env production",
+    ]);
+  });
+
+  it("rejects top-level development deploys without an explicit environment", async () => {
+    const cwd = await tempDir();
+    await writeFile(
+      join(cwd, "wrangler.jsonc"),
+      JSON.stringify(
+        {
+          vars: {
+            AUTH_ENV: "development",
+            AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+          },
+          d1_databases: [
+            {
+              binding: "AUTH_DB",
+              database_name: "app-auth-dev",
+              database_id: "local-id",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+    const errors: string[] = [];
+    const code = await runCli(["deploy", "--dry-run"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+    });
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Deploy without --env requires top-level vars.AUTH_ENV=production",
+    );
+  });
 });
 
 async function tempDir() {

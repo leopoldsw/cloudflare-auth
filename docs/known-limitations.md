@@ -11,6 +11,5 @@ Cloudflare Auth v1 is intentionally narrow.
 - The Cloudflare rate-limit binding is a coarse prefilter. D1 remains the authoritative rate limiter for auth decisions.
 - Password reset token validation happens before hashing, but token consume, password update, and session revocation are separate repository operations.
 - No-argument Hono `requireUser()` stores the latest mounted config in module scope. Pass the config explicitly when multiple auth configurations run in one isolate.
-- `cf-auth deploy` is a dry-run wrapper in this local build until release automation wires it to a real Wrangler deploy.
 
 See `docs/non-goals.md` for the full v1 exclusion list.

@@ -8,6 +8,19 @@ npx cf-auth@latest migrate --remote --env production
 npx cf-auth@latest deploy --env production
 ```
 
+To preview the exact checks and Wrangler deploy command without changing
+Cloudflare state:
+
+```bash
+npx cf-auth@latest deploy --dry-run --env production
+```
+
+To apply remote migrations immediately before deployment:
+
+```bash
+npx cf-auth@latest deploy --migrate --env production
+```
+
 For support and release records, emit the redaction-safe report:
 
 ```bash
