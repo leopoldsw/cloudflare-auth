@@ -779,6 +779,7 @@ export function defineAuthConfig(
   };
   assertAuthConfigOrigins(resolved);
   assertSessionOptions(resolved);
+  assertFeatureOptions(resolved);
   return resolved;
 }
 
@@ -809,6 +810,69 @@ function assertSessionOptions(config: AuthConfig): void {
     throw new AuthCryptoError(
       "unsupported SameSite mode",
       "invalid_cookie_config",
+    );
+  }
+}
+
+function assertFeatureOptions(config: AuthConfig): void {
+  for (const policy of [
+    config.magicLink.activeTokenPolicy,
+    config.passwordReset.activeTokenPolicy,
+    config.emailVerification.activeTokenPolicy,
+  ]) {
+    if (
+      policy !== "invalidate-previous" &&
+      policy !== "allow-multiple-active"
+    ) {
+      throw new AuthCryptoError(
+        "invalid active token policy",
+        "invalid_active_token_policy",
+      );
+    }
+  }
+  if (config.magicLink.allowSignups) {
+    if (!config.signup.enabled) {
+      throw new AuthCryptoError(
+        "magic-link signups require signup.enabled",
+        "invalid_feature_config",
+      );
+    }
+    if (config.signup.username.required) {
+      throw new AuthCryptoError(
+        "magic-link signups cannot require usernames",
+        "invalid_feature_config",
+      );
+    }
+  }
+  if (config.signup.enumerationSafe) {
+    if (!config.emailVerification.enabled) {
+      throw new AuthCryptoError(
+        "enumeration-safe signup requires email verification",
+        "invalid_feature_config",
+      );
+    }
+    if (!config.signup.requireEmailVerificationBeforeSession) {
+      throw new AuthCryptoError(
+        "enumeration-safe signup must require verification before session",
+        "invalid_feature_config",
+      );
+    }
+    if (config.signup.username.required) {
+      throw new AuthCryptoError(
+        "enumeration-safe signup cannot require usernames",
+        "invalid_feature_config",
+      );
+    }
+  }
+  if (
+    !config.emailVerification.enabled &&
+    (config.signup.requireEmailVerificationBeforeSession ||
+      config.login.requireVerifiedEmail ||
+      config.session.requireVerifiedEmail)
+  ) {
+    throw new AuthCryptoError(
+      "verified-email requirements need email verification",
+      "invalid_feature_config",
     );
   }
 }

@@ -110,6 +110,49 @@ describe("auth HTTP runtime", () => {
     ).toEqual(["http://localhost:5173"]);
   });
 
+  it("rejects invalid feature flag combinations", () => {
+    const invalid = (overrides: Partial<AuthConfig>) =>
+      defineAuthConfig({
+        appName: "Invalid Feature Config",
+        basePath: "/auth",
+        ...overrides,
+      });
+    expect(() =>
+      invalid({
+        magicLink: {
+          allowSignups: true,
+        } as AuthConfig["magicLink"],
+        signup: {
+          enabled: false,
+        } as AuthConfig["signup"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        magicLink: {
+          activeTokenPolicy: "bad-policy",
+        } as unknown as AuthConfig["magicLink"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        signup: {
+          enumerationSafe: true,
+          requireEmailVerificationBeforeSession: false,
+          username: { enabled: true, required: false },
+        } as AuthConfig["signup"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        emailVerification: {
+          enabled: false,
+        } as AuthConfig["emailVerification"],
+        login: { requireVerifiedEmail: true } as AuthConfig["login"],
+      }),
+    ).toThrow(AuthCryptoError);
+  });
+
   it("signs up, reads current user, logs out, and logs in", async () => {
     const { authFetch } = await setup();
     const signup = await authFetch("/auth/signup", {
