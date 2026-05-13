@@ -126,16 +126,20 @@ async function commandInit(
   }
   await mkdir(join(target, "src"), { recursive: true });
   await mkdir(join(target, "migrations"), { recursive: true });
+  const localSecret = `k_dev.${base64urlEncode(randomBytes(32))}`;
   await writeIfMissing(
     join(target, "package.json"),
     JSON.stringify(templatePackageJson(), null, 2) + "\n",
   );
+  await writeIfMissing(join(target, "tsconfig.json"), tsconfigTemplate());
   await writeIfMissing(
     join(target, "src", "auth.config.ts"),
     authConfigTemplate(),
   );
   await writeIfMissing(join(target, "src", "index.ts"), honoIndexTemplate());
   await writeIfMissing(join(target, "wrangler.jsonc"), wranglerTemplate());
+  await writeIfMissing(join(target, ".gitignore"), gitignoreTemplate());
+  await writeIfMissing(join(target, ".dev.vars"), devVarsTemplate(localSecret));
   await writeIfMissing(join(target, ".dev.vars.example"), devVarsTemplate());
   await writeIfMissing(
     join(target, "migrations", "0001_initial.sql"),
@@ -489,7 +493,7 @@ function templatePackageJson() {
     scripts: {
       dev: "wrangler dev",
       build: "tsc -p tsconfig.json --noEmit",
-      test: "vitest run",
+      test: "vitest run --passWithNoTests",
     },
     dependencies: {
       "@cf-auth/hono": generatedPackageVersion,
@@ -511,6 +515,10 @@ function authConfigTemplate(): string {
 export default defineAuthConfig({
   appName: "My App",
   basePath: "/auth",
+  passwordHashing: {
+    profile: "development-fast",
+    maxConcurrentHashesPerIsolate: 1
+  },
   email: terminalEmail({ outbox: true })
 });
 `;
@@ -519,11 +527,27 @@ export default defineAuthConfig({
 function honoIndexTemplate(): string {
   return `import { Hono } from "hono";
 import { createAuthRoutes } from "@cf-auth/hono";
-import authConfig from "./auth.config";
+import authConfig from "./auth.config.js";
 
 const app = new Hono();
 app.route(authConfig.basePath, createAuthRoutes(authConfig));
 export default app;
+`;
+}
+
+function tsconfigTemplate(): string {
+  return `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
 `;
 }
 
@@ -569,8 +593,21 @@ function wranglerTemplate(): string {
 `;
 }
 
-function devVarsTemplate(): string {
-  return "AUTH_ENV=development\nAUTH_PUBLIC_ORIGIN=http://localhost:8787\nAUTH_SECRET=k_dev.REPLACE_WITH_GENERATED_BASE64URL_SECRET\n";
+function gitignoreTemplate(): string {
+  return `.dev.vars
+.wrangler
+node_modules
+dist
+`;
+}
+
+function devVarsTemplate(
+  secret = "k_dev.REPLACE_WITH_GENERATED_BASE64URL_SECRET",
+): string {
+  return `AUTH_ENV=development
+AUTH_PUBLIC_ORIGIN=http://localhost:8787
+AUTH_SECRET=${secret}
+`;
 }
 
 function initialMigrationSql(): string {
