@@ -3,8 +3,10 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { base64urlEncode } from "@cf-auth/core";
+import cliPackageJson from "../package.json" with { type: "json" };
 
 export const cliPackageName = "@cf-auth/cli";
+const generatedPackageVersion = cliPackageJson.version;
 
 export interface CliIO {
   cwd?: string;
@@ -490,8 +492,8 @@ function templatePackageJson() {
       test: "vitest run",
     },
     dependencies: {
-      "@cf-auth/hono": "workspace:*",
-      "@cf-auth/worker": "workspace:*",
+      "@cf-auth/hono": generatedPackageVersion,
+      "@cf-auth/worker": generatedPackageVersion,
       hono: "4.12.18",
     },
     devDependencies: {

@@ -18,6 +18,14 @@ describe("CLI MVP", () => {
     expect(code).toBe(0);
     expect(existsSync(join(app, "src", "auth.config.ts"))).toBe(true);
     expect(existsSync(join(app, "migrations", "0001_initial.sql"))).toBe(true);
+    const generatedPackage = JSON.parse(
+      await readFile(join(app, "package.json"), "utf8"),
+    ) as {
+      dependencies: Record<string, string>;
+    };
+    expect(generatedPackage.dependencies["@cf-auth/hono"]).toBe("0.0.0");
+    expect(generatedPackage.dependencies["@cf-auth/worker"]).toBe("0.0.0");
+    expect(JSON.stringify(generatedPackage)).not.toContain("workspace:");
     expect(await readFile(join(app, "src", "index.ts"), "utf8")).toContain(
       "app.route(authConfig.basePath",
     );
