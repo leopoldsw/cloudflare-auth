@@ -598,6 +598,15 @@ export interface AuthConfig extends MinimalAuthConfig {
     createSessionAfterVerification: boolean;
     activeTokenPolicy: "invalidate-previous" | "allow-multiple-active";
   };
+  turnstile: {
+    mode: "disabled" | "optional" | "required";
+    endpoints: string[];
+    verify?: (input: {
+      token: string;
+      request: Request;
+      runtime: AuthEmailRuntime;
+    }) => Promise<boolean>;
+  };
   email: AuthEmailAdapter;
   redirects: {
     defaultAfterLogin: string;
@@ -614,6 +623,7 @@ type RuntimeEnv = Record<string, unknown> & {
   AUTH_SECRET_PREVIOUS?: string;
   AUTH_ENV?: AuthRuntimeMode;
   AUTH_PUBLIC_ORIGIN?: string;
+  TURNSTILE_SECRET_KEY?: string;
 };
 
 interface RuntimeContext {
@@ -725,6 +735,11 @@ export function defineAuthConfig(
       createSessionAfterVerification: false,
       activeTokenPolicy: "invalidate-previous",
       ...config.emailVerification,
+    },
+    turnstile: {
+      mode: "disabled",
+      endpoints: [],
+      ...config.turnstile,
     },
     email: config.email ?? terminalEmail({ outbox: true }),
     redirects: {
@@ -872,7 +887,9 @@ async function handleSignup(
 ): Promise<Response> {
   if (!runtime.config.signup.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const body = signupSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "signup", rawBody, request);
+  const body = signupSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
   const username = body.username ? body.username.trim() : null;
   const normalizedUsername = username ? normalizeUsername(username) : null;
@@ -930,7 +947,9 @@ async function handleLogin(
     !runtime.config.login.usernamePassword
   )
     return errorResponse("Not found", 404, "not_found");
-  const body = loginSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "password_login", rawBody, request);
+  const body = loginSchema.parse(rawBody);
   const isEmail = body.identifier.includes("@");
   let user: UserRow | null = null;
   try {
@@ -1022,7 +1041,9 @@ async function handleMagicLinkRequest(
 ): Promise<Response> {
   if (!runtime.config.login.magicLink)
     return errorResponse("Not found", 404, "not_found");
-  const body = emailRequestSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "magic_link_request", rawBody, request);
+  const body = emailRequestSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
   await rateLimit(
     runtime,
@@ -1071,7 +1092,9 @@ async function handleMagicLinkConsume(
   runtime: RuntimeContext,
 ): Promise<Response> {
   const mode = contentMode(request);
-  const body = tokenSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "magic_link_consume", rawBody, request);
+  const body = tokenSchema.parse(rawBody);
   await rateLimit(
     runtime,
     "magic_link_consume",
@@ -1128,7 +1151,14 @@ async function handleEmailVerifyRequest(
 ): Promise<Response> {
   if (!runtime.config.emailVerification.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const body = emailRequestSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(
+    runtime,
+    "email_verification_request",
+    rawBody,
+    request,
+  );
+  const body = emailRequestSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
   await rateLimit(
     runtime,
@@ -1159,7 +1189,14 @@ async function handleEmailVerifyConsume(
   if (!runtime.config.emailVerification.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const body = tokenSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(
+    runtime,
+    "email_verification_consume",
+    rawBody,
+    request,
+  );
+  const body = tokenSchema.parse(rawBody);
   await rateLimit(
     runtime,
     "email_verification_consume",
@@ -1204,7 +1241,9 @@ async function handlePasswordResetRequest(
 ): Promise<Response> {
   if (!runtime.config.passwordReset.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const body = emailRequestSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "password_reset_request", rawBody, request);
+  const body = emailRequestSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
   await rateLimit(
     runtime,
@@ -1244,7 +1283,9 @@ async function handlePasswordResetConfirm(
   if (!runtime.config.passwordReset.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const body = resetConfirmSchema.parse(await parseBody(request, runtime));
+  const rawBody = await parseBody(request, runtime);
+  await enforceTurnstile(runtime, "password_reset_confirm", rawBody, request);
+  const body = resetConfirmSchema.parse(rawBody);
   await rateLimit(
     runtime,
     "password_reset_confirm",
@@ -1521,6 +1562,15 @@ async function rateLimit(
     subjectType,
     subject: subjectType === "ip" ? canonicalizeIp(subject) : subject,
   });
+  const prefilterAllowed = await cloudflareRateLimitPrefilter({
+    env: runtime.env,
+    key: `${action}:${ipKey}`,
+  });
+  if (!prefilterAllowed)
+    throw new AuthCryptoError(
+      "Too many attempts. Try again later.",
+      "rate_limited",
+    );
   const first = await runtime.repos.rateLimits.hitFixedWindow({
     action,
     key: ipKey,
@@ -1540,6 +1590,88 @@ async function rateLimit(
       "Too many attempts. Try again later.",
       "rate_limited",
     );
+}
+
+async function enforceTurnstile(
+  runtime: RuntimeContext,
+  endpoint: string,
+  body: Record<string, unknown>,
+  request: Request,
+): Promise<void> {
+  const { turnstile } = runtime.config;
+  if (
+    turnstile.mode === "disabled" ||
+    !turnstile.endpoints.includes(endpoint)
+  ) {
+    return;
+  }
+  const token =
+    typeof body.turnstileToken === "string" ? body.turnstileToken.trim() : "";
+  if (!token) {
+    if (turnstile.mode === "required")
+      throw new AuthCryptoError(
+        "Turnstile token is required",
+        "turnstile_required",
+      );
+    return;
+  }
+  const ok = turnstile.verify
+    ? await turnstile.verify({
+        token,
+        request,
+        runtime: emailRuntime(runtime),
+      })
+    : await verifyTurnstileToken({
+        token,
+        secret: runtime.env.TURNSTILE_SECRET_KEY ?? "",
+        remoteIp: clientIp(request),
+      });
+  if (!ok)
+    throw new AuthCryptoError(
+      "Turnstile verification failed",
+      "turnstile_failed",
+    );
+}
+
+export async function verifyTurnstileToken(input: {
+  token: string;
+  secret: string;
+  remoteIp?: string;
+  fetcher?: typeof fetch;
+}): Promise<boolean> {
+  if (!input.secret)
+    throw new AuthCryptoError(
+      "TURNSTILE_SECRET_KEY is missing",
+      "config_error",
+    );
+  const body = new URLSearchParams({
+    secret: input.secret,
+    response: input.token,
+  });
+  if (input.remoteIp && input.remoteIp !== "unknown")
+    body.set("remoteip", input.remoteIp);
+  const response = await (input.fetcher ?? fetch)(
+    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    { method: "POST", body },
+  );
+  if (!response.ok) return false;
+  const payload = (await response.json()) as { success?: boolean };
+  return payload.success === true;
+}
+
+export async function cloudflareRateLimitPrefilter(input: {
+  env: Record<string, unknown>;
+  binding?: string;
+  key: string;
+}): Promise<boolean> {
+  const binding = input.env[input.binding ?? "AUTH_RATE_LIMITER"] as
+    | {
+        limit(input: { key: string }): Promise<{ success: boolean }>;
+      }
+    | undefined;
+  if (!binding || typeof binding.limit !== "function") return true;
+  const result = await binding.limit({ key: input.key });
+  return result.success;
 }
 
 function resolveRuntime(
@@ -1754,14 +1886,14 @@ function escapeHtml(input: string): string {
 
 const consoleLogger: AuthLogger = {
   log(message, metadata) {
-    console.log(redact(String(message)), redactMetadata(metadata));
+    console.log(redactLogValue(String(message)), redactMetadata(metadata));
   },
   error(message, metadata) {
-    console.error(redact(String(message)), redactMetadata(metadata));
+    console.error(redactLogValue(String(message)), redactMetadata(metadata));
   },
 };
 
-function redact(value: string): string {
+export function redactLogValue(value: string): string {
   return value
     .replace(
       /cfauth\.(ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43}/gu,
@@ -1774,7 +1906,7 @@ function redactMetadata(
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!metadata) return undefined;
-  return JSON.parse(redact(JSON.stringify(metadata))) as Record<
+  return JSON.parse(redactLogValue(JSON.stringify(metadata))) as Record<
     string,
     unknown
   >;

@@ -1,5 +1,6 @@
 import { performance } from "node:perf_hooks";
-import { hashPassword } from "@cf-auth/core";
+
+import { hashPassword } from "../packages/core/src/index.js";
 
 const samples: number[] = [];
 for (let i = 0; i < 3; i += 1) {
