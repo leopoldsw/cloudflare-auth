@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { base64urlEncode } from "@cf-auth/core";
+import { base64urlEncode, normalizeEmail } from "@cf-auth/core";
 import cliPackageJson from "../package.json" with { type: "json" };
 
 export const cliPackageName = "@cf-auth/cli";
@@ -130,7 +130,7 @@ export async function runCli(
         return 0;
       case "users":
       case "sessions":
-        out(commandRecovery(parsed));
+        out(await commandRecovery(parsed, cwd, io.runCommand ?? runCommand));
         return 0;
       default:
         err(`Unknown command: ${parsed.command}`);
@@ -972,31 +972,9 @@ async function commandClean(
   cwd: string,
   runner: CommandRunner,
 ): Promise<string> {
-  const target = targetMode(parsed);
-  const envName = parsed.flags.env as string | undefined;
-  const config = await readWrangler(cwd);
-  if (target.remote && hasNamedEnvironments(config) && !envName) {
-    throw new Error(
-      "Remote cleanup requires --env when Wrangler config uses named environments.",
-    );
-  }
-  const database = selectD1(config, envName);
-  const remoteFlag = target.remote ? "--remote" : "--local";
-  const envArgs = target.remote && envName ? ["--env", envName] : [];
-  const command = {
-    command: "wrangler",
-    args: [
-      "d1",
-      "execute",
-      database.database_name,
-      remoteFlag,
-      ...envArgs,
-      "--yes",
-      "--command",
-      cleanupSql(Date.now()),
-    ],
-  };
-  const display = `wrangler d1 execute ${database.database_name} ${remoteFlag}${envArgs.length ? ` --env ${envName}` : ""} --command <redacted cleanup SQL>`;
+  const context = await d1CommandContext(parsed, cwd, "Remote cleanup");
+  const command = buildD1ExecuteCommand(context, cleanupSql(Date.now()));
+  const display = displayD1ExecuteCommand(context, "<redacted cleanup SQL>");
   if (parsed.flags["dry-run"]) {
     return [
       "Dry run only. Would execute cleanup with default retention windows.",
@@ -1021,10 +999,225 @@ function cleanupSql(now: number): string {
   ].join("; ");
 }
 
-function commandRecovery(parsed: ParsedArgs): string {
-  if (!parsed.flags["dry-run"])
-    return "Recovery helpers require --dry-run in this local build.";
-  return "Dry run only. Would update users/sessions without printing tokens, hashes, cookies, raw IPs, or raw user agents.";
+async function commandRecovery(
+  parsed: ParsedArgs,
+  cwd: string,
+  runner: CommandRunner,
+): Promise<string> {
+  const context = await d1CommandContext(parsed, cwd, "Remote recovery");
+  if (parsed.command === "users") {
+    return commandUsers(parsed, cwd, runner, context);
+  }
+  return commandSessions(parsed, cwd, runner, context);
+}
+
+function commandUsers(
+  parsed: ParsedArgs,
+  cwd: string,
+  runner: CommandRunner,
+  context: D1CommandContext,
+): string {
+  const action = parsed.positionals[0];
+  const identifier = parsed.positionals[1];
+  if (action !== "disable" && action !== "enable") {
+    throw new Error("users command requires disable or enable.");
+  }
+  if (!identifier) {
+    throw new Error("users command requires a user id or email.");
+  }
+  const now = Date.now();
+  const target = userWhereClause(identifier);
+  const sql =
+    action === "disable"
+      ? [
+          `UPDATE users SET disabled_at = ${now}, updated_at = ${now} WHERE ${target}`,
+          `UPDATE sessions SET revoked_at = ${now} WHERE user_id IN (SELECT id FROM users WHERE ${target}) AND revoked_at IS NULL`,
+        ].join("; ")
+      : `UPDATE users SET disabled_at = NULL, updated_at = ${now} WHERE ${target}`;
+  if (parsed.flags["dry-run"]) {
+    return `Dry run only. Would ${action} the matched user without printing identifiers, tokens, hashes, cookies, raw IPs, or raw user agents.`;
+  }
+  const result = runRedactedRecoveryCommand(
+    buildD1ExecuteCommand(context, sql),
+    cwd,
+    runner,
+  );
+  return `${result}\nuser ${action} completed`;
+}
+
+function commandSessions(
+  parsed: ParsedArgs,
+  cwd: string,
+  runner: CommandRunner,
+  context: D1CommandContext,
+): string {
+  const action = parsed.positionals[0];
+  if (action !== "revoke" && action !== "list") {
+    throw new Error("sessions command requires revoke or list.");
+  }
+  if (typeof parsed.flags.user !== "string") {
+    throw new Error("sessions command requires --user <user-id-or-email>.");
+  }
+  const target = userWhereClause(parsed.flags.user);
+  if (action === "revoke") {
+    const now = Date.now();
+    const sql = `UPDATE sessions SET revoked_at = ${now} WHERE user_id IN (SELECT id FROM users WHERE ${target}) AND revoked_at IS NULL`;
+    if (parsed.flags["dry-run"]) {
+      return "Dry run only. Would revoke matched user sessions without printing tokens, hashes, cookies, raw IPs, or raw user agents.";
+    }
+    const result = runRedactedRecoveryCommand(
+      buildD1ExecuteCommand(context, sql),
+      cwd,
+      runner,
+    );
+    return `${result}\nsessions revoke completed`;
+  }
+  const limit = parseLimit(parsed.flags.limit);
+  const sql = `SELECT id, created_at, expires_at, revoked_at, last_seen_at FROM sessions WHERE user_id IN (SELECT id FROM users WHERE ${target}) ORDER BY created_at DESC LIMIT ${limit}`;
+  const result = runner(
+    "wrangler",
+    buildD1ExecuteCommand(context, sql, true).args,
+    { cwd },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      "Command failed: wrangler d1 execute <redacted recovery SQL>",
+    );
+  }
+  return renderSessionList(parseD1Rows(result.stdout));
+}
+
+function runRedactedRecoveryCommand(
+  command: { command: string; args: string[] },
+  cwd: string,
+  runner: CommandRunner,
+): string {
+  const result = runner(command.command, command.args, { cwd });
+  if (result.status !== 0) {
+    throw new Error(
+      "Command failed: wrangler d1 execute <redacted recovery SQL>",
+    );
+  }
+  const output = [result.stdout.trim(), result.stderr.trim()]
+    .filter(Boolean)
+    .join("\n");
+  return output
+    ? `wrangler d1 execute <redacted recovery SQL>\n${output}`
+    : "wrangler d1 execute <redacted recovery SQL>";
+}
+
+interface D1CommandContext {
+  databaseName: string;
+  remote: boolean;
+  envName?: string;
+}
+
+async function d1CommandContext(
+  parsed: ParsedArgs,
+  cwd: string,
+  remoteErrorPrefix: string,
+): Promise<D1CommandContext> {
+  const target = targetMode(parsed);
+  const envName = parsed.flags.env as string | undefined;
+  const config = await readWrangler(cwd);
+  if (target.remote && hasNamedEnvironments(config) && !envName) {
+    throw new Error(
+      `${remoteErrorPrefix} requires --env when Wrangler config uses named environments.`,
+    );
+  }
+  const database = selectD1(config, envName);
+  return {
+    databaseName: database.database_name,
+    remote: target.remote,
+    ...(envName ? { envName } : {}),
+  };
+}
+
+function buildD1ExecuteCommand(
+  context: D1CommandContext,
+  sql: string,
+  json = false,
+): { command: string; args: string[] } {
+  return {
+    command: "wrangler",
+    args: [
+      "d1",
+      "execute",
+      context.databaseName,
+      context.remote ? "--remote" : "--local",
+      ...(context.remote && context.envName ? ["--env", context.envName] : []),
+      "--yes",
+      ...(json ? ["--json"] : []),
+      "--command",
+      sql,
+    ],
+  };
+}
+
+function displayD1ExecuteCommand(
+  context: D1CommandContext,
+  sqlDisplay: string,
+): string {
+  return `wrangler d1 execute ${context.databaseName} ${context.remote ? "--remote" : "--local"}${context.remote && context.envName ? ` --env ${context.envName}` : ""} --command ${sqlDisplay}`;
+}
+
+function userWhereClause(identifier: string): string {
+  if (identifier.includes("@")) {
+    return `normalized_email = ${sqlStringLiteral(normalizeEmail(identifier))}`;
+  }
+  return `id = ${sqlStringLiteral(identifier)}`;
+}
+
+function sqlStringLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function parseLimit(value: string | boolean | undefined): number {
+  if (value === undefined || value === false) return 20;
+  if (value === true) {
+    throw new Error("sessions list --limit requires a value.");
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new Error("sessions list --limit must be an integer from 1 to 100.");
+  }
+  return parsed;
+}
+
+function parseD1Rows(stdout: string): Array<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new Error("D1 JSON response could not be parsed.");
+  }
+  const rows: Array<Record<string, unknown>> = [];
+  const visit = (item: unknown) => {
+    if (Array.isArray(item)) {
+      for (const child of item) visit(child);
+      return;
+    }
+    if (!isRecord(item)) return;
+    if ("id" in item) rows.push(item);
+    for (const key of ["result", "results"]) visit(item[key]);
+  };
+  visit(parsed);
+  return rows;
+}
+
+function renderSessionList(rows: Array<Record<string, unknown>>): string {
+  if (rows.length === 0) return "No sessions found.";
+  return rows
+    .map((row) =>
+      [
+        `id=${String(row.id ?? "")}`,
+        `created_at=${String(row.created_at ?? "")}`,
+        `expires_at=${String(row.expires_at ?? "")}`,
+        `revoked_at=${String(row.revoked_at ?? "null")}`,
+        `last_seen_at=${String(row.last_seen_at ?? "null")}`,
+      ].join(" "),
+    )
+    .join("\n");
 }
 
 function parseArgs(args: string[]): ParsedArgs {

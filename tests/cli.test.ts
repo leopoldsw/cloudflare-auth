@@ -349,6 +349,112 @@ describe("CLI MVP", () => {
     expect(recovery.join("\n")).not.toMatch(/cfauth\.|cookie=.*cfauth/i);
   });
 
+  it("executes recovery helpers through redaction-safe D1 SQL", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const userCalls: Array<{ args: string[]; sql: string }> = [];
+    const userOutput: string[] = [];
+    const disableCode = await runCli(
+      ["users", "disable", "person@example.com", "--local"],
+      {
+        cwd,
+        stdout: (line) => userOutput.push(line),
+        runCommand: (_command, args) => {
+          userCalls.push({ args, sql: args.at(-1) ?? "" });
+          return { status: 0, stdout: "disabled", stderr: "" };
+        },
+      },
+    );
+
+    expect(disableCode).toBe(0);
+    expect(userCalls).toHaveLength(1);
+    expect(userCalls[0]?.args.slice(0, -1)).toEqual([
+      "d1",
+      "execute",
+      "app-auth-dev",
+      "--local",
+      "--yes",
+      "--command",
+    ]);
+    expect(userCalls[0]?.sql).toContain(
+      "normalized_email = 'person@example.com'",
+    );
+    expect(userCalls[0]?.sql).toContain("UPDATE sessions SET revoked_at");
+    expect(userOutput.join("\n")).not.toContain("person@example.com");
+
+    const sessionCalls: Array<{ args: string[]; sql: string }> = [];
+    const output: string[] = [];
+    const listCode = await runCli(
+      [
+        "sessions",
+        "list",
+        "--user",
+        "usr_safe",
+        "--remote",
+        "--env",
+        "production",
+      ],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: (_command, args) => {
+          sessionCalls.push({ args, sql: args.at(-1) ?? "" });
+          return {
+            status: 0,
+            stdout: JSON.stringify([
+              {
+                results: [
+                  {
+                    id: "ses_one",
+                    created_at: 10,
+                    expires_at: 20,
+                    revoked_at: null,
+                    last_seen_at: 15,
+                  },
+                ],
+              },
+            ]),
+            stderr: "",
+          };
+        },
+      },
+    );
+
+    expect(listCode).toBe(0);
+    expect(sessionCalls[0]?.args.slice(0, -1)).toEqual([
+      "d1",
+      "execute",
+      "app-auth",
+      "--remote",
+      "--env",
+      "production",
+      "--yes",
+      "--json",
+      "--command",
+    ]);
+    expect(sessionCalls[0]?.sql).toContain("SELECT id, created_at");
+    expect(sessionCalls[0]?.sql).not.toContain("token_hash");
+    expect(sessionCalls[0]?.sql).not.toContain("ip_hash");
+    expect(output.join("\n")).toContain("id=ses_one");
+    expect(output.join("\n")).not.toContain("token_hash");
+  });
+
+  it("rejects remote recovery without an explicit named environment", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const errors: string[] = [];
+    const code = await runCli(
+      ["sessions", "revoke", "--user", "usr_safe", "--remote"],
+      {
+        cwd,
+        stderr: (line) => errors.push(line),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("Remote recovery requires --env");
+  });
+
   it("runs clean through Wrangler and keeps dry-runs redacted", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);

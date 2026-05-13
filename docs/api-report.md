@@ -24,8 +24,8 @@ This report is the reviewed v1 public surface. Any breaking change requires an u
 - `cf-auth generate`
 - `cf-auth clean`
 - `cf-auth rotate-secret`
-- `cf-auth users ... --dry-run`
-- `cf-auth sessions ... --dry-run`
+- `cf-auth users disable|enable`
+- `cf-auth sessions revoke|list`
 
 ## HTTP Endpoints
 
