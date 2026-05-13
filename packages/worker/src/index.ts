@@ -781,6 +781,7 @@ export function defineAuthConfig(
   };
   assertAuthConfigOrigins(resolved);
   assertSessionOptions(resolved);
+  assertRequestOptions(resolved);
   assertFeatureOptions(resolved);
   return resolved;
 }
@@ -827,6 +828,18 @@ function assertSessionOptions(config: AuthConfig): void {
     throw new AuthCryptoError(
       "__Host- cookies require Secure and no Domain",
       "invalid_cookie_config",
+    );
+  }
+}
+
+function assertRequestOptions(config: AuthConfig): void {
+  if (
+    !Number.isInteger(config.request.maxBodyBytes) ||
+    config.request.maxBodyBytes < 1
+  ) {
+    throw new AuthCryptoError(
+      "invalid request maxBodyBytes",
+      "invalid_request_config",
     );
   }
 }

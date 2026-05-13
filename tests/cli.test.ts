@@ -420,6 +420,35 @@ export default defineAuthConfig({
     );
   });
 
+  it("doctor warns when request body source limits exceed 64 KiB", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+import { cloudflareEmail } from "@cf-auth/email-cloudflare";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: cloudflareEmail({ from: "no-reply@example.com" }),
+  request: {
+    maxBodyBytes: 128 * 1024
+  }
+});
+`,
+    );
+    const output: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("Request maxBodyBytes exceeds 64 KiB");
+  });
+
   it("doctor accepts byEnvironment terminal email for development only", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);

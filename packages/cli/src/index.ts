@@ -1119,6 +1119,8 @@ interface AuthSourceInspection {
   sessionSameSite: string | null;
   sessionDomain: string | null;
   dynamicSessionProperties: string[];
+  requestMaxBodyBytes: number | null;
+  dynamicRequestMaxBodyBytes: boolean;
   requireOriginOnUnsafeMethods: boolean;
   requestOrigins: Array<{ property: string; value: string }>;
   dynamicRequestOriginProperties: string[];
@@ -1155,6 +1157,9 @@ async function inspectAuthSource(cwd: string): Promise<AuthSourceInspection> {
     : { value: null, dynamic: false };
   const sessionDomain = sessionText
     ? extractStringPropertyInspection(sessionText, "domain")
+    : { value: null, dynamic: false };
+  const requestMaxBodyBytes = requestText
+    ? extractIntegerPropertyInspection(requestText, "maxBodyBytes")
     : { value: null, dynamic: false };
   const byEnvironmentEmailText = extractCallArgumentText(
     configText,
@@ -1201,6 +1206,8 @@ async function inspectAuthSource(cwd: string): Promise<AuthSourceInspection> {
       ...(sessionSameSite.dynamic ? ["session.sameSite"] : []),
       ...(sessionDomain.dynamic ? ["session.domain"] : []),
     ],
+    requestMaxBodyBytes: requestMaxBodyBytes.value,
+    dynamicRequestMaxBodyBytes: requestMaxBodyBytes.dynamic,
     requireOriginOnUnsafeMethods:
       (requestText
         ? extractBooleanProperty(requestText, "requireOriginOnUnsafeMethods")
@@ -1326,6 +1333,8 @@ function checkAuthSource(
 
   const sessionCookieCheck = checkSessionCookieSource(source, vars);
   if (sessionCookieCheck) checks.push(sessionCookieCheck);
+  const requestConfigCheck = checkRequestConfigSource(source);
+  if (requestConfigCheck) checks.push(requestConfigCheck);
   const redirectCheck = checkRedirectOrigins(source, vars.AUTH_ENV);
   if (redirectCheck) checks.push(redirectCheck);
   const requestOriginCheck = checkRequestOrigins(source, vars.AUTH_ENV);
@@ -1426,6 +1435,42 @@ function checkSessionCookieSource(
     status: "pass",
     message: "Session cookie source config is valid",
   };
+}
+
+function checkRequestConfigSource(
+  source: AuthSourceInspection,
+): DoctorCheck | null {
+  if (source.requestMaxBodyBytes !== null) {
+    if (
+      !Number.isSafeInteger(source.requestMaxBodyBytes) ||
+      source.requestMaxBodyBytes < 1
+    ) {
+      return {
+        id: "request_body_limit",
+        status: "fail",
+        message: "Request maxBodyBytes source config is invalid",
+        fix: "set request.maxBodyBytes to a positive integer byte limit",
+      };
+    }
+    if (source.requestMaxBodyBytes > 64 * 1024) {
+      return {
+        id: "request_body_limit",
+        status: "warn",
+        message: "Request maxBodyBytes exceeds 64 KiB",
+        fix: "keep auth request bodies small unless a documented integration requires a larger limit",
+      };
+    }
+    return null;
+  }
+  if (source.dynamicRequestMaxBodyBytes) {
+    return {
+      id: "request_body_limit",
+      status: "warn",
+      message: "Request maxBodyBytes source config contains a dynamic value",
+      fix: "verify the evaluated request body limit is positive and no larger than 64 KiB before deploy",
+    };
+  }
+  return null;
 }
 
 async function checkPasswordBenchmark(
@@ -1748,6 +1793,27 @@ function extractStringPropertyInspection(
     return { value: literals[0] ?? null, dynamic: false };
   }
   return { value: null, dynamic: true };
+}
+
+function extractIntegerPropertyInspection(
+  text: string,
+  property: string,
+): { value: number | null; dynamic: boolean } {
+  const expression = extractPropertyExpression(text, property);
+  if (expression === null) return { value: null, dynamic: false };
+  const value = parseStaticIntegerExpression(expression);
+  if (value !== null) return { value, dynamic: false };
+  return { value: null, dynamic: true };
+}
+
+function parseStaticIntegerExpression(expression: string): number | null {
+  const cleaned = stripCommentsAndStrings(expression).trim();
+  if (!/^-?\d[\d_]*(?:\s*\*\s*-?\d[\d_]*)*$/u.test(cleaned)) return null;
+  const value = cleaned
+    .split("*")
+    .map((part) => Number.parseInt(part.trim().replaceAll("_", ""), 10))
+    .reduce((product, factor) => product * factor, 1);
+  return Number.isSafeInteger(value) ? value : null;
 }
 
 function parsePasswordProfile(

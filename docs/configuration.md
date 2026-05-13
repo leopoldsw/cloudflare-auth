@@ -28,3 +28,6 @@ Session cookie names must be valid HTTP token names. `session.domain` is only
 for explicit cross-subdomain cookies and must look like `.example.com`; plain
 hostnames, wildcards, IP addresses, paths, schemes, and trailing-dot domains
 are rejected.
+
+`request.maxBodyBytes` must be a positive integer. `doctor` warns when the
+configured auth request-body limit is larger than 64 KiB.

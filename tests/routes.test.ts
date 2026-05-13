@@ -123,6 +123,16 @@ describe("auth HTTP runtime", () => {
         } as AuthConfig["session"],
       }),
     ).toThrow(AuthCryptoError);
+    expect(() =>
+      defineAuthConfig({
+        appName: "Bad Request Body Limit",
+        basePath: "/auth",
+        request: {
+          maxBodyBytes: 0,
+          requireOriginOnUnsafeMethods: true,
+        },
+      }),
+    ).toThrow(AuthCryptoError);
     expect(
       defineAuthConfig({
         appName: "Local Request Origin",
