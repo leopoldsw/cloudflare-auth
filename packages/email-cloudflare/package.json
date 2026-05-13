@@ -28,6 +28,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@cf-auth/core": "workspace:*"
+    "@cf-auth/core": "workspace:*",
+    "@cf-auth/worker": "workspace:*"
   }
 }

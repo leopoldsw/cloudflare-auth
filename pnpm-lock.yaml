@@ -145,6 +145,9 @@ importers:
       '@cf-auth/core':
         specifier: workspace:*
         version: link:../core
+      '@cf-auth/worker':
+        specifier: workspace:*
+        version: link:../worker
 
   packages/hono:
     dependencies:
