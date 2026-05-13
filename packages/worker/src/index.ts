@@ -770,7 +770,7 @@ export function defineAuthConfig(
 }
 
 export function terminalEmail(
-  options: { outbox?: boolean } = {},
+  options: { outbox?: boolean; print?: (line: string) => void } = {},
 ): AuthEmailAdapter & { outbox: SendAuthEmailInput[] } {
   const outbox: SendAuthEmailInput[] = [];
   async function send(input: SendAuthEmailInput, runtime: AuthEmailRuntime) {
@@ -781,7 +781,11 @@ export function terminalEmail(
       );
     }
     if (options.outbox) outbox.push(input);
-    runtime.logger.log(`[cf-auth dev email] ${input.url}`, { to: input.to });
+    (options.print ?? console.log)(`[cf-auth dev email] ${input.url}`);
+    runtime.logger.log("[cf-auth dev email sent]", {
+      to: input.to,
+      expiresAt: input.expiresAt,
+    });
   }
   return {
     kind: "terminal",

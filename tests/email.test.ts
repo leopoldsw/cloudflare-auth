@@ -16,9 +16,16 @@ const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 describe("email adapters and templates", () => {
   it("stores terminal emails in the dev outbox and rejects terminal sends outside development", async () => {
-    const adapter = terminalEmail({ outbox: true });
+    const printed: string[] = [];
+    const adapter = terminalEmail({
+      outbox: true,
+      print: (line) => printed.push(line),
+    });
     await adapter.sendMagicLink(sampleEmail(), runtime("development"));
     expect(adapter.outbox).toHaveLength(1);
+    expect(printed[0]).toContain(
+      "cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
     await expect(
       adapter.sendMagicLink(sampleEmail(), runtime("production")),
     ).rejects.toThrow(AuthCryptoError);
@@ -203,10 +210,11 @@ describe("email adapters and templates", () => {
 });
 
 function sampleEmail() {
+  const token = "cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   return {
     to: "person@example.com",
-    token: "cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    url: "https://example.com/auth/magic-link/verify?token=redacted",
+    token,
+    url: `https://example.com/auth/magic-link/verify?token=${token}`,
     redirectTo: "/dashboard",
     expiresAt: Date.now() + 1_000,
   };
