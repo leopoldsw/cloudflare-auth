@@ -23,9 +23,11 @@ describe("CLI MVP", () => {
     const generatedPackage = JSON.parse(
       await readFile(join(app, "package.json"), "utf8"),
     ) as {
+      name: string;
       dependencies: Record<string, string>;
       scripts: Record<string, string>;
     };
+    expect(generatedPackage.name).toBe("my-app");
     expect(generatedPackage.dependencies["@cf-auth/hono"]).toBe("0.0.0");
     expect(generatedPackage.dependencies["@cf-auth/worker"]).toBe("0.0.0");
     expect(generatedPackage.scripts.test).toBe("vitest run --passWithNoTests");
@@ -38,6 +40,8 @@ describe("CLI MVP", () => {
     const source = await readFile(join(app, "src", "index.ts"), "utf8");
     expect(source).toContain('import authConfig from "./auth.config.js"');
     expect(source).toContain("app.route(authConfig.basePath");
+    const wrangler = await readFile(join(app, "wrangler.jsonc"), "utf8");
+    expect(wrangler).toContain('"database_id": "local-development"');
     expect(
       await readFile(join(app, "migrations", "0001_initial.sql"), "utf8"),
     ).toBe(await readFile("migrations/0001_initial.sql", "utf8"));

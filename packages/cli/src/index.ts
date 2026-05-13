@@ -1,6 +1,6 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { base64urlEncode } from "@cf-auth/core";
 import cliPackageJson from "../package.json" with { type: "json" };
@@ -117,7 +117,7 @@ async function commandInit(
   const target = resolve(cwd, parsed.positionals[0] ?? ".");
   if (parsed.flags["dry-run"]) {
     out(
-      "Would write auth.config.ts, wrangler.jsonc, migrations, .dev.vars.example, and route mount snippets.",
+      "Would write package.json, tsconfig.json, auth.config.ts, wrangler.jsonc, migrations, .gitignore, .dev.vars, .dev.vars.example, and route mount snippets.",
     );
     out(
       "Hono mount: app.route(authConfig.basePath, createAuthRoutes(authConfig));",
@@ -129,7 +129,11 @@ async function commandInit(
   const localSecret = `k_dev.${base64urlEncode(randomBytes(32))}`;
   await writeIfMissing(
     join(target, "package.json"),
-    JSON.stringify(templatePackageJson(), null, 2) + "\n",
+    JSON.stringify(
+      templatePackageJson(packageNameFromTarget(target)),
+      null,
+      2,
+    ) + "\n",
   );
   await writeIfMissing(join(target, "tsconfig.json"), tsconfigTemplate());
   await writeIfMissing(
@@ -487,8 +491,18 @@ async function writeIfMissing(path: string, contents: string): Promise<void> {
   await writeFile(path, contents);
 }
 
-function templatePackageJson() {
+function packageNameFromTarget(target: string): string {
+  return (
+    basename(target)
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "cf-auth-app"
+  );
+}
+
+function templatePackageJson(name: string) {
   return {
+    name,
     type: "module",
     scripts: {
       dev: "wrangler dev",
@@ -565,7 +579,7 @@ function wranglerTemplate(): string {
     {
       "binding": "AUTH_DB",
       "database_name": "my-app-auth-dev",
-      "database_id": "REPLACE_WITH_DATABASE_ID"
+      "database_id": "local-development"
     }
   ],
   "env": {
