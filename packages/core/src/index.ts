@@ -1059,9 +1059,41 @@ function scryptWithParams(
 function compressIpv6(value: string): string {
   if (!isIP(value)) return "malformed";
   const lower = value.toLowerCase();
-  if (lower.includes("::")) return lower.replace(/(^|:)0{1,3}/gu, "$1");
-  return lower
-    .split(":")
-    .map((part) => part.replace(/^0+/u, "") || "0")
-    .join(":");
+  const [head = "", tail = ""] = lower.split("::");
+  const headParts = head ? head.split(":") : [];
+  const tailParts = tail ? tail.split(":") : [];
+  const groups = lower.includes("::")
+    ? [
+        ...headParts,
+        ...Array.from({
+          length: Math.max(0, 8 - headParts.length - tailParts.length),
+        }).map(() => "0"),
+        ...tailParts,
+      ]
+    : lower.split(":");
+  const normalized = groups.map((part) => part.replace(/^0+/u, "") || "0");
+  let bestStart = -1;
+  let bestLength = 0;
+  let currentStart = -1;
+  let currentLength = 0;
+  for (let i = 0; i <= normalized.length; i += 1) {
+    if (normalized[i] === "0") {
+      if (currentStart === -1) currentStart = i;
+      currentLength += 1;
+      continue;
+    }
+    if (currentLength > bestLength && currentLength > 1) {
+      bestStart = currentStart;
+      bestLength = currentLength;
+    }
+    currentStart = -1;
+    currentLength = 0;
+  }
+  if (bestStart === -1) return normalized.join(":");
+  const before = normalized.slice(0, bestStart).join(":");
+  const after = normalized.slice(bestStart + bestLength).join(":");
+  if (!before && !after) return "::";
+  if (!before) return `::${after}`;
+  if (!after) return `${before}::`;
+  return `${before}::${after}`;
 }

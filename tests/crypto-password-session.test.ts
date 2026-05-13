@@ -3,6 +3,8 @@ import {
   PasswordHashSemaphore,
   base64urlDecode,
   base64urlEncode,
+  canonicalizeIp,
+  canonicalizeUserAgent,
   deriveRateLimitKey,
   deriveSubkey,
   dummyVerifyPassword,
@@ -10,6 +12,8 @@ import {
   hashPassword,
   hashRawAuthToken,
   needsRehash,
+  normalizeEmail,
+  normalizeUsername,
   parseAuthKeyRing,
   parsePasswordHashEnvelope,
   parseRawAuthToken,
@@ -17,6 +21,7 @@ import {
   resolveSessionCookie,
   serializeClearSessionCookie,
   serializeSessionCookie,
+  validateRedirectTarget,
   validatePassword,
   verifyPassword,
 } from "@cf-auth/core";
@@ -98,6 +103,62 @@ describe("crypto, passwords, tokens, and sessions", () => {
     expect(email).not.toBe(otherAction);
     expect(email).toMatch(/^rl:v1:password_login:email:[A-Za-z0-9_-]{43}$/);
     expect(email).not.toContain("same");
+  });
+
+  it("normalizes email and username inputs with v1 rejection rules", () => {
+    expect(normalizeEmail(" Person@Example.COM ")).toBe("person@example.com");
+    expect(() => normalizeEmail("bad@@example.com")).toThrow(AuthCryptoError);
+    expect(() => normalizeEmail("bad@example..com")).toThrow(AuthCryptoError);
+    expect(() => normalizeEmail("bad@-example.com")).toThrow(AuthCryptoError);
+
+    expect(normalizeUsername(" Person_123 ")).toBe("person_123");
+    expect(() => normalizeUsername("me")).toThrow(AuthCryptoError);
+    expect(() => normalizeUsername("admin")).toThrow(AuthCryptoError);
+    expect(() => normalizeUsername("person@example.com")).toThrow(
+      AuthCryptoError,
+    );
+  });
+
+  it("validates redirects without accepting encoded protocol-relative variants", () => {
+    const base = {
+      requestOrigin: "https://app.example.com",
+      defaultRedirect: "/dashboard",
+      allowedOrigins: ["https://docs.example.com"],
+    };
+    expect(validateRedirectTarget({ ...base, redirectTo: "" })).toBe(
+      "/dashboard",
+    );
+    expect(validateRedirectTarget({ ...base, redirectTo: "/inside?x=1" })).toBe(
+      "/inside?x=1",
+    );
+    expect(
+      validateRedirectTarget({
+        ...base,
+        redirectTo: "https://docs.example.com/welcome#top",
+      }),
+    ).toBe("https://docs.example.com/welcome#top");
+    for (const redirectTo of [
+      "//evil.example",
+      "%2f%2fevil.example",
+      "/%2fevil.example",
+      "\\evil",
+      "javascript:alert(1)",
+      "https://evil.example",
+    ]) {
+      expect(() => validateRedirectTarget({ ...base, redirectTo })).toThrow(
+        AuthCryptoError,
+      );
+    }
+  });
+
+  it("canonicalizes IPs and caps user-agent values before hashing", () => {
+    expect(canonicalizeIp(" 203.0.113.9 ")).toBe("203.0.113.9");
+    expect(canonicalizeIp("2001:0db8:0000:0000:0000:ff00:0042:8329")).toBe(
+      "2001:db8::ff00:42:8329",
+    );
+    expect(canonicalizeIp("not an ip")).toBe("malformed");
+    expect(canonicalizeIp(null)).toBe("unknown");
+    expect(canonicalizeUserAgent(` ${"a".repeat(600)} `)).toHaveLength(512);
   });
 
   it("hashes and verifies password envelopes", async () => {
