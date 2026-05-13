@@ -7,6 +7,7 @@ import {
   base64urlEncode,
   normalizeEmail,
   parseAuthKeyRing,
+  resolveSessionCookie,
 } from "@cf-auth/core";
 import cliPackageJson from "../package.json" with { type: "json" };
 
@@ -335,6 +336,13 @@ async function commandDoctor(
       message: "AUTH_ENV is missing",
       fix: "set vars.AUTH_ENV to development, preview, or production",
     });
+  } else if (!isAuthMode(vars.AUTH_ENV)) {
+    addCheck({
+      id: "auth_env",
+      status: "fail",
+      message: "AUTH_ENV must be development, preview, or production",
+      fix: "set vars.AUTH_ENV to development, preview, or production",
+    });
   } else {
     addCheck({
       id: "auth_env",
@@ -356,6 +364,8 @@ async function commandDoctor(
       message: "Public origin configured",
     });
   }
+  const cookieCheck = checkCookieConfig(vars);
+  if (cookieCheck) addCheck(cookieCheck);
   if (remoteTarget) {
     addCheck(checkCloudflareAccount(cwd, runner, config));
   }
@@ -874,6 +884,68 @@ function parseSecretNames(text: string): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+function checkCookieConfig(vars: Record<string, string>): DoctorCheck | null {
+  const mode = vars.AUTH_ENV;
+  if (!isAuthMode(mode)) return null;
+  const origin = vars.AUTH_PUBLIC_ORIGIN;
+  if (!origin) {
+    return mode === "development"
+      ? {
+          id: "cookie_config",
+          status: "warn",
+          message: "Development public origin is missing",
+          fix: "set AUTH_PUBLIC_ORIGIN=http://localhost:8787",
+        }
+      : null;
+  }
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return {
+      id: "cookie_config",
+      status: "fail",
+      message: "AUTH_PUBLIC_ORIGIN is not a valid URL",
+      fix: "set AUTH_PUBLIC_ORIGIN to an exact origin such as https://example.com",
+    };
+  }
+  if (mode !== "development" && url.protocol !== "https:") {
+    return {
+      id: "cookie_config",
+      status: "fail",
+      message: "Preview and production public origins must use HTTPS",
+      fix: "set AUTH_PUBLIC_ORIGIN to an https:// origin",
+    };
+  }
+  try {
+    resolveSessionCookie({
+      mode,
+      requestOrigin: origin,
+      cookieName: "auto",
+    });
+  } catch {
+    return {
+      id: "cookie_config",
+      status: "fail",
+      message: "Session cookie configuration is invalid",
+      fix: "check cookie prefix, Secure, Domain, and public origin settings",
+    };
+  }
+  return {
+    id: "cookie_config",
+    status: "pass",
+    message: "Session cookie configuration is valid",
+  };
+}
+
+function isAuthMode(
+  value: string | undefined,
+): value is "development" | "preview" | "production" {
+  return (
+    value === "development" || value === "preview" || value === "production"
+  );
 }
 
 async function checkLocalSecrets(cwd: string): Promise<DoctorCheck[]> {

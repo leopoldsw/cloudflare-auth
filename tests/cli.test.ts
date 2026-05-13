@@ -285,6 +285,28 @@ describe("CLI MVP", () => {
     );
   });
 
+  it("doctor rejects non-HTTPS production public origins for cookies", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as {
+      env: { production: { vars: Record<string, string> } };
+    };
+    config.env.production.vars.AUTH_PUBLIC_ORIGIN = "http://example.com";
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Preview and production public origins must use HTTPS",
+    );
+  });
+
   it("emits redaction-safe doctor report JSON matching the checked-in schema id", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
