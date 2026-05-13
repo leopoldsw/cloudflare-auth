@@ -307,6 +307,107 @@ describe("CLI MVP", () => {
     );
   });
 
+  it("doctor detects production source config hazards", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig, terminalEmail } from "@cf-auth/worker";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: terminalEmail({ outbox: true }),
+  redirects: {
+    allowedOrigins: ["https://example.com/path"]
+  }
+});
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Terminal email/dev outbox is configured for a remote target",
+    );
+    expect(errors.join("\n")).toContain(
+      "Redirect allowedOrigins contains an invalid exact origin",
+    );
+  });
+
+  it("doctor reports required Turnstile secrets", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+import { cloudflareEmail } from "@cf-auth/email-cloudflare";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: cloudflareEmail({ from: "no-reply@example.com" }),
+  turnstile: {
+    mode: "required",
+    endpoints: ["signup"]
+  }
+});
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "TURNSTILE_SECRET_KEY is missing remotely",
+    );
+  });
+
+  it("doctor detects double-prefixed auth routes", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+import { cloudflareEmail } from "@cf-auth/email-cloudflare";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: cloudflareEmail({ from: "no-reply@example.com" })
+});
+`,
+      `import { Hono } from "hono";
+import { createAuthRoutes } from "@cf-auth/hono";
+import authConfig from "./auth.config.js";
+
+const app = new Hono();
+app.route("/auth/auth", createAuthRoutes(authConfig));
+export default app;
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Auth route appears to include /auth/auth",
+    );
+  });
+
   it("emits redaction-safe doctor report JSON matching the checked-in schema id", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
@@ -914,6 +1015,23 @@ async function writeWrangler(cwd: string) {
       2,
     ),
   );
+}
+
+async function writeAuthSource(
+  cwd: string,
+  configSource: string,
+  indexSource = `import { Hono } from "hono";
+import { createAuthRoutes } from "@cf-auth/hono";
+import authConfig from "./auth.config.js";
+
+const app = new Hono();
+app.route(authConfig.basePath, createAuthRoutes(authConfig));
+export default app;
+`,
+) {
+  await mkdir(join(cwd, "src"), { recursive: true });
+  await writeFile(join(cwd, "src", "auth.config.ts"), configSource);
+  await writeFile(join(cwd, "src", "index.ts"), indexSource);
 }
 
 function remoteSecretRunner(accounts = [{ id: "acct_prod" }]) {

@@ -18,7 +18,7 @@ export default defineAuthConfig({
 });
 ```
 
-Set `TURNSTILE_SECRET_KEY` as a Worker secret when using the built-in verifier. Clients submit the widget response as `turnstileToken` in JSON or form bodies.
+Set `TURNSTILE_SECRET_KEY` as a Worker secret when using the built-in verifier. `cf-auth doctor --env production` reports a missing secret when required mode is configured without a custom verifier. Clients submit the widget response as `turnstileToken` in JSON or form bodies.
 
 Available endpoint names:
 

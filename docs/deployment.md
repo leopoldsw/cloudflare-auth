@@ -32,12 +32,19 @@ Required placeholders:
 
 - `AUTH_PUBLIC_ORIGIN`: exact production origin, for example `https://example.com`
 - `AUTH_SECRET`: generated with `cf-auth rotate-secret --print` and stored as a Worker secret
+- `TURNSTILE_SECRET_KEY`: stored as a Worker secret when `turnstile.mode` is `required` and no custom verifier is configured
 - `AUTH_DB.database_id`: production D1 database ID
 - `AUTH_EMAIL`: Cloudflare Email binding when using Cloudflare Email
 
 `doctor --env production` checks remote Worker secret existence with
 `wrangler secret list --format json`; it can verify that `AUTH_SECRET` exists,
-but it cannot read back or validate the secret value.
+and, when required, `TURNSTILE_SECRET_KEY` exists, but it cannot read back or
+validate secret values.
+
+`doctor` also inspects `src` source files when present. It fails remote deploy
+checks for terminal email/dev outbox usage, invalid literal redirect origin
+allowlists, duplicate auth route mounts, and obvious `/auth/auth` double
+prefixes.
 
 `cf-auth rotate-secret --apply --env production` generates a new `AUTH_SECRET`
 and sends it to Wrangler over stdin. It prints the Wrangler operation result,

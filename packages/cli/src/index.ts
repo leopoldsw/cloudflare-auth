@@ -366,6 +366,10 @@ async function commandDoctor(
   }
   const cookieCheck = checkCookieConfig(vars);
   if (cookieCheck) addCheck(cookieCheck);
+  const authSource = await inspectAuthSource(cwd);
+  for (const check of checkAuthSource(authSource, vars, remoteTarget)) {
+    addCheck(check);
+  }
   if (remoteTarget) {
     addCheck(checkCloudflareAccount(cwd, runner, config));
   }
@@ -401,16 +405,28 @@ async function commandDoctor(
     }
     const secretCheck = checkRemoteSecret(envName, cwd, runner);
     addCheck(secretCheck);
+    if (authSource.turnstileRequiresSecret) {
+      addCheck(
+        checkRemoteSecretName({
+          name: "TURNSTILE_SECRET_KEY",
+          envName,
+          cwd,
+          runner,
+          missingMessage: "TURNSTILE_SECRET_KEY is missing remotely",
+          unavailableMessage:
+            "Remote TURNSTILE_SECRET_KEY could not be verified",
+          passMessage: "Remote TURNSTILE_SECRET_KEY configured",
+          fix: `wrangler secret put TURNSTILE_SECRET_KEY${envName ? ` --env ${envName}` : ""}`,
+        }),
+      );
+    }
   }
   if (!envName) {
     for (const check of await checkLocalSecrets(cwd)) addCheck(check);
+    if (authSource.turnstileRequiresSecret) {
+      addCheck(await checkLocalNamedSecret(cwd, "TURNSTILE_SECRET_KEY"));
+    }
   }
-  if (ok)
-    addCheck({
-      id: "auth_route",
-      status: "pass",
-      message: "Auth route mounted at /auth",
-    });
   return {
     ok,
     lines: renderDoctorLines(checks),
@@ -844,35 +860,60 @@ function checkRemoteSecret(
   cwd: string,
   runner: CommandRunner,
 ): DoctorCheck {
+  return checkRemoteSecretName({
+    name: "AUTH_SECRET",
+    envName,
+    cwd,
+    runner,
+    missingMessage: "AUTH_SECRET is missing remotely",
+    unavailableMessage: "Remote AUTH_SECRET could not be verified",
+    passMessage: "Remote AUTH_SECRET configured",
+    fix: "npx cf-auth@latest rotate-secret --apply --env production",
+    unavailableFix:
+      "run wrangler login, then npx cf-auth@latest rotate-secret --apply --env production",
+  });
+}
+
+function checkRemoteSecretName(input: {
+  name: string;
+  envName: string | undefined;
+  cwd: string;
+  runner: CommandRunner;
+  unavailableMessage: string;
+  missingMessage: string;
+  passMessage: string;
+  fix: string;
+  unavailableFix?: string;
+}): DoctorCheck {
   const args = [
     "secret",
     "list",
     "--format",
     "json",
-    ...(envName ? ["--env", envName] : []),
+    ...(input.envName ? ["--env", input.envName] : []),
   ];
-  const result = runner("wrangler", args, { cwd });
+  const result = input.runner("wrangler", args, { cwd: input.cwd });
   if (result.status !== 0) {
     return {
-      id: "remote_secret",
+      id: input.name === "AUTH_SECRET" ? "remote_secret" : "turnstile_secret",
       status: "fail",
-      message: "Remote AUTH_SECRET could not be verified",
-      fix: "run wrangler login, then npx cf-auth@latest rotate-secret --apply --env production",
+      message: input.unavailableMessage,
+      fix: input.unavailableFix ?? input.fix,
     };
   }
   const names = parseSecretNames(result.stdout);
-  if (!names.has("AUTH_SECRET")) {
+  if (!names.has(input.name)) {
     return {
-      id: "remote_secret",
+      id: input.name === "AUTH_SECRET" ? "remote_secret" : "turnstile_secret",
       status: "fail",
-      message: "AUTH_SECRET is missing remotely",
-      fix: "npx cf-auth@latest rotate-secret --apply --env production",
+      message: input.missingMessage,
+      fix: input.fix,
     };
   }
   return {
-    id: "remote_secret",
+    id: input.name === "AUTH_SECRET" ? "remote_secret" : "turnstile_secret",
     status: "pass",
-    message: "Remote AUTH_SECRET configured",
+    message: input.passMessage,
   };
 }
 
@@ -1010,6 +1051,380 @@ async function checkLocalSecrets(cwd: string): Promise<DoctorCheck[]> {
         : "Local AUTH_SECRET format is valid",
     },
   ];
+}
+
+async function checkLocalNamedSecret(
+  cwd: string,
+  name: string,
+): Promise<DoctorCheck> {
+  let text: string;
+  try {
+    text = await readFile(join(cwd, ".dev.vars"), "utf8");
+  } catch {
+    return {
+      id: "turnstile_secret",
+      status: "fail",
+      message: `${name} is missing locally`,
+      fix: `add ${name}=... to .dev.vars`,
+    };
+  }
+  const values = parseEnvFile(text);
+  if (!values[name]) {
+    return {
+      id: "turnstile_secret",
+      status: "fail",
+      message: `${name} is missing locally`,
+      fix: `add ${name}=... to .dev.vars`,
+    };
+  }
+  return {
+    id: "turnstile_secret",
+    status: "pass",
+    message: `${name} configured locally`,
+  };
+}
+
+interface SourceFile {
+  path: string;
+  text: string;
+}
+
+interface AuthSourceInspection {
+  sourceFileCount: number;
+  configFound: boolean;
+  routeMountCount: number;
+  hasDoubleAuthPrefix: boolean;
+  usesTerminalEmail: boolean;
+  usesDevOutbox: boolean;
+  turnstileRequiresSecret: boolean;
+  redirectOrigins: Array<{ property: string; value: string }>;
+  dynamicRedirectProperties: string[];
+}
+
+async function inspectAuthSource(cwd: string): Promise<AuthSourceInspection> {
+  const sourceFiles = await readSourceFiles(join(cwd, "src"));
+  const rootConfigFiles = await readRootAuthConfigFiles(cwd);
+  const configFile =
+    [...sourceFiles, ...rootConfigFiles].find((file) =>
+      /^auth\.config\.[cm]?[jt]sx?$/u.test(basename(file.path)),
+    ) ?? null;
+  const configText = configFile?.text ?? "";
+  const routeSource = sourceFiles.map((file) => file.text).join("\n");
+  const turnstileText = extractObjectPropertyText(configText, "turnstile");
+  return {
+    sourceFileCount: sourceFiles.length,
+    configFound: Boolean(configFile),
+    routeMountCount:
+      countMatches(routeSource, /\bcreateAuthRoutes\s*\(/gu) +
+      countMatches(routeSource, /\bcreateAuthHandler\s*\(/gu),
+    hasDoubleAuthPrefix:
+      routeSource.includes('"/auth/auth') ||
+      routeSource.includes("'/auth/auth") ||
+      routeSource.includes("`/auth/auth"),
+    usesTerminalEmail: /\bterminalEmail\s*\(/u.test(configText),
+    usesDevOutbox: /\boutbox\s*:\s*true\b/u.test(configText),
+    turnstileRequiresSecret: Boolean(
+      turnstileText &&
+      /\bmode\s*:\s*["']required["']/u.test(turnstileText) &&
+      !/\bverify\s*:/u.test(turnstileText),
+    ),
+    redirectOrigins: [
+      ...extractStringArrayProperty(configText, "allowedOrigins").values.map(
+        (value) => ({ property: "allowedOrigins", value }),
+      ),
+      ...extractStringArrayProperty(
+        configText,
+        "allowedPreviewOrigins",
+      ).values.map((value) => ({
+        property: "allowedPreviewOrigins",
+        value,
+      })),
+    ],
+    dynamicRedirectProperties: [
+      ...extractStringArrayProperty(configText, "allowedOrigins").dynamic.map(
+        () => "allowedOrigins",
+      ),
+      ...extractStringArrayProperty(
+        configText,
+        "allowedPreviewOrigins",
+      ).dynamic.map(() => "allowedPreviewOrigins"),
+    ],
+  };
+}
+
+function checkAuthSource(
+  source: AuthSourceInspection,
+  vars: Record<string, string>,
+  remoteTarget: boolean,
+): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  if (source.sourceFileCount === 0) {
+    checks.push({
+      id: "auth_route",
+      status: "warn",
+      message: "Auth source files could not be inspected",
+      fix: "keep auth route source under src or verify route mounting manually",
+    });
+  } else if (source.routeMountCount === 0) {
+    checks.push({
+      id: "auth_route",
+      status: "fail",
+      message: "Auth route mount was not found",
+      fix: "mount createAuthRoutes(authConfig) once at authConfig.basePath or use createAuthHandler(authConfig)",
+    });
+  } else if (source.routeMountCount > 1) {
+    checks.push({
+      id: "auth_route",
+      status: "fail",
+      message: "Auth route appears to be mounted more than once",
+      fix: "mount auth routes exactly once to avoid duplicate handlers",
+    });
+  } else if (source.hasDoubleAuthPrefix) {
+    checks.push({
+      id: "auth_route",
+      status: "fail",
+      message: "Auth route appears to include /auth/auth",
+      fix: "mount at authConfig.basePath and keep auth route definitions relative",
+    });
+  } else {
+    checks.push({
+      id: "auth_route",
+      status: "pass",
+      message: "Auth route mounted once",
+    });
+  }
+
+  if (!source.configFound) {
+    checks.push({
+      id: "auth_config",
+      status: "warn",
+      message: "auth.config source could not be inspected",
+      fix: "keep auth configuration in auth.config.ts or verify production settings manually",
+    });
+    return checks;
+  }
+
+  if (remoteTarget) {
+    if (source.usesTerminalEmail || source.usesDevOutbox) {
+      checks.push({
+        id: "email_adapter",
+        status: "fail",
+        message: "Terminal email/dev outbox is configured for a remote target",
+        fix: "switch auth.config.ts to cloudflareEmail(...) or a custom production email adapter before deploy",
+      });
+    } else {
+      checks.push({
+        id: "email_adapter",
+        status: "pass",
+        message: "Production email adapter source does not use terminal email",
+      });
+    }
+  }
+
+  const redirectCheck = checkRedirectOrigins(source, vars.AUTH_ENV);
+  if (redirectCheck) checks.push(redirectCheck);
+  return checks;
+}
+
+function checkRedirectOrigins(
+  source: AuthSourceInspection,
+  mode: string | undefined,
+): DoctorCheck | null {
+  const invalid = source.redirectOrigins.find(
+    (origin) => !isValidRedirectOrigin(origin.value, mode),
+  );
+  if (invalid) {
+    return {
+      id: "redirect_origins",
+      status: "fail",
+      message: `Redirect ${invalid.property} contains an invalid exact origin`,
+      fix: "use exact origins like https://example.com without paths, queries, fragments, wildcards, or trailing slashes",
+    };
+  }
+  if (source.dynamicRedirectProperties.length > 0) {
+    return {
+      id: "redirect_origins",
+      status: "warn",
+      message: "Redirect origin allowlist contains dynamic values",
+      fix: "verify dynamic redirect origins are exact trusted origins",
+    };
+  }
+  return {
+    id: "redirect_origins",
+    status: "pass",
+    message: "Redirect origin allowlists are valid",
+  };
+}
+
+function isValidRedirectOrigin(
+  value: string,
+  mode: string | undefined,
+): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (value !== url.origin) return false;
+  if (url.protocol === "https:") return true;
+  return (
+    mode === "development" &&
+    url.protocol === "http:" &&
+    ["localhost", "127.0.0.1"].includes(url.hostname)
+  );
+}
+
+async function readRootAuthConfigFiles(cwd: string): Promise<SourceFile[]> {
+  const files: SourceFile[] = [];
+  for (const name of [
+    "auth.config.ts",
+    "auth.config.tsx",
+    "auth.config.js",
+    "auth.config.mjs",
+    "auth.config.cjs",
+  ]) {
+    const path = join(cwd, name);
+    if (!existsSync(path)) continue;
+    files.push({ path, text: await readFile(path, "utf8") });
+  }
+  return files;
+}
+
+async function readSourceFiles(root: string): Promise<SourceFile[]> {
+  if (!existsSync(root)) return [];
+  const files: SourceFile[] = [];
+  async function visit(directory: string) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        entry.isDirectory() &&
+        !["node_modules", "dist", ".wrangler"].includes(entry.name)
+      ) {
+        await visit(join(directory, entry.name));
+      } else if (
+        entry.isFile() &&
+        /\.[cm]?[jt]sx?$/u.test(entry.name) &&
+        !entry.name.endsWith(".d.ts")
+      ) {
+        const path = join(directory, entry.name);
+        files.push({ path, text: await readFile(path, "utf8") });
+      }
+    }
+  }
+  await visit(root);
+  return files;
+}
+
+function countMatches(text: string, pattern: RegExp): number {
+  return [...text.matchAll(pattern)].length;
+}
+
+function extractObjectPropertyText(
+  text: string,
+  property: string,
+): string | null {
+  const pattern = new RegExp(`\\b${property}\\s*:`, "gu");
+  for (const match of text.matchAll(pattern)) {
+    let index = (match.index ?? 0) + match[0].length;
+    while (/\s/u.test(text[index] ?? "")) index += 1;
+    if (text[index] !== "{") continue;
+    const end = findMatchingDelimiter(text, index, "{", "}");
+    if (end !== null) return text.slice(index + 1, end);
+  }
+  return null;
+}
+
+function extractStringArrayProperty(
+  text: string,
+  property: string,
+): { values: string[]; dynamic: string[] } {
+  const values: string[] = [];
+  const dynamic: string[] = [];
+  const pattern = new RegExp(`\\b${property}\\s*:`, "gu");
+  for (const match of text.matchAll(pattern)) {
+    let index = (match.index ?? 0) + match[0].length;
+    while (/\s/u.test(text[index] ?? "")) index += 1;
+    if (text[index] !== "[") {
+      dynamic.push(property);
+      continue;
+    }
+    const end = findMatchingDelimiter(text, index, "[", "]");
+    if (end === null) {
+      dynamic.push(property);
+      continue;
+    }
+    const content = text.slice(index + 1, end);
+    values.push(...extractStringLiterals(content));
+    if (stripCommentsAndStrings(content).replace(/[\s,]/gu, "") !== "") {
+      dynamic.push(property);
+    }
+  }
+  return { values, dynamic };
+}
+
+function extractStringLiterals(text: string): string[] {
+  const values: string[] = [];
+  const pattern = /(["'])(?:\\.|(?!\1)[^\\])*\1/gu;
+  for (const match of text.matchAll(pattern)) {
+    const raw = match[0];
+    values.push(raw.slice(1, -1).replace(/\\(["'\\/])/gu, "$1"));
+  }
+  return values;
+}
+
+function stripCommentsAndStrings(text: string): string {
+  return text
+    .replace(/(["'])(?:\\.|(?!\1)[^\\])*\1/gu, "")
+    .replace(/\/\/.*$/gmu, "")
+    .replace(/\/\*[\s\S]*?\*\//gu, "");
+}
+
+function findMatchingDelimiter(
+  text: string,
+  start: number,
+  open: string,
+  close: string,
+): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      while (index < text.length && text[index] !== "\n") index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (
+        index < text.length - 1 &&
+        !(text[index] === "*" && text[index + 1] === "/")
+      ) {
+        index += 1;
+      }
+      index += 1;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === open) depth += 1;
+    if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return null;
 }
 
 function parseEnvFile(text: string): Record<string, string> {
