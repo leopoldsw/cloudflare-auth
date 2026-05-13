@@ -30,6 +30,11 @@ for (const dir of packageDirs) {
     for (const [name, target] of Object.entries(pkg.bin)) {
       if (!String(target).startsWith("./dist/"))
         failures.push(`${pkg.name}: bin ${name} must point into dist`);
+      if (pkg.exports?.["."]?.import === target) {
+        failures.push(
+          `${pkg.name}: bin ${name} must use a dedicated bin entrypoint, not the root export`,
+        );
+      }
       try {
         const bin = await readFile(join(dir, String(target)), "utf8");
         if (!bin.startsWith("#!/usr/bin/env node")) {

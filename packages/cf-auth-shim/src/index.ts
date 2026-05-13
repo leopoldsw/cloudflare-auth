@@ -1,6 +1,3 @@
-#!/usr/bin/env node
-import { runCli } from "@cf-auth/cli";
+export { cliPackageName } from "@cf-auth/cli";
 
-runCli().then((code) => {
-  process.exitCode = code;
-});
+export const cfAuthPackageName = "cf-auth";

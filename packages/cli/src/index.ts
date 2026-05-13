@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -708,10 +707,4 @@ UPDATE auth_meta
 SET value = '2', updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
 WHERE key = 'schema_version';
 `;
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runCli().then((code) => {
-    process.exitCode = code;
-  });
 }

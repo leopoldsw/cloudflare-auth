@@ -1,4 +1,3 @@
-#!/usr/bin/env node
-import { runCli } from "@cf-auth/cli";
+export { cliPackageName } from "@cf-auth/cli";
 
-void runCli(["init", ...process.argv.slice(2)]);
+export const createCloudflareAuthPackageName = "create-cloudflare-auth";

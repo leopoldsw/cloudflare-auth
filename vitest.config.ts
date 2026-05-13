@@ -13,6 +13,8 @@ export default defineConfig({
       "@cf-auth/hono": `${root}packages/hono/src/index.ts`,
       "@cf-auth/testing": `${root}packages/testing/src/index.ts`,
       "@cf-auth/worker": `${root}packages/worker/src/index.ts`,
+      "cf-auth": `${root}packages/cf-auth-shim/src/index.ts`,
+      "create-cloudflare-auth": `${root}packages/create-cloudflare-auth/src/index.ts`,
     },
   },
   test: {

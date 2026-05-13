@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "bin": {
-    "cf-auth": "./dist/index.js"
+    "cf-auth": "./dist/bin.js"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -26,7 +26,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --clean --sourcemap && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "tsup src/index.ts src/bin.ts --format esm,cjs --clean --sourcemap && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
