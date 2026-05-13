@@ -49,6 +49,7 @@ const appPackage = JSON.parse(await readFile(appPackagePath, "utf8"));
 appPackage.dependencies["@cf-auth/hono"] = fileSpec("@cf-auth/hono");
 appPackage.dependencies["@cf-auth/worker"] = fileSpec("@cf-auth/worker");
 appPackage.devDependencies["@cf-auth/cli"] = fileSpec("@cf-auth/cli");
+appPackage.devDependencies["@cf-auth/testing"] = fileSpec("@cf-auth/testing");
 appPackage.pnpm = {
   ...(appPackage.pnpm ?? {}),
   overrides: Object.fromEntries(
@@ -61,6 +62,7 @@ await writeFile(appPackagePath, JSON.stringify(appPackage, null, 2) + "\n");
 
 const installMode = process.env.CF_AUTH_TARBALL_INSTALL === "1";
 if (installMode) {
+  await writeFile(join(appDir, "smoke-auth.test.ts"), smokeAuthTestSource());
   run("pnpm", [
     "--dir",
     appDir,
@@ -126,4 +128,64 @@ function run(command, args, options = {}) {
 function runJson(command, args) {
   const result = run(command, args);
   return JSON.parse(result.stdout);
+}
+
+function smokeAuthTestSource() {
+  return `import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import app from "./src/index";
+import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
+
+describe("generated auth app", () => {
+  it("signs up and logs in against migrated D1", async () => {
+    const db = createSqliteD1Database();
+    await applyD1Migrations(db, [
+      await readFile(join(process.cwd(), "migrations", "0001_initial.sql"), "utf8"),
+      await readFile(join(process.cwd(), "migrations", "0002_indexes.sql"), "utf8"),
+    ]);
+    const env = {
+      AUTH_DB: db,
+      AUTH_ENV: "development",
+      AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+      AUTH_SECRET: "k_smoke.${"A".repeat(43)}",
+    };
+    const ctx = {
+      waitUntil(promise: Promise<unknown>) {
+        void promise;
+      },
+      passThroughOnException() {},
+    } as ExecutionContext;
+    const signup = await app.fetch(
+      new Request("http://localhost:8787/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "smoke@example.com",
+          password: "correct horse battery staple",
+        }),
+      }),
+      env,
+      ctx,
+    );
+    expect(signup.status).toBe(200);
+    expect(signup.headers.get("Set-Cookie") ?? "").toContain("cfauth-session=");
+
+    const login = await app.fetch(
+      new Request("http://localhost:8787/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: "smoke@example.com",
+          password: "correct horse battery staple",
+        }),
+      }),
+      env,
+      ctx,
+    );
+    expect(login.status).toBe(200);
+    expect(login.headers.get("Set-Cookie") ?? "").toContain("cfauth-session=");
+  });
+});
+`;
 }

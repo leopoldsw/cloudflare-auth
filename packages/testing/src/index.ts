@@ -1,13 +1,22 @@
-import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { createRequire } from "node:module";
+import type {
+  DatabaseSync as DatabaseSyncType,
+  StatementSync,
+} from "node:sqlite";
 import type { AuthEmailAdapter, SendAuthEmailInput } from "@cf-auth/worker";
 
 export const testingPackageName = "@cf-auth/testing";
+
+const requireNode = createRequire(`${process.cwd()}/package.json`);
+const { DatabaseSync } = requireNode("node:sqlite") as {
+  DatabaseSync: new (filename: string) => DatabaseSyncType;
+};
 
 type BoundValue = string | number | null;
 
 class SqliteD1PreparedStatement {
   constructor(
-    private readonly database: DatabaseSync,
+    private readonly database: DatabaseSyncType,
     private readonly sql: string,
     private readonly params: BoundValue[] = [],
   ) {}
@@ -83,7 +92,7 @@ class SqliteD1PreparedStatement {
 class SqliteD1Database {
   private queue: Promise<void> = Promise.resolve();
 
-  constructor(readonly sqlite: DatabaseSync) {
+  constructor(readonly sqlite: DatabaseSyncType) {
     this.sqlite.exec("PRAGMA foreign_keys = ON");
   }
 
@@ -143,10 +152,10 @@ class SqliteD1Database {
 }
 
 export function createSqliteD1Database(): D1Database & {
-  sqlite: DatabaseSync;
+  sqlite: DatabaseSyncType;
 } {
   return new SqliteD1Database(new DatabaseSync(":memory:")) as D1Database & {
-    sqlite: DatabaseSync;
+    sqlite: DatabaseSyncType;
   };
 }
 

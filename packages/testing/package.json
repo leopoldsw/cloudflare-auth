@@ -24,7 +24,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --clean --sourcemap && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "tsup src/index.ts --format esm,cjs --platform node --clean --sourcemap && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
