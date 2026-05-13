@@ -264,6 +264,25 @@ async function commandDoctor(
       message: "Public origin configured",
     });
   }
+  if (vars.AUTH_ENV === "production" || envName) {
+    const email = selected?.send_email?.find(
+      (item) => item.name === "AUTH_EMAIL",
+    );
+    if (!email) {
+      addCheck({
+        id: "email_binding",
+        status: "fail",
+        message: "Cloudflare Email binding AUTH_EMAIL is missing",
+        fix: "add a send_email binding named AUTH_EMAIL or configure a custom production email adapter",
+      });
+    } else {
+      addCheck({
+        id: "email_binding",
+        status: "pass",
+        message: "Cloudflare Email binding AUTH_EMAIL configured",
+      });
+    }
+  }
   if (!existsSync(join(cwd, ".dev.vars")) && !envName) {
     addCheck({
       id: "local_secret",
@@ -424,6 +443,7 @@ function targetMode(parsed: ParsedArgs): { local: boolean; remote: boolean } {
 
 interface WranglerConfig {
   vars?: Record<string, string>;
+  send_email?: Array<{ name: string }>;
   d1_databases?: Array<{
     binding: string;
     database_name: string;
@@ -535,6 +555,11 @@ function wranglerTemplate(): string {
           "binding": "AUTH_DB",
           "database_name": "my-app-auth",
           "database_id": "REPLACE_WITH_DATABASE_ID"
+        }
+      ],
+      "send_email": [
+        {
+          "name": "AUTH_EMAIL"
         }
       ]
     }

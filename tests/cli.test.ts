@@ -110,6 +110,26 @@ describe("CLI MVP", () => {
     expect(errors.join("\n")).not.toMatch(/cfauth\.|AUTH_SECRET=/);
   });
 
+  it("doctor reports missing production email binding", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as {
+      env: { production: { send_email?: unknown } };
+    };
+    delete config.env.production.send_email;
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+    });
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Cloudflare Email binding AUTH_EMAIL is missing",
+    );
+  });
+
   it("emits redaction-safe doctor report JSON matching the checked-in schema id", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
@@ -211,6 +231,7 @@ async function writeWrangler(cwd: string) {
                 database_id: "prod-id",
               },
             ],
+            send_email: [{ name: "AUTH_EMAIL" }],
           },
         },
       },
