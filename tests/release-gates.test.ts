@@ -158,6 +158,21 @@ describe("release gates", () => {
     expect(result.stderr).toContain("throughputHashesPerSecond");
   });
 
+  it("requires security policy operational checks", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "SECURITY.md",
+      "push protection",
+      "push safeguards",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("SECURITY.md");
+    expect(result.stderr).toContain("push protection");
+  });
+
   it("requires production password hashing in examples and generated templates", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -376,7 +391,14 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     ["README.md", ["SECURITY.md", "docs/known-limitations.md"]],
     [
       "SECURITY.md",
-      ["Expected Response Window", "secret scanning", "advisory evidence only"],
+      [
+        "Supported Versions",
+        "Reporting A Vulnerability",
+        "Expected Response Window",
+        "secret scanning",
+        "push protection",
+        "advisory evidence only",
+      ],
     ],
     [
       "docs/decisions/password-benchmark.md",

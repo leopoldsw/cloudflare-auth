@@ -72,6 +72,7 @@ await requireText(
   "pnpm benchmark:password",
 );
 await requireText("SECURITY.md", "secret scanning");
+await requireText("SECURITY.md", "push protection");
 await requireText("SECURITY.md", "advisory evidence only");
 await requireText(
   ".github/workflows/dependency-review.yml",

@@ -4,6 +4,7 @@ const docs = {
   metrics: await readFile("docs/metrics.md", "utf8"),
   rateLimiting: await readFile("docs/rate-limiting.md", "utf8"),
   securityModel: await readFile("docs/security-model.md", "utf8"),
+  securityPolicy: await readFile("SECURITY.md", "utf8"),
   turnstile: await readFile("docs/turnstile.md", "utf8"),
 };
 const failures = [];
@@ -46,6 +47,17 @@ for (const threat of threatRows) {
   } else {
     await requireLinkedTestsExist(row, threat);
   }
+}
+
+for (const text of [
+  "Supported Versions",
+  "Reporting A Vulnerability",
+  "Expected Response Window",
+  "secret scanning",
+  "push protection",
+  "advisory evidence only",
+]) {
+  requireText("SECURITY.md", docs.securityPolicy, text);
 }
 
 for (const text of [

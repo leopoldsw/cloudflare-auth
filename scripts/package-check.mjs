@@ -668,6 +668,7 @@ async function verifyReleaseControls() {
         "check:package-names",
         "not as the sole security gate",
         "secret scanning",
+        "push protection",
         "Changesets version/changelog",
         "Changesets fixed package group",
         "dry-run publish summary artifact",
