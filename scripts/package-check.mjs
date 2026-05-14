@@ -130,6 +130,7 @@ for (const dir of packageDirs) {
 
 await verifyPackageNamingDocs();
 await verifyDocsManifest();
+await verifyToolchainDocs();
 await verifyRootScripts();
 await verifyCiControls();
 await verifyReleaseControls();
@@ -266,6 +267,7 @@ async function verifyDocsManifest() {
     "docs/roadmap.md",
     "docs/metrics.md",
     "docs/cli.md",
+    "docs/toolchain.md",
     "docs/alpha.md",
     "docs/public-beta.md",
     "docs/deploy-to-cloudflare.md",
@@ -454,6 +456,33 @@ function verifyRootScripts() {
     if (!rootPackage.scripts?.[script]) {
       failures.push(`package.json: missing script ${script}`);
     }
+  }
+}
+
+async function verifyToolchainDocs() {
+  const matrix = JSON.parse(
+    await readFile("scripts/version-matrix.json", "utf8"),
+  );
+  const docs = await readFile("docs/toolchain.md", "utf8");
+  for (const [key, value] of Object.entries({
+    node: matrix.node,
+    pnpm: matrix.pnpm,
+    typescript: matrix.typescript,
+    wrangler: matrix.wrangler,
+    hono: matrix.hono,
+    tsup: matrix.tsup,
+    vitest: matrix.vitest,
+    zod: matrix.zod,
+    changesets: matrix.changesets,
+    workersCompatibilityDateFloor: matrix.workersCompatibilityDateFloor,
+  })) {
+    if (!docs.includes(String(value))) {
+      failures.push(`docs/toolchain.md: missing ${key} version ${value}`);
+    }
+  }
+  const deployment = await readFile("docs/deployment.md", "utf8");
+  if (!deployment.includes("(toolchain.md)")) {
+    failures.push("docs/deployment.md: missing toolchain.md link");
   }
 }
 

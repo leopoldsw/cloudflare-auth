@@ -2,6 +2,9 @@
 
 Production deploys should use a named environment.
 
+Use the supported toolchain from [Toolchain](toolchain.md) when deploying
+release candidates or reproducing support reports.
+
 ```bash
 npx --package @cf-auth/cli@latest cf-auth doctor --env production
 npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production
