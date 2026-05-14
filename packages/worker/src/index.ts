@@ -3500,7 +3500,9 @@ function json(
 }
 
 function errorResponse(error: unknown, status: number, code: string): Response {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = redactLogValue(
+    error instanceof Error ? error.message : String(error),
+  );
   return json(
     { error: { code, message } },
     code === "body_too_large"

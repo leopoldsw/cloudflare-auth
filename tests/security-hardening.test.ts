@@ -229,6 +229,40 @@ describe("security hardening helpers", () => {
     ).resolves.toBe(false);
   });
 
+  it("redacts sensitive values from API error messages", async () => {
+    const rawToken = `cfauth.magic.k1.${"A".repeat(43)}`;
+    const secretMaterial = "B".repeat(43);
+    const required = await setup({
+      turnstile: {
+        mode: "required",
+        endpoints: ["magic_link_request"],
+        verify: async ({ token }) => {
+          throw new Error(
+            `verifier failed token=${token} email=person@example.com AUTH_SECRET=k1.${secretMaterial}`,
+          );
+        },
+      },
+    });
+    const response = await required.authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "person@example.com",
+        turnstileToken: rawToken,
+      }),
+    });
+
+    expect(response.status).toBe(500);
+    const body = await response.text();
+    expect(body).toContain('"code":"server_error"');
+    expect(body).toContain("token=[REDACTED]");
+    expect(body).toContain("[REDACTED_EMAIL]");
+    expect(body).toContain("AUTH_SECRET=[REDACTED]");
+    expect(body).not.toContain(rawToken);
+    expect(body).not.toContain("person@example.com");
+    expect(body).not.toContain(secretMaterial);
+  });
+
   it("short-circuits D1 rate-limit writes when a Cloudflare binding denies", async () => {
     const { authFetch, db } = await setup(
       {},
