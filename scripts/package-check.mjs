@@ -367,6 +367,7 @@ async function verifyReleaseControls() {
   for (const needle of [
     "id-token: write",
     "package_names_confirmed",
+    "pnpm install --frozen-lockfile",
     "pnpm format:check",
     "pnpm lint",
     "pnpm typecheck",
