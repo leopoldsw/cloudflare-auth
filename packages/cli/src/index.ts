@@ -2946,7 +2946,7 @@ function wranglerTemplate(): string {
   return `{
   "name": "my-app-dev",
   "main": "src/index.ts",
-  "compatibility_date": "2026-05-13",
+  "compatibility_date": "2026-05-14",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "AUTH_ENV": "development",

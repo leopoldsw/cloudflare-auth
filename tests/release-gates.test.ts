@@ -668,7 +668,7 @@ await writeFile(dir + "/package.json", JSON.stringify({
   }
 }, null, 2));
 await writeFile(dir + "/wrangler.jsonc", JSON.stringify({
-  compatibility_date: "2026-05-13",
+  compatibility_date: "2026-05-14",
   compatibility_flags: ["nodejs_compat"],
   vars: { AUTH_ENV: "production", AUTH_PUBLIC_ORIGIN: "https://auth.example.test" },
   d1_databases: [{ binding: "AUTH_DB", database_name: "auth", database_id: "auth", migrations_dir: "migrations" }]
