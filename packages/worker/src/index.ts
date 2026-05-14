@@ -1082,10 +1082,7 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
 export async function cleanCfAuth(
   input: CleanCfAuthInput,
 ): Promise<CleanCfAuthResult> {
-  const config =
-    "runtime" in input.config
-      ? (input.config as AuthConfig)
-      : defineAuthConfig(input.config);
+  const config = normalizeAuthConfig(input.config);
   const db = input.env[config.database.binding] as D1Database | undefined;
   if (!db) throw new AuthCryptoError("D1 binding is missing", "config_error");
   const day = 24 * 60 * 60 * 1000;
@@ -1673,10 +1670,7 @@ function assertTurnstileEndpoints(endpoints: readonly string[]): void {
 }
 
 export function createAuthHandler(configInput: AuthHelperConfig) {
-  const config =
-    "runtime" in configInput
-      ? (configInput as AuthConfig)
-      : defineAuthConfig(configInput);
+  const config = normalizeAuthConfig(configInput);
   return {
     async fetch(
       request: Request,
@@ -1881,12 +1875,13 @@ function resolveHelperRuntime(
   envInput?: unknown,
   ctxInput?: ExecutionContext,
 ): RuntimeContext {
-  const config =
-    "runtime" in configInput
-      ? (configInput as AuthConfig)
-      : defineAuthConfig(configInput);
+  const config = normalizeAuthConfig(configInput);
   const ctx = ctxInput ?? ({ waitUntil() {} } as unknown as ExecutionContext);
   return resolveRuntime(config, request, envInput, ctx);
+}
+
+function normalizeAuthConfig(configInput: AuthHelperConfig): AuthConfig {
+  return defineAuthConfig(configInput as AuthConfigInput);
 }
 
 async function handleSignup(

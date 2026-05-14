@@ -186,6 +186,41 @@ describe("auth HTTP runtime", () => {
     ).toEqual(["http://localhost:5173"]);
   });
 
+  it("normalizes partial runtime overrides passed directly to the handler", async () => {
+    const db = createSqliteD1Database();
+    await applyD1Migrations(db, [
+      await readFile("migrations/0001_initial.sql", "utf8"),
+      await readFile("migrations/0002_indexes.sql", "utf8"),
+    ]);
+    const handler = createAuthHandler({
+      appName: "Partial Runtime Test",
+      basePath: "/auth",
+      email: createMockEmailAdapter(),
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["custom.example"],
+      },
+      passwordHashing: {
+        profile: "development-fast",
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://custom.example/auth/user"),
+      {
+        AUTH_DB: db,
+        AUTH_SECRET: authSecret,
+        AUTH_ENV: "production",
+        AUTH_PUBLIC_ORIGIN: "https://custom.example",
+      },
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toEqual({ user: null });
+  });
+
   it("rejects invalid feature flag combinations", () => {
     const invalid = (overrides: Partial<AuthConfig>) =>
       defineAuthConfig({
