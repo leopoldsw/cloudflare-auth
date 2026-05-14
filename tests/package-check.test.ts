@@ -45,6 +45,22 @@ describe("package checks", () => {
       ".github/workflows/published-quickstart-smoke.yml: missing CF_AUTH_PUBLISHED_QUICKSTART_PACKAGE_TAG",
     );
   });
+
+  it("requires release gates before package publication", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "      - run: pnpm release:gates",
+      "      - run: pnpm changeset publish --provenance\n      - run: pnpm release:gates",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: pnpm changeset publish --provenance must appear after pnpm benchmark:password",
+    );
+  });
 });
 
 async function packageCheckFixture() {

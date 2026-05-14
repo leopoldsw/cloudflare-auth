@@ -400,6 +400,16 @@ async function verifyReleaseControls() {
       failures.push(`.github/workflows/release.yml: missing ${needle}`);
     }
   }
+  requireOrderedText(".github/workflows/release.yml", releaseWorkflow, [
+    "pnpm install --frozen-lockfile",
+    "pnpm package:check",
+    "pnpm verify:package-ownership",
+    "pnpm check:package-names",
+    "pnpm release:gates",
+    "pnpm smoke:tarballs",
+    "pnpm benchmark:password",
+    "pnpm changeset publish --provenance",
+  ]);
 
   const productionSmokeWorkflow = await readFile(
     ".github/workflows/cloudflare-production-smoke.yml",
@@ -504,6 +514,21 @@ async function verifyReleaseControls() {
         failures.push(`${file}: missing ${needle}`);
       }
     }
+  }
+}
+
+function requireOrderedText(file, text, needles) {
+  let previousIndex = -1;
+  let previousNeedle = "";
+  for (const needle of needles) {
+    const index = text.indexOf(needle);
+    if (index === -1) continue;
+    if (index < previousIndex) {
+      failures.push(`${file}: ${needle} must appear after ${previousNeedle}`);
+      return;
+    }
+    previousIndex = index;
+    previousNeedle = needle;
   }
 }
 
