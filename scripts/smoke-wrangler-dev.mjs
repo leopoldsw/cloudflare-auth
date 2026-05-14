@@ -64,7 +64,7 @@ dev.stderr.on("data", (chunk) => {
 });
 
 try {
-  await waitForHttp(origin);
+  await waitForHttp(`${origin}/auth/user`);
   await exerciseAuth(origin);
   console.log(`wrangler dev smoke passed: ${exampleDir} at ${origin}`);
 } finally {
@@ -103,6 +103,7 @@ async function findOpenPort() {
 async function waitForHttp(originUrl) {
   const deadline = Date.now() + 30_000;
   let lastError;
+  let lastStatus;
   while (Date.now() < deadline) {
     if (dev.exitCode !== null) {
       throw new Error(`wrangler dev exited early:\n${output}`);
@@ -110,15 +111,20 @@ async function waitForHttp(originUrl) {
     try {
       const response = await fetch(originUrl);
       if (response.ok) return;
+      lastStatus = response.status;
     } catch (error) {
       lastError = error;
     }
     await delay(250);
   }
+  const detail =
+    lastStatus === undefined
+      ? lastError instanceof Error
+        ? lastError.message
+        : String(lastError)
+      : `HTTP ${lastStatus}`;
   throw new Error(
-    `Timed out waiting for wrangler dev: ${
-      lastError instanceof Error ? lastError.message : String(lastError)
-    }\n${output}`,
+    `Timed out waiting for wrangler dev at ${originUrl}: ${detail}\n${output}`,
   );
 }
 

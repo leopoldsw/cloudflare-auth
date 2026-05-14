@@ -105,6 +105,10 @@ if (installMode) {
   ]);
   run("pnpm", ["--dir", appDir, "build"]);
   run("pnpm", ["--dir", appDir, "test"]);
+  run(process.execPath, [
+    join(root, "scripts", "smoke-wrangler-dev.mjs"),
+    appDir,
+  ]);
 }
 
 const migrate = installMode
