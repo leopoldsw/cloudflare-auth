@@ -1,13 +1,54 @@
 import { describe, expect, it } from "vitest";
 
 import { cfAuthPackageName } from "cf-auth";
-import { clientPackageName } from "@cf-auth/client";
-import { cliPackageName } from "@cf-auth/cli";
-import { corePackageName } from "@cf-auth/core";
-import { emailCloudflarePackageName } from "@cf-auth/email-cloudflare";
-import { honoPackageName } from "@cf-auth/hono";
-import { testingPackageName } from "@cf-auth/testing";
-import { workerPackageName } from "@cf-auth/worker";
+import {
+  AuthClientError,
+  clientPackageName,
+  createAuthClient,
+} from "@cf-auth/client";
+import { cliPackageName, runCli } from "@cf-auth/cli";
+import {
+  corePackageName,
+  hashPassword,
+  normalizeEmail,
+  parseAuthKeyRing,
+  resolveSessionCookie,
+  validateRedirectTarget,
+} from "@cf-auth/core";
+import {
+  cloudflareEmail,
+  defaultEmailVerificationTemplate,
+  defaultMagicLinkTemplate,
+  defaultPasswordResetTemplate,
+  emailCloudflarePackageName,
+} from "@cf-auth/email-cloudflare";
+import {
+  createAuthRoutes,
+  getAuthUser,
+  honoPackageName,
+  optionalUser,
+  requireUser,
+  requireVerifiedUser,
+} from "@cf-auth/hono";
+import {
+  applyD1Migrations,
+  createMockEmailAdapter,
+  createSqliteD1Database,
+  testingPackageName,
+} from "@cf-auth/testing";
+import {
+  byEnvironment,
+  cloudflareRateLimitPrefilter,
+  createAuthHandler,
+  createD1Repositories,
+  defineAuthConfig,
+  getAuthSessionFromRequest,
+  redactLogValue,
+  terminalEmail,
+  turnstileEndpointNames,
+  verifyTurnstileToken,
+  workerPackageName,
+} from "@cf-auth/worker";
 import { createCloudflareAuthPackageName } from "create-cloudflare-auth";
 
 describe("package boundary exports", () => {
@@ -21,5 +62,42 @@ describe("package boundary exports", () => {
     expect(emailCloudflarePackageName).toBe("@cf-auth/email-cloudflare");
     expect(testingPackageName).toBe("@cf-auth/testing");
     expect(createCloudflareAuthPackageName).toBe("create-cloudflare-auth");
+  });
+
+  it("imports documented runtime symbols through package roots", () => {
+    for (const symbol of [
+      runCli,
+      createAuthClient,
+      normalizeEmail,
+      validateRedirectTarget,
+      parseAuthKeyRing,
+      hashPassword,
+      resolveSessionCookie,
+      defineAuthConfig,
+      createAuthHandler,
+      getAuthSessionFromRequest,
+      createD1Repositories,
+      terminalEmail,
+      byEnvironment,
+      verifyTurnstileToken,
+      cloudflareRateLimitPrefilter,
+      redactLogValue,
+      createAuthRoutes,
+      getAuthUser,
+      optionalUser,
+      requireUser,
+      requireVerifiedUser,
+      cloudflareEmail,
+      defaultMagicLinkTemplate,
+      defaultEmailVerificationTemplate,
+      defaultPasswordResetTemplate,
+      createSqliteD1Database,
+      applyD1Migrations,
+      createMockEmailAdapter,
+    ]) {
+      expect(typeof symbol).toBe("function");
+    }
+    expect(AuthClientError).toBeInstanceOf(Function);
+    expect(turnstileEndpointNames).toContain("signup");
   });
 });
