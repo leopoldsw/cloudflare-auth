@@ -441,6 +441,50 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("packages[0].version");
   });
 
+  it("rejects package ownership evidence with raw emails, IPs, and user agents", async () => {
+    const emailEvidence = validPackageEvidence();
+    (emailEvidence as Record<string, unknown>).notes =
+      "verified by person@example.com";
+    const emailPath = await writeEvidence(
+      "package-ownership-email",
+      emailEvidence,
+    );
+    const emailResult = runScript("scripts/verify-package-ownership.mjs", {
+      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+      CF_AUTH_PACKAGE_OWNERSHIP_PATH: emailPath,
+    });
+
+    const ipEvidence = validPackageEvidence();
+    (ipEvidence as Record<string, unknown>).notes = "verified from 2001:db8::1";
+    const ipPath = await writeEvidence("package-ownership-ipv6", ipEvidence);
+    const ipResult = runScript("scripts/verify-package-ownership.mjs", {
+      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+      CF_AUTH_PACKAGE_OWNERSHIP_PATH: ipPath,
+    });
+
+    const userAgentEvidence = validPackageEvidence();
+    (userAgentEvidence as Record<string, unknown>).userAgent =
+      "Mozilla/5.0 Evidence Browser";
+    const userAgentPath = await writeEvidence(
+      "package-ownership-user-agent",
+      userAgentEvidence,
+    );
+    const userAgentResult = runScript("scripts/verify-package-ownership.mjs", {
+      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+      CF_AUTH_PACKAGE_OWNERSHIP_PATH: userAgentPath,
+    });
+
+    expect(emailResult.status).toBe(1);
+    expect(emailResult.stderr).toContain("must not include raw secrets");
+    expect(emailResult.stderr).toContain("emails");
+    expect(ipResult.status).toBe(1);
+    expect(ipResult.stderr).toContain("must not include raw secrets");
+    expect(ipResult.stderr).toContain("IPs");
+    expect(userAgentResult.status).toBe(1);
+    expect(userAgentResult.stderr).toContain("must not include raw secrets");
+    expect(userAgentResult.stderr).toContain("user agents");
+  });
+
   it("accepts security tracker evidence with issue and advisory search proof", async () => {
     const path = await writeEvidence(
       "security-tracker",

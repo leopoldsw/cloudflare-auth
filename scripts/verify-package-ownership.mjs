@@ -1,6 +1,10 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import {
+  containsIpLiteral,
+  containsRawUserAgent,
+} from "./evidence-redaction.mjs";
 import { isIsoDateString } from "./evidence-validation.mjs";
 
 const evidencePath =
@@ -142,7 +146,7 @@ function validateEvidence(value, rawText) {
 
   if (containsSensitiveEvidence(rawText)) {
     failures.push(
-      `${evidencePath}: must not include npm tokens or auth-token environment variables`,
+      `${evidencePath}: must not include raw secrets, tokens, cookies, emails, IPs, user agents, or Cloudflare API tokens`,
     );
   }
   if (containsPlaceholderEvidence(rawText)) {
@@ -167,9 +171,18 @@ function requireDate(value, path) {
 
 function containsSensitiveEvidence(text) {
   return (
+    /\bAUTH_SECRET\s*=/u.test(text) ||
+    /\bCLOUDFLARE_API_TOKEN\b/u.test(text) ||
     /\b(?:NODE_AUTH_TOKEN|NPM_TOKEN)\b/u.test(text) ||
     /\b_authToken\b/u.test(text) ||
-    /\bnpm_[A-Za-z0-9]{20,}\b/u.test(text)
+    /\bnpm_[A-Za-z0-9]{20,}\b/u.test(text) ||
+    /\bcfauth\.(?:ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{20,}/u.test(
+      text,
+    ) ||
+    /\b(?:__Host-|__Secure-)?cfauth-session=/u.test(text) ||
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu.test(text) ||
+    containsIpLiteral(text) ||
+    containsRawUserAgent(text)
   );
 }
 
