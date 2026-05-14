@@ -313,6 +313,28 @@ describe("auth HTTP runtime", () => {
     await expect(response?.json()).resolves.toEqual({ user: null });
   });
 
+  it("matches the auth base path on path boundaries only", async () => {
+    const { handler, env, ctx } = await setup();
+    for (const path of ["/authentication", "/authentic", "/authz"]) {
+      const response = await handler.fetch(
+        new Request(`${origin}${path}`),
+        env,
+        ctx,
+      );
+      expect(response).toBeNull();
+    }
+
+    const root = await handler.fetch(new Request(`${origin}/auth`), env, ctx);
+    expect(root?.status).toBe(404);
+
+    const nested = await handler.fetch(
+      new Request(`${origin}/auth/user`),
+      env,
+      ctx,
+    );
+    expect(nested?.status).toBe(200);
+  });
+
   it("limits development public-origin fallback to trusted localhost terminal email", async () => {
     const terminalFallback = await setup({
       email: terminalEmail({ print() {} }),
