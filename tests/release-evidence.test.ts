@@ -770,6 +770,7 @@ describe("release evidence verifiers", () => {
   it("rejects deploy button evidence without required proof flags and endpoints", async () => {
     const evidence = validDeployButtonEvidence();
     evidence.starterTemplateCreated = false;
+    evidence.emailBindingConfigured = false;
     evidence.migrationsApplied = false;
     evidence.signupLoginSmokePassed = false;
     evidence.smokedEndpoints = ["/auth/signup"];
@@ -781,6 +782,7 @@ describe("release evidence verifiers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("starterTemplateCreated");
+    expect(result.stderr).toContain("emailBindingConfigured");
     expect(result.stderr).toContain("migrationsApplied");
     expect(result.stderr).toContain("signupLoginSmokePassed");
     expect(result.stderr).toContain("/auth/login");
@@ -1472,6 +1474,7 @@ function validDeployButtonEvidence() {
     templateRepositoryPublic: true,
     templateHasNoWorkspaceDependencies: true,
     d1BindingConfigured: true,
+    emailBindingConfigured: true,
     migrationsApplied: true,
     authSecretConfigured: true,
     publicOriginConfigured: true,

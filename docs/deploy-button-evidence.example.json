@@ -11,6 +11,7 @@
   "templateRepositoryPublic": false,
   "templateHasNoWorkspaceDependencies": false,
   "d1BindingConfigured": false,
+  "emailBindingConfigured": false,
   "migrationsApplied": false,
   "authSecretConfigured": false,
   "publicOriginConfigured": false,

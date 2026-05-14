@@ -104,6 +104,7 @@ function validateEvidence(value, rawText) {
     "templateRepositoryPublic",
     "templateHasNoWorkspaceDependencies",
     "d1BindingConfigured",
+    "emailBindingConfigured",
     "migrationsApplied",
     "authSecretConfigured",
     "publicOriginConfigured",

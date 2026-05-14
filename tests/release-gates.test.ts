@@ -1753,6 +1753,7 @@ function validDeployButtonEvidence() {
     templateRepositoryPublic: true,
     templateHasNoWorkspaceDependencies: true,
     d1BindingConfigured: true,
+    emailBindingConfigured: true,
     migrationsApplied: true,
     authSecretConfigured: true,
     publicOriginConfigured: true,
