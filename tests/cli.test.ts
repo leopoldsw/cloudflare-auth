@@ -503,6 +503,43 @@ export default defineAuthConfig({
     );
   });
 
+  it("doctor rejects session cookie domains outside the public origin host", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as {
+      env: { production: { vars: Record<string, string> } };
+    };
+    config.env.production.vars.AUTH_PUBLIC_ORIGIN = "https://app.other.com";
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    await writeAuthSource(
+      cwd,
+      `import { defineAuthConfig } from "@cf-auth/worker";
+import { cloudflareEmail } from "@cf-auth/email-cloudflare";
+
+export default defineAuthConfig({
+  appName: "My App",
+  basePath: "/auth",
+  email: cloudflareEmail({ from: "no-reply@example.com" }),
+  session: {
+    domain: ".example.com"
+  }
+});
+`,
+    );
+    const errors: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Session cookie source config is invalid for this environment",
+    );
+  });
+
   it("doctor warns when request body source limits exceed 64 KiB", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
