@@ -447,6 +447,12 @@ describe("CLI MVP", () => {
       "if (authResponse) return authResponse;",
     );
     expect(typeOutput.join("\n")).toContain("AUTH_DB: D1Database");
+    expect(typeOutput.join("\n")).toContain("AUTH_EMAIL?:");
+    expect(typeOutput.join("\n")).toContain("send(message:");
+    expect(typeOutput.join("\n")).toContain("AUTH_RATE_LIMITER?:");
+    expect(typeOutput.join("\n")).toContain(
+      "limit(input: { key: string }): Promise<{ success: boolean }>",
+    );
     expect(typeOutput.join("\n")).toContain("AUTH_SECRET_PREVIOUS?: string");
     expect(typeOutput.join("\n")).toContain(
       'AUTH_ENV: "development" | "preview" | "production"',
