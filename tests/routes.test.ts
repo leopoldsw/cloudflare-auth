@@ -474,6 +474,24 @@ describe("auth HTTP runtime", () => {
     });
     expect(oversized.status).toBe(413);
 
+    const streamBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            JSON.stringify({ email: "stream@example.com" }),
+          ),
+        );
+        controller.close();
+      },
+    });
+    const oversizedStream = await limited.authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: streamBody as unknown as BodyInit,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    expect(oversizedStream.status).toBe(413);
+
     const { authFetch, handler, env } = await setup();
     const unsafe = await authFetch("/auth/magic-link/request", {
       method: "POST",
