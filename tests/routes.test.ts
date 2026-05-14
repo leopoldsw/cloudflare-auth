@@ -541,6 +541,19 @@ describe("auth HTTP runtime", () => {
       error: { code: "validation_failed" },
     });
 
+    const formSignup = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        email: "form@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(formSignup.status).toBe(415);
+    await expect(formSignup.json()).resolves.toMatchObject({
+      error: { code: "unsupported_content_type" },
+    });
+
     const prod = await handler.fetch(
       new Request("https://example.com/auth/logout", { method: "POST" }),
       {

@@ -1978,13 +1978,17 @@ function displayCommand(command: string, args: string[]): string {
 
 function commandGenerate(parsed: ParsedArgs): string {
   const what = parsed.positionals[0] ?? "hono";
+  if (what === "hono")
+    return "app.route(authConfig.basePath, createAuthRoutes(authConfig));";
   if (what === "types")
     return "export interface Env { AUTH_DB: D1Database; AUTH_SECRET: string; }";
   if (what === "react-client")
     return 'import { createAuthClient } from "@cf-auth/client";\nexport const auth = createAuthClient({ basePath: "/auth" });';
   if (what === "worker-snippet")
     return "const authHandler = createAuthHandler(authConfig);\nconst authResponse = await authHandler.fetch(request, env, ctx);";
-  return "app.route(authConfig.basePath, createAuthRoutes(authConfig));";
+  throw new Error(
+    `Unsupported generator: ${what}. Supported generators: hono, worker-snippet, react-client, types.`,
+  );
 }
 
 async function commandRotateSecret(

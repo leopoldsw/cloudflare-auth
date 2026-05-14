@@ -267,6 +267,22 @@ describe("CLI MVP", () => {
     expect(errors.join("\n")).toContain("Remote migrations require --env");
   });
 
+  it("rejects unknown generate snippets instead of aliasing them", async () => {
+    const output: string[] = [];
+    const errors: string[] = [];
+    const ok = await runCli(["generate", "worker-snippet"], {
+      stdout: (line) => output.push(line),
+    });
+    const bad = await runCli(["generate", "turnstile"], {
+      stderr: (line) => errors.push(line),
+    });
+
+    expect(ok).toBe(0);
+    expect(output.join("\n")).toContain("createAuthHandler(authConfig)");
+    expect(bad).toBe(1);
+    expect(errors.join("\n")).toContain("Unsupported generator: turnstile");
+  });
+
   it("doctor reports missing D1 and secret fixes without leaking sensitive values", async () => {
     const cwd = await tempDir();
     await writeFile(

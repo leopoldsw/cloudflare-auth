@@ -1780,7 +1780,7 @@ async function handleSignup(
 ): Promise<Response> {
   if (!runtime.config.signup.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(runtime, "signup", rawBody, request);
   const body = signupSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
@@ -1857,7 +1857,7 @@ async function handleLogin(
     !runtime.config.login.usernamePassword
   )
     return errorResponse("Not found", 404, "not_found");
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(runtime, "password_login", rawBody, request);
   const body = loginSchema.parse(rawBody);
   const isEmail = body.identifier.includes("@");
@@ -2000,7 +2000,7 @@ async function handleMagicLinkRequest(
 ): Promise<Response> {
   if (!runtime.config.login.magicLink)
     return errorResponse("Not found", 404, "not_found");
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(runtime, "magic_link_request", rawBody, request);
   const body = emailRequestSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
@@ -2069,7 +2069,7 @@ async function handleMagicLinkConsume(
   runtime: RuntimeContext,
 ): Promise<Response> {
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json-or-form");
   await enforceTurnstile(runtime, "magic_link_consume", rawBody, request);
   const body = tokenSchema.parse(rawBody);
   await rateLimit(
@@ -2145,7 +2145,7 @@ async function handleEmailVerifyRequest(
 ): Promise<Response> {
   if (!runtime.config.emailVerification.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(
     runtime,
     "email_verification_request",
@@ -2200,7 +2200,7 @@ async function handleEmailVerifyConsume(
   if (!runtime.config.emailVerification.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json-or-form");
   await enforceTurnstile(
     runtime,
     "email_verification_consume",
@@ -2280,7 +2280,7 @@ async function handlePasswordResetRequest(
 ): Promise<Response> {
   if (!runtime.config.passwordReset.enabled)
     return errorResponse("Not found", 404, "not_found");
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(runtime, "password_reset_request", rawBody, request);
   const body = emailRequestSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
@@ -2337,7 +2337,7 @@ async function handlePasswordResetConfirm(
   if (!runtime.config.passwordReset.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime);
+  const rawBody = await parseBody(request, runtime, "json-or-form");
   await enforceTurnstile(runtime, "password_reset_confirm", rawBody, request);
   const body = resetConfirmSchema.parse(rawBody);
   await rateLimit(
@@ -2823,6 +2823,7 @@ async function lookupSessionForConfig(
 async function parseBody(
   request: Request,
   runtime: RuntimeContext,
+  mode: "json" | "json-or-form",
 ): Promise<Record<string, unknown>> {
   const contentType = request.headers.get("Content-Type") ?? "";
   const length = Number(request.headers.get("Content-Length") ?? "0");
@@ -2838,7 +2839,10 @@ async function parseBody(
       throw new AuthCryptoError("Invalid JSON body", "validation_failed");
     }
   }
-  if (contentType.startsWith("application/x-www-form-urlencoded"))
+  if (
+    mode === "json-or-form" &&
+    contentType.startsWith("application/x-www-form-urlencoded")
+  )
     return Object.fromEntries(new URLSearchParams(text));
   if (!contentType && !text) return {};
   throw new AuthCryptoError(
