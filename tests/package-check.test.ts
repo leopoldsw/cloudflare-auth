@@ -77,6 +77,22 @@ describe("package checks", () => {
       ".github/workflows/release.yml: pnpm test must appear after pnpm typecheck",
     );
   });
+
+  it("requires npm auth token wiring for publication", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "NODE_AUTH_TOKEN",
+      "NODE_PACKAGE_TOKEN",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: missing NODE_AUTH_TOKEN",
+    );
+  });
 });
 
 async function packageCheckFixture() {

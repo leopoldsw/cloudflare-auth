@@ -367,6 +367,7 @@ async function verifyReleaseControls() {
   for (const needle of [
     "id-token: write",
     "package_names_confirmed",
+    "registry-url: https://registry.npmjs.org",
     "pnpm install --frozen-lockfile",
     "pnpm format:check",
     "pnpm lint",
@@ -395,6 +396,8 @@ async function verifyReleaseControls() {
     "CF_AUTH_TARBALL_INSTALL",
     "pnpm benchmark:password",
     "pnpm changeset publish --provenance",
+    "NODE_AUTH_TOKEN",
+    "secrets.NPM_TOKEN",
   ]) {
     if (!releaseWorkflow.includes(needle)) {
       failures.push(`.github/workflows/release.yml: missing ${needle}`);
