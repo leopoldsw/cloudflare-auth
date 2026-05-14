@@ -765,6 +765,61 @@ describe("auth HTTP runtime", () => {
     );
   });
 
+  it("hides corrupted stored password hash faults from login responses", async () => {
+    const { authFetch, db } = await setup();
+    const now = Date.now();
+    await db
+      .prepare(
+        `INSERT INTO users (
+          id, email, normalized_email, username, normalized_username,
+          password_hash, email_verified_at, created_at, updated_at, metadata_json
+        ) VALUES (?, ?, ?, NULL, NULL, ?, NULL, ?, ?, '{}')`,
+      )
+      .bind(
+        "usr_bad_hash",
+        "bad-hash@example.com",
+        "bad-hash@example.com",
+        "not-a-password-envelope",
+        now,
+        now,
+      )
+      .run();
+
+    const response = await authFetch("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "CF-Ray": "ray-bad-password-hash",
+      },
+      body: JSON.stringify({
+        identifier: "bad-hash@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "server_error" },
+      requestId: "ray-bad-password-hash",
+    });
+
+    const event = await db
+      .prepare(
+        "SELECT event_type, user_id, request_id, metadata_json FROM auth_events ORDER BY created_at DESC LIMIT 1",
+      )
+      .first<{
+        event_type: string;
+        user_id: string | null;
+        request_id: string | null;
+        metadata_json: string;
+      }>();
+    expect(event).toMatchObject({
+      event_type: "password_login_failed",
+      user_id: "usr_bad_hash",
+      request_id: "ray-bad-password-hash",
+      metadata_json: JSON.stringify({ reason: "invalid_password_hash" }),
+    });
+  });
+
   it("returns public rate limit errors when the password hash queue times out", async () => {
     const { authFetch } = await setup({
       passwordHashing: {

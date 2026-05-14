@@ -2195,9 +2195,24 @@ async function handleLogin(
     });
     return errorResponse("Invalid credentials", 401, "invalid_credentials");
   }
-  const ok = await passwordSemaphore(runtime).run(() =>
-    verifyPassword(body.password, user.password_hash ?? ""),
-  );
+  let ok: boolean;
+  try {
+    ok = await passwordSemaphore(runtime).run(() =>
+      verifyPassword(body.password, user.password_hash ?? ""),
+    );
+  } catch (error) {
+    if (
+      error instanceof AuthCryptoError &&
+      error.code === "invalid_password_hash"
+    ) {
+      queueAuthEvent(runtime, request, "password_login_failed", {
+        userId: user.id,
+        metadata: { reason: "invalid_password_hash" },
+      });
+      return errorResponse("Server error", 500, "server_error");
+    }
+    throw error;
+  }
   if (!ok) {
     queueAuthEvent(runtime, request, "password_login_failed", {
       userId: user.id,
