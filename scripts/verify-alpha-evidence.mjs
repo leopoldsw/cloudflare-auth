@@ -63,10 +63,19 @@ function validateEvidence(value, rawText) {
   if (value.schemaVersion !== 1) {
     failures.push(`${evidencePath}: schemaVersion must be 1`);
   }
+  if (!Array.isArray(value.localSetups)) {
+    failures.push(`${evidencePath}: localSetups must be an array`);
+  }
   const localSetups = Array.isArray(value.localSetups) ? value.localSetups : [];
+  if (!Array.isArray(value.productionDeploys)) {
+    failures.push(`${evidencePath}: productionDeploys must be an array`);
+  }
   const productionDeploys = Array.isArray(value.productionDeploys)
     ? value.productionDeploys
     : [];
+  if (!Array.isArray(value.failures)) {
+    failures.push(`${evidencePath}: failures must be an array`);
+  }
   const failuresSeen = Array.isArray(value.failures) ? value.failures : [];
 
   const localSetupUsers = new Set(

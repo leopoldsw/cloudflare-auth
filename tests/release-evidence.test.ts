@@ -291,6 +291,25 @@ describe("release evidence verifiers", () => {
     );
   });
 
+  it("rejects alpha evidence without explicit setup, deploy, and failure arrays", async () => {
+    const evidence = validAlphaEvidence() as Partial<
+      ReturnType<typeof validAlphaEvidence>
+    >;
+    delete evidence.localSetups;
+    delete evidence.productionDeploys;
+    delete evidence.failures;
+    const path = await writeEvidence("alpha-missing-arrays", evidence);
+    const result = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("localSetups must be an array");
+    expect(result.stderr).toContain("productionDeploys must be an array");
+    expect(result.stderr).toContain("failures must be an array");
+  });
+
   it("rejects non-object beta evidence sections without cascading field errors", async () => {
     const evidence = validBetaEvidence() as Record<string, unknown>;
     evidence.publishedQuickstart = null;
