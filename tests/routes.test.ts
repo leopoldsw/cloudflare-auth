@@ -359,6 +359,51 @@ describe("auth HTTP runtime", () => {
     await expect(oldSession.json()).resolves.toEqual({ user: null });
   });
 
+  it("invalidates prior active email tokens by default", async () => {
+    const { authFetch, db } = await setup();
+    await signup(authFetch, "single-token@example.com");
+    await requestEmailTokens(authFetch, "single-token@example.com");
+
+    const counts = await tokenCounts(db);
+    expect(counts.magic_link).toMatchObject({ active: 1, revoked: 1 });
+    expect(counts.email_verification).toMatchObject({ active: 1, revoked: 1 });
+    expect(counts.password_reset).toMatchObject({ active: 1, revoked: 1 });
+  });
+
+  it("allows multiple active email tokens when configured", async () => {
+    const { authFetch, db } = await setup({
+      magicLink: {
+        allowSignups: false,
+        expiresInMinutes: 15,
+        activeTokenPolicy: "allow-multiple-active",
+      },
+      emailVerification: {
+        enabled: true,
+        expiresInHours: 24,
+        createSessionAfterVerification: false,
+        activeTokenPolicy: "allow-multiple-active",
+      },
+      passwordReset: {
+        enabled: true,
+        expiresInMinutes: 30,
+        revokeExistingSessions: true,
+        createSessionAfterReset: false,
+        markEmailVerifiedOnReset: true,
+        activeTokenPolicy: "allow-multiple-active",
+      },
+    });
+    await signup(authFetch, "multi-token@example.com");
+    await requestEmailTokens(authFetch, "multi-token@example.com");
+
+    const counts = await tokenCounts(db);
+    expect(counts.magic_link).toMatchObject({ active: 2, revoked: 0 });
+    expect(counts.email_verification).toMatchObject({
+      active: 2,
+      revoked: 0,
+    });
+    expect(counts.password_reset).toMatchObject({ active: 2, revoked: 0 });
+  });
+
   it("rejects verification and reset confirmation for disabled users", async () => {
     const { authFetch, email, db } = await setup();
     await signup(authFetch, "disabled-reset@example.com");
@@ -655,4 +700,53 @@ async function signup(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: "correct horse battery staple" }),
   });
+}
+
+async function requestEmailTokens(
+  authFetch: (path: string, init?: RequestInit) => Promise<Response>,
+  email: string,
+) {
+  for (let i = 0; i < 2; i += 1) {
+    await authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    await authFetch("/auth/password/reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  }
+  await authFetch("/auth/email/verify/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+async function tokenCounts(db: D1Database) {
+  const rows = await db
+    .prepare(
+      `SELECT
+        type,
+        SUM(CASE WHEN used_at IS NULL AND revoked_at IS NULL THEN 1 ELSE 0 END) AS active,
+        SUM(CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END) AS revoked
+      FROM verification_tokens
+      GROUP BY type`,
+    )
+    .all<{
+      type: "magic_link" | "email_verification" | "password_reset";
+      active: number;
+      revoked: number;
+    }>();
+  return Object.fromEntries(
+    (rows.results ?? []).map((row) => [
+      row.type,
+      { active: row.active, revoked: row.revoked },
+    ]),
+  ) as Record<
+    "magic_link" | "email_verification" | "password_reset",
+    { active: number; revoked: number }
+  >;
 }

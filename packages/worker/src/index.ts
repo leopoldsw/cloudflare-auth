@@ -1,4 +1,5 @@
 import {
+  type ActiveTokenPolicy,
   type AuthEventRow,
   AuthCryptoError,
   type AuthRepositories,
@@ -1859,7 +1860,10 @@ async function createAndSendToken(
   ttlMs: number,
 ): Promise<void> {
   const now = Date.now();
-  if (userId || normalizedEmail) {
+  if (
+    (userId || normalizedEmail) &&
+    activeTokenPolicy(runtime, type) === "invalidate-previous"
+  ) {
     await runtime.repos.verificationTokens.revokeActiveVerificationTokens({
       type,
       userId,
@@ -2207,6 +2211,16 @@ async function rateLimit(
       "rate_limited",
     );
   }
+}
+
+function activeTokenPolicy(
+  runtime: RuntimeContext,
+  type: "magic_link" | "email_verification" | "password_reset",
+): ActiveTokenPolicy {
+  if (type === "magic_link") return runtime.config.magicLink.activeTokenPolicy;
+  if (type === "email_verification")
+    return runtime.config.emailVerification.activeTokenPolicy;
+  return runtime.config.passwordReset.activeTokenPolicy;
 }
 
 function passwordSemaphore(runtime: RuntimeContext): PasswordHashSemaphore {
