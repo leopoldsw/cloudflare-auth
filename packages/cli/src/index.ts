@@ -2755,7 +2755,62 @@ function existingWranglerPath(cwd: string): string | null {
 }
 
 function stripJsonComments(text: string): string {
-  return text.replace(/^\s*\/\/.*$/gmu, "");
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index] ?? "";
+    const next = text[index + 1] ?? "";
+
+    if (inLineComment) {
+      if (char === "\n") {
+        inLineComment = false;
+        output += char;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      } else if (char === "\n") {
+        output += char;
+      }
+      continue;
+    }
+    if (inString) {
+      output += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+    output += char;
+  }
+
+  return output.replace(/,\s*([}\]])/g, "$1");
 }
 
 async function repairWranglerConfig(

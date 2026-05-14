@@ -535,6 +535,44 @@ describe("CLI MVP", () => {
     );
   });
 
+  it("parses Wrangler JSONC comments and trailing commas", async () => {
+    const cwd = await tempDir();
+    await mkdir(join(cwd, "migrations"), { recursive: true });
+    await writeFile(join(cwd, "migrations", "0001_initial.sql"), "-- test\n");
+    await writeFile(
+      join(cwd, "wrangler.jsonc"),
+      `{
+  // Local development Worker
+  "name": "jsonc-app-dev",
+  "compatibility_date": "2026-05-14",
+  "compatibility_flags": ["nodejs_compat",],
+  "vars": {
+    "AUTH_ENV": "development",
+    "AUTH_PUBLIC_ORIGIN": "http://localhost:8787", // keep URL slashes
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "jsonc-app-auth-dev",
+      "database_id": "local-development",
+    },
+  ],
+}
+`,
+    );
+    const output: string[] = [];
+
+    const code = await runCli(["migrate", "--dry-run", "--local"], {
+      cwd,
+      stdout: (line) => output.push(line),
+    });
+
+    expect(code).toBe(0);
+    expect(output[0]).toBe(
+      "wrangler d1 migrations apply jsonc-app-auth-dev --local",
+    );
+  });
+
   it("rejects unknown generate snippets instead of aliasing them", async () => {
     const workerOutput: string[] = [];
     const typeOutput: string[] = [];
