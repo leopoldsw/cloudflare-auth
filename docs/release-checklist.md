@@ -14,7 +14,7 @@
 - `pnpm verify:migrations`
 - `pnpm verify:examples`
 - `pnpm release:gates`
-- `pnpm smoke:tarballs`
+- `CF_AUTH_TARBALL_INSTALL=1 pnpm smoke:tarballs`
 - `pnpm benchmark:password`
 
 ## Prerelease
