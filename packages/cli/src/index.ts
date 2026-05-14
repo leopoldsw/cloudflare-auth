@@ -1012,7 +1012,38 @@ async function commandDeploy(
     displayCommand(migrationStatus.command, migrationStatus.args),
     displayCommand(deployCommand.command, deployCommand.args),
   ];
-  if (parsed.flags["dry-run"]) return planned.join("\n");
+  if (parsed.flags["dry-run"]) {
+    if (parsed.flags.migrate) {
+      const migrateApply = await buildMigrateCommand(
+        {
+          command: "migrate",
+          positionals: [],
+          flags: {
+            remote: true,
+            ...(envName ? { env: envName } : {}),
+          },
+        },
+        cwd,
+      );
+      const database = selectD1(config, envName);
+      const migrationVerify = buildD1ExecuteCommand(
+        {
+          databaseName: database.database_name,
+          remote: true,
+          ...(envName ? { envName } : {}),
+        },
+        migrationStateSql(),
+        true,
+      );
+      planned.splice(
+        2,
+        0,
+        displayCommand(migrateApply.command, migrateApply.args),
+        displayCommand(migrationVerify.command, migrationVerify.args),
+      );
+    }
+    return planned.join("\n");
+  }
 
   const lines = [planned[0]];
   lines.push(runCheckedCommand(migrationStatus, cwd, runner));

@@ -1465,6 +1465,25 @@ export default app;
     );
     expect(deploy.join("\n")).toContain("wrangler deploy --env production");
 
+    const migrateDeploy: string[] = [];
+    await runCli(["deploy", "--dry-run", "--migrate", "--env", "production"], {
+      cwd,
+      stdout: (line) => migrateDeploy.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+    expect(migrateDeploy.join("\n")).toContain(
+      "wrangler d1 migrations list app-auth --remote --env production",
+    );
+    expect(migrateDeploy.join("\n")).toContain(
+      "wrangler d1 migrations apply app-auth --remote --env production",
+    );
+    expect(migrateDeploy.join("\n")).toContain(
+      `wrangler d1 execute app-auth --remote --env production --yes --json --command ${migrationStateSql()}`,
+    );
+    expect(migrateDeploy.join("\n")).toContain(
+      "wrangler deploy --env production",
+    );
+
     const ambiguous: string[] = [];
     const deployCode = await runCli(["deploy", "--dry-run"], {
       cwd,
