@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import {
   containsIpLiteral,
+  containsRawSecretMaterial,
   containsRawUserAgent,
 } from "./evidence-redaction.mjs";
 import {
@@ -182,11 +183,7 @@ function requireDate(value, path) {
 
 function containsSensitiveEvidence(text) {
   return (
-    /\bAUTH_SECRET\s*=/u.test(text) ||
-    /\bCLOUDFLARE_API_TOKEN\b/u.test(text) ||
-    /\b(?:NODE_AUTH_TOKEN|NPM_TOKEN)\b/u.test(text) ||
-    /\b_authToken\b/u.test(text) ||
-    /\bnpm_[A-Za-z0-9]{20,}\b/u.test(text) ||
+    containsRawSecretMaterial(text) ||
     /\bcfauth\.(?:ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{20,}/u.test(
       text,
     ) ||

@@ -271,6 +271,80 @@ describe("release evidence verifiers", () => {
     }
   });
 
+  it("rejects raw auth secret material in release evidence files", async () => {
+    const alphaEvidence = validAlphaEvidence();
+    (alphaEvidence.localSetups[0] as Record<string, unknown>).notes =
+      `AUTH_SECRET_PREVIOUS=${authSecret("k_old")}`;
+    const alphaPath = await writeEvidence("alpha-auth-secret", alphaEvidence);
+    const alphaResult = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: alphaPath,
+    });
+
+    const betaEvidence = validBetaEvidence();
+    (betaEvidence as Record<string, unknown>).notes =
+      `AUTH_SECRET:${authSecret("k_beta")}`;
+    const betaPath = await writeEvidence("beta-auth-secret", betaEvidence);
+    const betaResult = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: betaPath,
+    });
+
+    const deployButtonEvidence = validDeployButtonEvidence();
+    (deployButtonEvidence as Record<string, unknown>).secretCheck = {
+      AUTH_SECRET: authSecret("k_deploy"),
+    };
+    const deployButtonPath = await writeEvidence(
+      "deploy-button-auth-secret",
+      deployButtonEvidence,
+    );
+    const deployButtonResult = runScript(
+      "scripts/verify-deploy-button-evidence.mjs",
+      {
+        CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+        CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: deployButtonPath,
+      },
+    );
+
+    const packageEvidence = validPackageEvidence();
+    (packageEvidence as Record<string, unknown>).notes =
+      `generated ${authSecret("k_package")}`;
+    const packagePath = await writeEvidence(
+      "package-ownership-auth-secret",
+      packageEvidence,
+    );
+    const packageResult = runScript("scripts/verify-package-ownership.mjs", {
+      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+      CF_AUTH_PACKAGE_OWNERSHIP_PATH: packagePath,
+    });
+
+    const securityTracker = validSecurityTracker();
+    (securityTracker as Record<string, unknown>).notes =
+      `TURNSTILE_SECRET_KEY=${"T".repeat(32)}`;
+    const securityTrackerPath = await writeEvidence(
+      "security-tracker-auth-secret",
+      securityTracker,
+    );
+    const securityTrackerResult = runScript(
+      "scripts/verify-security-release-tracker.mjs",
+      {
+        CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+        CF_AUTH_SECURITY_TRACKER_PATH: securityTrackerPath,
+      },
+    );
+
+    for (const result of [
+      alphaResult,
+      betaResult,
+      deployButtonResult,
+      packageResult,
+      securityTrackerResult,
+    ]) {
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("must not include raw secrets");
+    }
+  });
+
   it("requires forced release evidence files to exist", async () => {
     const dir = await mkdtemp(join(tmpdir(), "cf-auth-missing-evidence-"));
     const cases = [
@@ -946,6 +1020,10 @@ function runScript(
     encoding: "utf8",
     env: { ...process.env, ...env },
   });
+}
+
+function authSecret(kid: string) {
+  return `${kid}.${"A".repeat(43)}`;
 }
 
 function validAlphaEvidence() {

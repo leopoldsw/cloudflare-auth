@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import {
   containsIpLiteral,
+  containsRawSecretMaterial,
   containsRawUserAgent,
 } from "./evidence-redaction.mjs";
 import {
@@ -243,8 +244,7 @@ function median(values) {
 
 function containsSensitiveAlphaEvidence(text) {
   return (
-    /\bAUTH_SECRET\s*=/u.test(text) ||
-    /\b(?:CLOUDFLARE_API_TOKEN|NODE_AUTH_TOKEN|NPM_TOKEN)\b/u.test(text) ||
+    containsRawSecretMaterial(text) ||
     /\bcfauth\.(?:ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{20,}/u.test(
       text,
     ) ||

@@ -1,5 +1,21 @@
 import { isIP } from "node:net";
 
+const secretAssignmentPattern =
+  /["']?\b(?:AUTH_SECRET|AUTH_SECRET_PREVIOUS|TURNSTILE_SECRET_KEY)\b["']?\s*[:=]\s*(?!["']?\[REDACTED(?:_[A-Z]+)?\]["']?)(?:"[^"\r\n]+"|'[^'\r\n]+'|[^\s,\r\n,;&]+)/iu;
+const authRootSecretPattern = /\b[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43}\b/u;
+const sensitiveTokenNamePattern =
+  /\b(?:CLOUDFLARE_API_TOKEN|NODE_AUTH_TOKEN|NPM_TOKEN)\b/u;
+const npmTokenPattern = /\b_authToken\b|\bnpm_[A-Za-z0-9]{20,}\b/u;
+
+export function containsRawSecretMaterial(text) {
+  return (
+    secretAssignmentPattern.test(text) ||
+    authRootSecretPattern.test(text) ||
+    sensitiveTokenNamePattern.test(text) ||
+    npmTokenPattern.test(text)
+  );
+}
+
 export function containsIpLiteral(text) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/u.test(text)) return true;
   const candidates =
