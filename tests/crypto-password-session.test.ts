@@ -142,6 +142,8 @@ describe("crypto, passwords, tokens, and sessions", () => {
       "%2f%2fevil.example",
       "/%2fevil.example",
       "\\evil",
+      "%5c%5cevil.example",
+      "/%5cevil.example",
       "javascript:alert(1)",
       "https://evil.example",
     ]) {

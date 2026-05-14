@@ -442,8 +442,8 @@ export function validateRedirectTarget(input: {
     throw new AuthCryptoError("unsafe redirect", "unsafe_redirect");
   }
   if (
+    decoded.includes("\\") ||
     decoded.startsWith("//") ||
-    decoded.startsWith("\\") ||
     /^[/\\]%2f/i.test(value)
   ) {
     throw new AuthCryptoError("unsafe redirect", "unsafe_redirect");
