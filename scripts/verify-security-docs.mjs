@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 const docs = {
   metrics: await readFile("docs/metrics.md", "utf8"),
@@ -43,6 +43,8 @@ for (const threat of threatRows) {
     failures.push(
       `docs/security-model.md: ${threat} row must link to regression test evidence`,
     );
+  } else {
+    await requireLinkedTestsExist(row, threat);
   }
 }
 
@@ -100,5 +102,19 @@ console.log("security documentation verified");
 function requireText(file, text, needle) {
   if (!text.includes(needle)) {
     failures.push(`${file}: missing ${needle}`);
+  }
+}
+
+async function requireLinkedTestsExist(row, threat) {
+  const links = [...row.matchAll(/\]\(\.\.\/(tests\/[^)#]+)(?:#[^)]+)?\)/gu)];
+  for (const match of links) {
+    const path = match[1];
+    try {
+      await access(path);
+    } catch {
+      failures.push(
+        `docs/security-model.md: ${threat} row links to missing test evidence ${path}`,
+      );
+    }
   }
 }

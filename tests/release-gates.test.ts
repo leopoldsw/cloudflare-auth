@@ -586,7 +586,10 @@ async function writeSecurityDocsFixtures(root: string) {
     "Bot pressure",
     "Edge floods",
     "Operational blind spots",
-  ].map((threat) => `| ${threat} | mitigation | [tests](../tests/x) |`);
+  ].map(
+    (threat) => `| ${threat} | mitigation | [tests](../tests/routes.test.ts) |`,
+  );
+  await writeFixtureFile(root, "tests/routes.test.ts", "route tests\n");
   await writeFixtureFile(
     root,
     "docs/security-model.md",
