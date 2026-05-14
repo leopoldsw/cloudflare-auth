@@ -31,6 +31,7 @@ for (const root of ["examples", "templates"]) {
       await readFile(join(dir, "wrangler.jsonc"), "utf8"),
     );
     verifyWranglerToolchain(dir, wrangler);
+    await verifyDevVarsExample(dir);
     const rendered = renderPublishedManifest(pkg);
     for (const section of ["dependencies", "devDependencies"]) {
       for (const [name, version] of Object.entries(rendered[section] ?? {})) {
@@ -111,6 +112,25 @@ async function requireFile(path) {
     await readFile(path, "utf8");
   } catch {
     failures.push(`${path}: missing required template file`);
+  }
+}
+
+async function verifyDevVarsExample(dir) {
+  let text;
+  try {
+    text = await readFile(join(dir, ".dev.vars.example"), "utf8");
+  } catch {
+    failures.push(`${dir}: missing .dev.vars.example`);
+    return;
+  }
+  for (const line of [
+    "AUTH_ENV=development",
+    "AUTH_PUBLIC_ORIGIN=http://localhost:8787",
+    "AUTH_SECRET=k_dev.REPLACE_WITH_GENERATED_BASE64URL_SECRET",
+  ]) {
+    if (!text.includes(line)) {
+      failures.push(`${dir}: .dev.vars.example missing ${line}`);
+    }
   }
 }
 

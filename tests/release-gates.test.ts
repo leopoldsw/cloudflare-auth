@@ -655,6 +655,11 @@ async function writeMigrationFixtures(root: string) {
 }
 
 async function writeExamplesFixtures(root: string) {
+  const devVarsExample = [
+    "AUTH_ENV=development",
+    "AUTH_PUBLIC_ORIGIN=http://localhost:8787",
+    "AUTH_SECRET=k_dev.REPLACE_WITH_GENERATED_BASE64URL_SECRET",
+  ].join("\n");
   for (const dir of [
     "examples/hono-basic",
     "examples/react-vite-worker",
@@ -711,17 +716,13 @@ async function writeExamplesFixtures(root: string) {
         2,
       ),
     );
+    await writeFixtureFile(root, `${dir}/.dev.vars.example`, devVarsExample);
   }
   for (const template of [
     "templates/hono-basic",
     "templates/react-vite-worker",
     "templates/worker-basic",
   ]) {
-    await writeFixtureFile(
-      root,
-      `${template}/.dev.vars.example`,
-      "AUTH_SECRET=k1.REPLACE_WITH_32_BYTE_BASE64URL_SECRET\n",
-    );
     await writeFixtureFile(
       root,
       `${template}/migrations/0001_initial.sql`,
