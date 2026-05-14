@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const docs = {
+  metrics: await readFile("docs/metrics.md", "utf8"),
   rateLimiting: await readFile("docs/rate-limiting.md", "utf8"),
   securityModel: await readFile("docs/security-model.md", "utf8"),
   turnstile: await readFile("docs/turnstile.md", "utf8"),
@@ -71,6 +72,19 @@ for (const text of [
   "tests/security-hardening.test.ts",
 ]) {
   requireText("docs/rate-limiting.md", docs.rateLimiting, text);
+}
+
+for (const text of [
+  "dummy_password_verification",
+  "rate_limit_hit",
+  "email_send_failed",
+  "config_error",
+  "malformed_token",
+  "invalid_or_expired",
+  "disabled_user",
+  "GROUP BY reason",
+]) {
+  requireText("docs/metrics.md", docs.metrics, text);
 }
 
 if (failures.length > 0) {

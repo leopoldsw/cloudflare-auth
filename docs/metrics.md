@@ -24,6 +24,7 @@ Useful event types include:
 - `disabled_user_auth_attempt`
 - `rate_limit_hit`
 - `email_send_failed`
+- `config_error`
 
 Example aggregate query:
 
@@ -56,6 +57,35 @@ WHERE event_type IN (
   'password_reset_confirm_failed'
 )
 GROUP BY event_type;
+```
+
+Token consume failure reasons are stored in redacted `metadata_json`. Useful
+values include `malformed_token`, `token_hash_failed`, `invalid_token`,
+`invalid_or_expired`, `disabled_user`, and `user_missing`.
+
+```sql
+SELECT json_extract(metadata_json, '$.reason') AS reason, count(*) AS count
+FROM auth_events
+WHERE event_type IN (
+  'magic_link_consume_failed',
+  'email_verification_consume_failed',
+  'password_reset_confirm_failed'
+)
+GROUP BY reason
+ORDER BY count DESC;
+```
+
+Configuration/runtime failures:
+
+```sql
+SELECT
+  json_extract(metadata_json, '$.code') AS code,
+  max(created_at) AS last_seen_at,
+  count(*) AS count
+FROM auth_events
+WHERE event_type = 'config_error'
+GROUP BY code
+ORDER BY last_seen_at DESC;
 ```
 
 Keep `auth_events` according to your audit-retention policy. The generated
