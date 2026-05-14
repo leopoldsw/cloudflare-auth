@@ -21,6 +21,39 @@ describe("package checks", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("rejects non-object root package manifests", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(join(root, "package.json"), "null\n");
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "package.json: top-level JSON value must be an object",
+    );
+  });
+
+  it("rejects non-object workspace package manifests", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(join(root, "packages", "cli", "package.json"), "null\n");
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packages/cli/package.json: top-level JSON value must be an object",
+    );
+  });
+
+  it("rejects non-object version matrix manifests", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(join(root, "scripts", "version-matrix.json"), "null\n");
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "scripts/version-matrix.json: top-level JSON value must be an object",
+    );
+  });
+
   it("requires the production smoke workflow safety gate", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

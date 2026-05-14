@@ -5,7 +5,8 @@ import { basename, join } from "node:path";
 
 import { isJsonObject } from "./evidence-validation.mjs";
 
-const rootPackage = JSON.parse(await readFile("package.json", "utf8"));
+const failures = [];
+const rootPackage = (await readJsonObject("package.json")) ?? {};
 const rootLicense = await readFile("LICENSE", "utf8");
 const expectedPackages = new Map([
   [
@@ -38,7 +39,6 @@ const packageDirs = (await readdir("packages", { withFileTypes: true }))
   .sort();
 const packDir = await mkdtemp(join(tmpdir(), "cf-auth-package-check-"));
 
-const failures = [];
 const publishablePackageNames = [];
 let ownershipEvidence;
 for (const expectedDir of expectedPackages.keys()) {
@@ -51,7 +51,8 @@ for (const expectedDir of expectedPackages.keys()) {
 
 for (const dir of packageDirs) {
   const expected = expectedPackages.get(basename(dir));
-  const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+  const pkg = await readJsonObject(join(dir, "package.json"));
+  if (!pkg) continue;
   if (!pkg.name) failures.push(`${dir}: missing name`);
   if (!expected) {
     failures.push(`${dir}: unexpected package directory`);
@@ -191,7 +192,14 @@ function readPackedPackageJson(filename, name) {
     return null;
   }
   try {
-    return JSON.parse(result.stdout);
+    const manifest = JSON.parse(result.stdout);
+    if (!isJsonObject(manifest)) {
+      failures.push(
+        `${name}: packed package.json top-level JSON value must be an object`,
+      );
+      return null;
+    }
+    return manifest;
   } catch {
     failures.push(`${name}: packed package.json must be valid JSON`);
     return null;
@@ -858,9 +866,8 @@ function verifyRootScripts() {
 }
 
 async function verifyToolchainDocs() {
-  const matrix = JSON.parse(
-    await readFile("scripts/version-matrix.json", "utf8"),
-  );
+  const matrix = await readJsonObject("scripts/version-matrix.json");
+  if (!matrix) return;
   const docs = await readFile("docs/toolchain.md", "utf8");
   for (const [key, value] of Object.entries({
     node: matrix.node,
@@ -883,6 +890,21 @@ async function verifyToolchainDocs() {
   if (!deployment.includes("(toolchain.md)")) {
     failures.push("docs/deployment.md: missing toolchain.md link");
   }
+}
+
+async function readJsonObject(path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    failures.push(`${path}: must be valid JSON`);
+    return null;
+  }
+  if (!isJsonObject(parsed)) {
+    failures.push(`${path}: top-level JSON value must be an object`);
+    return null;
+  }
+  return parsed;
 }
 
 async function listMarkdownFiles(dir) {
