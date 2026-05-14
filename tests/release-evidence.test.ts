@@ -62,6 +62,23 @@ describe("release evidence verifiers", () => {
     expect(result.stdout).toContain("public-beta evidence verified");
   });
 
+  it("rejects beta production smoke evidence without command proof", async () => {
+    const evidence = validBetaEvidence();
+    evidence.productionSmoke.commands = [];
+    const path = await writeEvidence("beta-missing-command", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("cf-auth doctor --env production");
+    expect(result.stderr).toContain(
+      "cf-auth migrate --remote --env production",
+    );
+    expect(result.stderr).toContain("cf-auth deploy --env production");
+  });
+
   it("accepts deploy button evidence for the documented template path", async () => {
     const path = await writeEvidence(
       "deploy-button",
@@ -221,6 +238,11 @@ function validBetaEvidence() {
       passed: true,
       documentedProductionPath: true,
       optInCloudflareAccountFixture: true,
+      commands: [
+        "npx --package @cf-auth/cli@beta cf-auth doctor --env production",
+        "npx --package @cf-auth/cli@beta cf-auth migrate --remote --env production",
+        "npx --package @cf-auth/cli@beta cf-auth deploy --env production",
+      ],
       smokedEndpoints: [
         "/auth/signup",
         "/auth/login",

@@ -115,6 +115,21 @@ function validateProductionSmoke(value) {
       failures.push(`${evidencePath}: ${path}.${field} must be true`);
     }
   }
+  requireCommandContains(
+    value.commands,
+    "cf-auth doctor --env production",
+    `${path}.commands`,
+  );
+  requireCommandContains(
+    value.commands,
+    "cf-auth migrate --remote --env production",
+    `${path}.commands`,
+  );
+  requireCommandContains(
+    value.commands,
+    "cf-auth deploy --env production",
+    `${path}.commands`,
+  );
   for (const endpoint of [
     "/auth/signup",
     "/auth/login",
@@ -181,6 +196,17 @@ function requireUrl(value, path) {
     }
   } catch {
     failures.push(`${evidencePath}: ${path} must be a valid URL`);
+  }
+}
+
+function requireCommandContains(commands, expected, path) {
+  const commandList = Array.isArray(commands) ? commands : [];
+  if (
+    !commandList.some(
+      (command) => typeof command === "string" && command.includes(expected),
+    )
+  ) {
+    failures.push(`${evidencePath}: ${path} must include ${expected}`);
   }
 }
 

@@ -112,6 +112,7 @@ await requireText(
   "docs/beta-evidence.example.json",
   '"optInCloudflareAccountFixture"',
 );
+await requireText("docs/beta-evidence.example.json", '"commands"');
 await requireText("docs/release-checklist.md", "pnpm verify:security-docs");
 await requireText(
   "docs/public-beta.md",
