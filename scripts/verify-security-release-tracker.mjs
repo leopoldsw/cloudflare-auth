@@ -59,6 +59,13 @@ function validateTracker(value, rawText) {
   requireIssueSearchUrl(value.issueSearchUrl);
   requireUrl(value.advisorySearchUrl, "advisorySearchUrl");
   requireAdvisorySearchUrl(value.advisorySearchUrl);
+  const issueRepo = githubRepoForIssueSearch(value.issueSearchUrl);
+  const advisoryRepo = githubRepoForAdvisorySearch(value.advisorySearchUrl);
+  if (issueRepo && advisoryRepo && issueRepo !== advisoryRepo) {
+    failures.push(
+      `${trackerPath}: issueSearchUrl and advisorySearchUrl must target the same GitHub repository`,
+    );
+  }
 
   const openIssues = Array.isArray(value.openHighCriticalAuthSecurityIssues)
     ? value.openHighCriticalAuthSecurityIssues
@@ -133,9 +140,9 @@ function requireIssueSearchUrl(value) {
   } catch {
     return;
   }
-  if (url.hostname !== "github.com" || !url.pathname.endsWith("/issues")) {
+  if (url.hostname !== "github.com" || !githubRepoForIssueSearch(value)) {
     failures.push(
-      `${trackerPath}: issueSearchUrl must be a GitHub issues search URL`,
+      `${trackerPath}: issueSearchUrl must be a GitHub repository issues search URL`,
     );
     return;
   }
@@ -156,14 +163,50 @@ function requireAdvisorySearchUrl(value) {
   } catch {
     return;
   }
-  if (
-    url.hostname !== "github.com" ||
-    !url.pathname.endsWith("/security/advisories")
-  ) {
+  if (url.hostname !== "github.com" || !githubRepoForAdvisorySearch(value)) {
     failures.push(
-      `${trackerPath}: advisorySearchUrl must be a GitHub security advisory URL`,
+      `${trackerPath}: advisorySearchUrl must be a GitHub repository security advisory URL`,
     );
   }
+}
+
+function githubRepoForIssueSearch(value) {
+  if (typeof value !== "string") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (
+    url.hostname !== "github.com" ||
+    segments.length !== 3 ||
+    segments[2] !== "issues"
+  ) {
+    return null;
+  }
+  return `${segments[0]}/${segments[1]}`;
+}
+
+function githubRepoForAdvisorySearch(value) {
+  if (typeof value !== "string") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (
+    url.hostname !== "github.com" ||
+    segments.length !== 4 ||
+    segments[2] !== "security" ||
+    segments[3] !== "advisories"
+  ) {
+    return null;
+  }
+  return `${segments[0]}/${segments[1]}`;
 }
 
 function containsPlaceholderEvidence(text) {

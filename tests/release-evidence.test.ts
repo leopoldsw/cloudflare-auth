@@ -684,7 +684,46 @@ describe("release evidence verifiers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("open high/critical auth issues");
-    expect(result.stderr).toContain("GitHub security advisory URL");
+    expect(result.stderr).toContain("GitHub repository security advisory URL");
+  });
+
+  it("rejects security tracker URLs that are not scoped to one repository", async () => {
+    const rootIssueEvidence = validSecurityTracker();
+    rootIssueEvidence.issueSearchUrl =
+      "https://github.com/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical";
+    const rootIssuePath = await writeEvidence(
+      "security-tracker-root-issues",
+      rootIssueEvidence,
+    );
+    const rootIssueResult = runScript(
+      "scripts/verify-security-release-tracker.mjs",
+      {
+        CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+        CF_AUTH_SECURITY_TRACKER_PATH: rootIssuePath,
+      },
+    );
+
+    const mismatchEvidence = validSecurityTracker();
+    mismatchEvidence.advisorySearchUrl =
+      "https://github.com/acme/other-auth/security/advisories";
+    const mismatchPath = await writeEvidence(
+      "security-tracker-repo-mismatch",
+      mismatchEvidence,
+    );
+    const mismatchResult = runScript(
+      "scripts/verify-security-release-tracker.mjs",
+      {
+        CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+        CF_AUTH_SECURITY_TRACKER_PATH: mismatchPath,
+      },
+    );
+
+    expect(rootIssueResult.status).toBe(1);
+    expect(rootIssueResult.stderr).toContain(
+      "GitHub repository issues search URL",
+    );
+    expect(mismatchResult.status).toBe(1);
+    expect(mismatchResult.stderr).toContain("same GitHub repository");
   });
 });
 
