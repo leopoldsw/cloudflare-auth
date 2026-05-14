@@ -686,6 +686,39 @@ describe("auth HTTP runtime", () => {
     expect(replay.status).toBe(400);
   });
 
+  it("treats repository consistency errors as server faults", async () => {
+    const { authFetch, email, db, handler, env, ctx, flushDeferred } =
+      await setup();
+    await signup(authFetch, "repo-error@example.com");
+    await authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "repo-error@example.com" }),
+    });
+    const token =
+      email.messages.find((item) => item.type === "magic")?.token ?? "";
+    const inconsistentDb = inconsistentBatchD1Database(db);
+
+    const response = await handler.fetch(
+      new Request(`${origin}/auth/magic-link/consume`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: origin,
+        },
+        body: JSON.stringify({ token }),
+      }),
+      { ...env, AUTH_DB: inconsistentDb },
+      ctx,
+    );
+    await flushDeferred();
+
+    expect(response?.status).toBe(500);
+    const body = await response?.text();
+    expect(body).toContain('"code":"server_error"');
+    expect(body).not.toContain("token_consume_inconsistent");
+  });
+
   it("verifies email and resets password through POST confirmation flows", async () => {
     const { authFetch, email, handler, env } = await setup();
     const signupResponse = await signup(authFetch, "verify@example.com");
@@ -1708,6 +1741,23 @@ function throwingD1Database(): D1Database {
     dump: fail,
     withSession: fail,
   } as unknown as D1Database;
+}
+
+function inconsistentBatchD1Database(db: D1Database): D1Database {
+  return {
+    prepare: db.prepare.bind(db),
+    exec: db.exec.bind(db),
+    dump: db.dump.bind(db),
+    withSession: db.withSession.bind(db),
+    async batch(statements) {
+      const results = await db.batch(statements);
+      const sessionInsert = results[1] as
+        | { meta?: { changes?: number } }
+        | undefined;
+      if (sessionInsert?.meta) sessionInsert.meta.changes = 0;
+      return results;
+    },
+  } as D1Database;
 }
 
 async function tokenCounts(db: D1Database) {

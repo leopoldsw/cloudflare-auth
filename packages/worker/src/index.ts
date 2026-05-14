@@ -1873,12 +1873,15 @@ async function dispatchAuthRequest(
       const code =
         error instanceof z.ZodError
           ? "validation_failed"
-          : error.code === "hash_queue_timeout"
-            ? "rate_limited"
-            : error.code;
+          : error instanceof AuthRepositoryError
+            ? "server_error"
+            : error.code === "hash_queue_timeout"
+              ? "rate_limited"
+              : error.code;
       return errorResponse(
         error,
-        error instanceof AuthCryptoError && error.code === "config_error"
+        error instanceof AuthRepositoryError ||
+          (error instanceof AuthCryptoError && error.code === "config_error")
           ? 500
           : 400,
         code,
