@@ -150,10 +150,19 @@ function packagePath(value) {
 
 async function verifyPackageNamingDocs() {
   const naming = await readFile("docs/decisions/package-naming.md", "utf8");
+  const ownershipExample = await readFile(
+    "docs/package-ownership.example.json",
+    "utf8",
+  );
   for (const { name } of expectedPackages.values()) {
     if (!naming.includes(`\`${name}\``)) {
       failures.push(`docs/decisions/package-naming.md: missing ${name}`);
     }
+  }
+  if (!ownershipExample.includes('"registryVersion"')) {
+    failures.push(
+      "docs/package-ownership.example.json: missing registryVersion example for already-published package names",
+    );
   }
 
   const fallback = "npx --package @cf-auth/cli@latest cf-auth init";
