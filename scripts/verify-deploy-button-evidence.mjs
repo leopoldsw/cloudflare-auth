@@ -53,6 +53,7 @@ function validateEvidence(value, rawText) {
 
   requireUrl(value.templateRepositoryUrl, "templateRepositoryUrl");
   requireUrl(value.deployButtonUrl, "deployButtonUrl");
+  requireBetaPackageTag(value.packageTag, "packageTag");
   if (
     typeof value.deployButtonUrl === "string" &&
     !value.deployButtonUrl.startsWith(
@@ -113,6 +114,15 @@ function requireString(value, path) {
   if (typeof value !== "string" || value.length === 0) {
     failures.push(`${evidencePath}: ${path} must be a non-empty string`);
   }
+}
+
+function requireBetaPackageTag(value, path) {
+  requireString(value, path);
+  if (typeof value !== "string") return;
+  if (value === "beta" || /^\d+\.\d+\.\d+-beta(?:[.-].*)?$/u.test(value)) {
+    return;
+  }
+  failures.push(`${evidencePath}: ${path} must be beta or a beta prerelease`);
 }
 
 function requireDate(value, path) {

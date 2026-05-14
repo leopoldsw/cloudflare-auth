@@ -148,6 +148,19 @@ describe("release evidence verifiers", () => {
     );
   });
 
+  it("rejects deploy button evidence that uses a non-beta package tag", async () => {
+    const evidence = validDeployButtonEvidence();
+    evidence.packageTag = "latest";
+    const path = await writeEvidence("deploy-button-latest-tag", evidence);
+    const result = runScript("scripts/verify-deploy-button-evidence.mjs", {
+      CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+      CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packageTag");
+  });
+
   it("accepts package ownership evidence with private shim reservations", async () => {
     const path = await writeEvidence(
       "package-ownership",
@@ -326,6 +339,7 @@ function validDeployButtonEvidence() {
     templateRepositoryUrl: "https://github.com/acme/cloudflare-auth-template",
     deployButtonUrl:
       "https://deploy.workers.cloudflare.com/?url=https://github.com/acme/cloudflare-auth-template",
+    packageTag: "beta",
     deployedOrigin: "https://auth.acme.test",
     starterTemplateCreated: true,
     templateRepositoryPublic: true,

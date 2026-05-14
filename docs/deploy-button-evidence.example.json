@@ -5,6 +5,7 @@
   "verifiedBy": "maintainer-name",
   "templateRepositoryUrl": "https://github.com/OWNER/cloudflare-auth-template",
   "deployButtonUrl": "https://deploy.workers.cloudflare.com/?url=https://github.com/OWNER/cloudflare-auth-template",
+  "packageTag": "beta",
   "deployedOrigin": "https://example.com",
   "starterTemplateCreated": false,
   "templateRepositoryPublic": false,
