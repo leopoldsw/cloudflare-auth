@@ -71,6 +71,7 @@ function validatePublishedQuickstart(value) {
   requireObject(value, path);
   if (!value) return;
   requireUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
+  requireGithubActionsRunUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
   requireBetaPackageTag(value.packageTag, `${path}.packageTag`);
   if (value.passed !== true)
     failures.push(`${evidencePath}: ${path}.passed must be true`);
@@ -109,6 +110,7 @@ function validateProductionSmoke(value) {
   requireObject(value, path);
   if (!value) return;
   requireUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
+  requireGithubActionsRunUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
   requireBetaPackageTag(value.packageTag, `${path}.packageTag`);
   requireOrigin(value.origin, `${path}.origin`);
   if (value.passed !== true)
@@ -211,6 +213,22 @@ function requireUrl(value, path) {
     }
   } catch {
     failures.push(`${evidencePath}: ${path} must be a valid URL`);
+  }
+}
+
+function requireGithubActionsRunUrl(value, path) {
+  if (typeof value !== "string") return;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (
+    url.hostname !== "github.com" ||
+    !/^\/[^/]+\/[^/]+\/actions\/runs\/[1-9]\d*$/u.test(url.pathname)
+  ) {
+    failures.push(`${evidencePath}: ${path} must be a GitHub Actions run URL`);
   }
 }
 

@@ -256,6 +256,24 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("productionSmoke.packageTag");
   });
 
+  it("rejects beta evidence without GitHub Actions workflow proof", async () => {
+    const evidence = validBetaEvidence();
+    evidence.publishedQuickstart.workflowRunUrl =
+      "https://ci.example.test/runs/123";
+    evidence.productionSmoke.workflowRunUrl =
+      "https://github.com/acme/cloudflare-auth/actions";
+    const path = await writeEvidence("beta-non-github-workflow", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("publishedQuickstart.workflowRunUrl");
+    expect(result.stderr).toContain("productionSmoke.workflowRunUrl");
+    expect(result.stderr).toContain("GitHub Actions run URL");
+  });
+
   it("rejects beta evidence with raw IPv6 addresses", async () => {
     const evidence = validBetaEvidence();
     (evidence.productionSmoke as Record<string, unknown>).notes =
