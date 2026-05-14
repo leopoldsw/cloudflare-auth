@@ -616,6 +616,27 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("only the url parameter");
   });
 
+  it("rejects deploy button evidence without required proof flags and endpoints", async () => {
+    const evidence = validDeployButtonEvidence();
+    evidence.starterTemplateCreated = false;
+    evidence.migrationsApplied = false;
+    evidence.signupLoginSmokePassed = false;
+    evidence.smokedEndpoints = ["/auth/signup"];
+    const path = await writeEvidence("deploy-button-missing-proof", evidence);
+    const result = runScript("scripts/verify-deploy-button-evidence.mjs", {
+      CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+      CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("starterTemplateCreated");
+    expect(result.stderr).toContain("migrationsApplied");
+    expect(result.stderr).toContain("signupLoginSmokePassed");
+    expect(result.stderr).toContain("/auth/login");
+    expect(result.stderr).toContain("/auth/logout");
+    expect(result.stderr).toContain("/auth/user");
+  });
+
   it("rejects deploy button evidence with raw emails, IPs, and user agents", async () => {
     const emailEvidence = validDeployButtonEvidence();
     (emailEvidence as Record<string, unknown>).notes =
@@ -901,6 +922,22 @@ describe("release evidence verifiers", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("open high/critical auth issues");
     expect(result.stderr).toContain("GitHub repository security advisory URL");
+  });
+
+  it("rejects security tracker evidence with unresolved high or critical issues", async () => {
+    const evidence = validSecurityTracker();
+    evidence.openHighCriticalAuthSecurityIssues = ["issue-123"];
+    evidence.advisories[0]!.status = "open";
+    const path = await writeEvidence("security-tracker-open-issue", evidence);
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("openHighCriticalAuthSecurityIssues");
+    expect(result.stderr).toContain("advisories[0]");
+    expect(result.stderr).toContain("must be resolved before stable 1.0");
   });
 
   it("rejects security tracker URLs that are not scoped to one repository", async () => {
