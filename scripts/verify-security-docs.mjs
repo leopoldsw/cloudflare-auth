@@ -1,5 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
+import ts from "typescript";
 
 const docs = {
   metrics: await readFile("docs/metrics.md", "utf8"),
@@ -74,11 +75,12 @@ for (const text of [
   'mode: "required"',
   "before schema validation, account lookup, token lookup, token consume, or password hashing",
   "tests/security-hardening.test.ts",
-  "magic_link_consume",
-  "password_reset_confirm",
   "transport errors and malformed responses are treated as failed challenges",
 ]) {
   requireText("docs/turnstile.md", docs.turnstile, text);
+}
+for (const endpoint of await turnstileEndpointNames()) {
+  requireText("docs/turnstile.md", docs.turnstile, endpoint);
 }
 
 for (const text of [
@@ -136,4 +138,54 @@ async function requireLinkedEvidenceExists(row, threat) {
 
 function isExternalLink(target) {
   return /^[a-z][a-z0-9+.-]*:/iu.test(target) || target.startsWith("#");
+}
+
+async function turnstileEndpointNames() {
+  const path = "packages/worker/src/index.ts";
+  let sourceText;
+  try {
+    sourceText = await readFile(path, "utf8");
+  } catch {
+    failures.push(`${path}: could not be read for Turnstile docs coverage`);
+    return [];
+  }
+
+  const sourceFile = ts.createSourceFile(
+    path,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const names = new Set();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        !ts.isIdentifier(declaration.name) ||
+        declaration.name.text !== "turnstileEndpointNames" ||
+        !declaration.initializer
+      ) {
+        continue;
+      }
+      const array = unwrapConstAssertion(declaration.initializer);
+      if (!ts.isArrayLiteralExpression(array)) continue;
+      for (const element of array.elements) {
+        if (ts.isStringLiteral(element)) names.add(element.text);
+      }
+    }
+  }
+
+  if (names.size === 0)
+    failures.push(
+      `${path}: no Turnstile endpoint names found for docs coverage`,
+    );
+
+  return [...names].sort();
+}
+
+function unwrapConstAssertion(expression) {
+  if (ts.isAsExpression(expression)) return expression.expression;
+  return expression;
 }

@@ -326,6 +326,23 @@ describe("release gates", () => {
     expect(result.stderr).toContain("missing-turnstile.md");
   });
 
+  it("derives Turnstile docs coverage from runtime endpoint names", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "packages/worker/src/index.ts",
+      '  "password_reset_confirm",',
+      ['  "password_reset_confirm",', '  "new_turnstile_endpoint",'].join("\n"),
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-security-docs.mjs");
+    expect(result.stderr).toContain(
+      "docs/turnstile.md: missing new_turnstile_endpoint",
+    );
+  });
+
   it("requires production password hashing in examples and generated templates", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -866,6 +883,16 @@ async function writeDocsCoverageFixtures(root: string) {
     root,
     "packages/worker/src/index.ts",
     [
+      "const turnstileEndpointNames = [",
+      '  "signup",',
+      '  "password_login",',
+      '  "magic_link_request",',
+      '  "magic_link_consume",',
+      '  "email_verification_request",',
+      '  "email_verification_consume",',
+      '  "password_reset_request",',
+      '  "password_reset_confirm",',
+      "] as const;",
       "interface MinimalAuthConfig {",
       "  appName: string;",
       "  basePath: string;",
@@ -1156,7 +1183,13 @@ async function writeSecurityDocsFixtures(root: string) {
       'mode: "required"',
       "before schema validation, account lookup, token lookup, token consume, or password hashing",
       "tests/security-hardening.test.ts",
+      "signup",
+      "password_login",
+      "magic_link_request",
       "magic_link_consume",
+      "email_verification_request",
+      "email_verification_consume",
+      "password_reset_request",
       "password_reset_confirm",
       "transport errors and malformed responses are treated as failed challenges",
     ].join("\n"),
