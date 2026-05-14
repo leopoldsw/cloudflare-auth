@@ -40,6 +40,7 @@ jobs:
       - run: pnpm build
       - run: pnpm package:check
       - run: pnpm version-matrix:check
+      - run: pnpm verify:deploy-template
       - run: pnpm verify:migrations
       - run: pnpm verify:examples
       - run: pnpm release:gates

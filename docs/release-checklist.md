@@ -11,6 +11,7 @@
 - `pnpm build`
 - `pnpm package:check`
 - `pnpm version-matrix:check`
+- `pnpm verify:deploy-template`
 - `pnpm verify:migrations`
 - `pnpm verify:examples`
 - `pnpm release:gates`
@@ -30,6 +31,7 @@
 
 - beta packages published from a dry-run artifact
 - published quickstart smoke workflow passes using the beta package tag
+- generated Deploy to Cloudflare template passes `pnpm verify:deploy-template`
 - maintainer manually verifies the quickstart
 - opt-in Wrangler dev smoke workflow passes for at least one Worker example
 - opt-in Cloudflare production smoke workflow passes against the dedicated fixture

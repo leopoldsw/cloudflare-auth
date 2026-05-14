@@ -41,10 +41,16 @@ Do not publish public beta docs that use unscoped package commands until those p
 The beta template repository must be generated from `templates/hono-basic` and then verified outside the monorepo:
 
 ```bash
+CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG=beta \
+node scripts/export-deploy-template.mjs /tmp/cloudflare-auth-template
+cd /tmp/cloudflare-auth-template
 pnpm install
 pnpm build
 npx --package @cf-auth/cli@beta cf-auth migrate --local
 npm run dev
 ```
 
-The template must include published package versions, not `workspace:*` dependencies.
+The template must include published package versions, not `workspace:*`
+dependencies. `pnpm verify:deploy-template` checks the generated template shape,
+including D1 binding metadata and the deploy script that applies migrations
+through the `AUTH_DB` binding.

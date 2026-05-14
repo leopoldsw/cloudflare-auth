@@ -19,6 +19,8 @@ await requireFile(".github/workflows/codeql.yml");
 await requireFile(".github/workflows/cloudflare-production-smoke.yml");
 await requireFile(".github/workflows/dependency-review.yml");
 await requireFile(".github/workflows/published-quickstart-smoke.yml");
+await requireFile("scripts/export-deploy-template.mjs");
+await requireFile("scripts/verify-deploy-template.mjs");
 await requireText("README.md", "SECURITY.md");
 await requireText("SECURITY.md", "Expected Response Window");
 await requireText("docs/release-checklist.md", "unresolved high/critical");

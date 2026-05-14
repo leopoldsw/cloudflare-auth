@@ -19,6 +19,8 @@
     "build": "pnpm -r --filter './packages/**' --sort --workspace-concurrency=1 build",
     "package:check": "node scripts/package-check.mjs",
     "version-matrix:check": "node scripts/version-matrix-check.mjs",
+    "export:deploy-template": "node scripts/export-deploy-template.mjs",
+    "verify:deploy-template": "node scripts/verify-deploy-template.mjs",
     "verify:examples": "node scripts/verify-examples.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "release:gates": "node scripts/release-gates.mjs",
