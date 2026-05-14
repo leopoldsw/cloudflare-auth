@@ -1420,6 +1420,23 @@ describe("auth HTTP runtime", () => {
       error: { code: "validation_failed" },
     });
 
+    const turnstileRequired = await setup({
+      turnstile: {
+        mode: "required",
+        endpoints: ["signup"],
+        verify: async () => true,
+      },
+    });
+    const nonObjectJson = await turnstileRequired.authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "null",
+    });
+    expect(nonObjectJson.status).toBe(400);
+    await expect(nonObjectJson.json()).resolves.toMatchObject({
+      error: { code: "validation_failed" },
+    });
+
     const formSignup = await authFetch("/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },

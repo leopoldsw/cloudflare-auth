@@ -3237,13 +3237,22 @@ async function parseBody(
     runtime.config.request.maxBodyBytes,
   );
   if (isJson) {
+    let parsed: unknown;
     try {
-      return JSON.parse(text || "{}") as Record<string, unknown>;
+      parsed = JSON.parse(text || "{}");
     } catch {
       throw new AuthCryptoError("Invalid JSON body", "validation_failed");
     }
+    if (!isJsonObject(parsed)) {
+      throw new AuthCryptoError("Invalid JSON body", "validation_failed");
+    }
+    return parsed;
   }
   return Object.fromEntries(new URLSearchParams(text));
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function readLimitedBodyText(
