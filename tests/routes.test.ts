@@ -784,6 +784,40 @@ describe("auth HTTP runtime", () => {
     expect(previewPreflight?.status).toBe(403);
   });
 
+  it("parses supported content types with parameters", async () => {
+    const { authFetch, email } = await setup();
+    const signup = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        email: "typed@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(signup.status).toBe(200);
+
+    await authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        email: "typed@example.com",
+        redirectTo: "/typed",
+      }),
+    });
+    const token = email.messages.find((item) => item.type === "magic")?.token;
+    if (!token) throw new Error("missing magic token");
+
+    const consume = await authFetch("/auth/magic-link/consume", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+      },
+      body: new URLSearchParams({ token }),
+    });
+    expect(consume.status).toBe(303);
+    expect(consume.headers.get("Location")).toBe("/typed");
+  });
+
   it("keeps rate-limit keys opaque and feature-disabled endpoints side-effect free", async () => {
     const { authFetch, db } = await setup({
       passwordReset: { enabled: false } as AuthConfig["passwordReset"],
