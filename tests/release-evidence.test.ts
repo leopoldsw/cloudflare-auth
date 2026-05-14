@@ -1030,6 +1030,43 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("placeholder version 0.0.0");
   });
 
+  it("rejects package ownership evidence without explicit package arrays", async () => {
+    const cwd = await packageOwnershipFixture({
+      publishCfAuthShim: false,
+      staleCfAuthReservation: false,
+      publishCreatePackage: false,
+      staleCreateReservation: false,
+    });
+    const evidence = packageOwnershipFixtureEvidence({
+      publishCfAuthShim: false,
+      staleCfAuthReservation: false,
+      publishCreatePackage: false,
+      staleCreateReservation: false,
+    }) as Partial<ReturnType<typeof packageOwnershipFixtureEvidence>>;
+    delete evidence.packages;
+    delete evidence.reservedPackages;
+    await writeFile(
+      join(cwd, "docs", "package-ownership.json"),
+      `${JSON.stringify(evidence, null, 2)}\n`,
+    );
+    const result = runScript(
+      "scripts/verify-package-ownership.mjs",
+      {
+        CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+        CF_AUTH_PACKAGE_OWNERSHIP_PATH: join(
+          cwd,
+          "docs",
+          "package-ownership.json",
+        ),
+      },
+      cwd,
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages must be an array");
+    expect(result.stderr).toContain("reservedPackages must be an array");
+  });
+
   it("rejects private shim package names in publishable ownership evidence", async () => {
     const evidence = validPackageEvidence();
     evidence.packages.push({

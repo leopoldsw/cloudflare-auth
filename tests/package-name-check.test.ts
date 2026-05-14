@@ -77,6 +77,27 @@ describe("package name registry checks", () => {
     expect(result.stderr).toContain("top-level JSON value must be an object");
   });
 
+  it("rejects package ownership evidence without explicit package arrays", async () => {
+    const fixture = await packageNameFixture();
+    await writeFile(
+      join(fixture.root, "docs", "package-ownership.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          verifiedAt: "2026-05-14T00:00:00.000Z",
+          verifiedBy: "release-reviewer",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages must be an array");
+    expect(result.stderr).toContain("reservedPackages must be an array");
+  });
+
   it("rejects non-object workspace package manifests", async () => {
     const fixture = await packageNameFixture();
     await writeFile(

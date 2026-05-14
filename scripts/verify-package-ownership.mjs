@@ -88,6 +88,9 @@ function validateEvidence(value, rawText) {
   requireString(value.verifiedBy, "verifiedBy");
   requireDate(value.verifiedAt, "verifiedAt");
 
+  if (!Array.isArray(value.packages)) {
+    failures.push(`${evidencePath}: packages must be an array`);
+  }
   const packageEvidence = Array.isArray(value.packages) ? value.packages : [];
   const byName = new Map();
   for (const [index, item] of packageEvidence.entries()) {
@@ -148,6 +151,9 @@ function validateEvidence(value, rawText) {
     }
   }
 
+  if (!Array.isArray(value.reservedPackages)) {
+    failures.push(`${evidencePath}: reservedPackages must be an array`);
+  }
   const reservedEvidence = Array.isArray(value.reservedPackages)
     ? value.reservedPackages
     : [];

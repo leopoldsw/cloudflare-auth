@@ -191,7 +191,13 @@ async function readOwnershipEvidence() {
     failures.push(`${evidencePath}: top-level JSON value must be an object`);
     fail();
   }
+  if (!Array.isArray(parsed.packages)) {
+    failures.push(`${evidencePath}: packages must be an array`);
+  }
   const packageEvidence = Array.isArray(parsed.packages) ? parsed.packages : [];
+  if (!Array.isArray(parsed.reservedPackages)) {
+    failures.push(`${evidencePath}: reservedPackages must be an array`);
+  }
   const reservedEvidence = Array.isArray(parsed.reservedPackages)
     ? parsed.reservedPackages
     : [];
