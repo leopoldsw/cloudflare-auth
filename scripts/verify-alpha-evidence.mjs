@@ -89,6 +89,12 @@ function validateEvidence(value, rawText) {
         failures.push(`${evidencePath}: ${path}.${field} must be true`);
       }
     }
+    requireCommandContains(setup.commands, "cf-auth init", `${path}.commands`);
+    requireCommandContains(
+      setup.commands,
+      "cf-auth migrate --local",
+      `${path}.commands`,
+    );
   }
 
   if (setupMinutes.length > 0 && median(setupMinutes) >= 10) {

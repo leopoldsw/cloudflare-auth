@@ -51,6 +51,20 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("3 distinct alpha users");
   });
 
+  it("rejects alpha local setup evidence without command proof", async () => {
+    const evidence = validAlphaEvidence();
+    evidence.localSetups[0]!.commands = [];
+    const path = await writeEvidence("alpha-missing-local-command", evidence);
+    const result = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("cf-auth init");
+    expect(result.stderr).toContain("cf-auth migrate --local");
+  });
+
   it("accepts beta evidence for clean quickstart and opt-in production smoke", async () => {
     const path = await writeEvidence("beta", validBetaEvidence());
     const result = runScript("scripts/verify-beta-evidence.mjs", {
@@ -183,6 +197,12 @@ function validAlphaEvidence() {
       user: `alpha-user-${index + 1}`,
       completedAt: "2026-05-14T00:00:00.000Z",
       setupMinutes: 8,
+      commands: [
+        "npx --package @cf-auth/cli@alpha cf-auth init my-app --template hono-basic",
+        "pnpm install",
+        "npx --package @cf-auth/cli@alpha cf-auth migrate --local",
+        "npm run dev",
+      ],
       cleanDirectory: true,
       documentedCommandsOnly: true,
       signupLoginVerified: true,
