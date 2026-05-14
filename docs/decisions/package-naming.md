@@ -45,3 +45,10 @@ npx --package @cf-auth/cli@latest cf-auth init my-app --template hono-basic
 ```
 
 The command `npm create cloudflare-auth@latest my-app` may appear in public quickstarts only after the unscoped create package is controlled by maintainers.
+
+## Release Controls
+
+Before publishing a prerelease or stable release, maintainers must verify package
+ownership for every published name or complete the fallback rename.
+npm publisher 2FA must be enabled for every publishing account, and the release
+workflow must publish from GitHub Actions with npm provenance.

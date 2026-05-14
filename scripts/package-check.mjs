@@ -110,6 +110,7 @@ for (const dir of packageDirs) {
 }
 
 await verifyPackageNamingDocs();
+await verifyReleaseControls();
 
 if (failures.length) {
   console.error(failures.join("\n"));
@@ -177,6 +178,48 @@ async function verifyPackageNamingDocs() {
       failures.push(
         `${file}: npm create cloudflare-auth commands are blocked until package ownership is confirmed`,
       );
+    }
+  }
+}
+
+async function verifyReleaseControls() {
+  const releaseWorkflow = await readFile(
+    ".github/workflows/release.yml",
+    "utf8",
+  );
+  for (const needle of [
+    "id-token: write",
+    "package_names_confirmed",
+    "pnpm package:check",
+    "pnpm changeset publish --provenance",
+  ]) {
+    if (!releaseWorkflow.includes(needle)) {
+      failures.push(`.github/workflows/release.yml: missing ${needle}`);
+    }
+  }
+
+  const changesets = JSON.parse(
+    await readFile(".changeset/config.json", "utf8"),
+  );
+  if (changesets.access !== "public") {
+    failures.push(".changeset/config.json: access must be public");
+  }
+
+  for (const [file, needles] of [
+    [
+      "docs/decisions/package-naming.md",
+      ["npm publisher 2FA", "npm provenance"],
+    ],
+    [
+      "docs/release-checklist.md",
+      ["npm publisher 2FA", "package ownership verified"],
+    ],
+  ]) {
+    const text = await readFile(file, "utf8");
+    for (const needle of needles) {
+      if (!text.includes(needle)) {
+        failures.push(`${file}: missing ${needle}`);
+      }
     }
   }
 }
