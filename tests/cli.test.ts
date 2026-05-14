@@ -2087,7 +2087,7 @@ export default app;
   it("applies previous auth secret from environment before the new remote secret", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
-    const previous = "k_old.abcdefghijklmnopqrstuvwxyzABCDEFG1234567";
+    const previous = `k_old.${"A".repeat(43)}`;
     process.env.AUTH_SECRET_OLD = previous;
     const calls: Array<{ args: string[]; input: string | undefined }> = [];
     try {
@@ -2124,6 +2124,76 @@ export default app;
       "--env",
       "production",
     ]);
+  });
+
+  it("rejects invalid previous auth secrets before remote writes", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const calls: string[] = [];
+    const errors: string[] = [];
+    process.env.AUTH_SECRET_OLD = "not-a-secret";
+    try {
+      const code = await runCli(
+        [
+          "rotate-secret",
+          "--apply",
+          "--previous-from-env",
+          "AUTH_SECRET_OLD",
+          "--env",
+          "production",
+        ],
+        {
+          cwd,
+          stderr: (line) => errors.push(line),
+          runCommand: (command, args) => {
+            calls.push([command, ...args].join(" "));
+            return { status: 0, stdout: "", stderr: "" };
+          },
+        },
+      );
+      expect(code).toBe(1);
+    } finally {
+      delete process.env.AUTH_SECRET_OLD;
+    }
+
+    expect(calls).toEqual([]);
+    expect(errors.join("\n")).toContain(
+      "AUTH_SECRET must be <kid>.<base64url>",
+    );
+  });
+
+  it("rejects duplicate current and previous auth secret kids", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const calls: string[] = [];
+    const errors: string[] = [];
+    process.env.AUTH_SECRET_OLD = `k1.${"A".repeat(43)}`;
+    try {
+      const code = await runCli(
+        [
+          "rotate-secret",
+          "--apply",
+          "--previous-from-env",
+          "AUTH_SECRET_OLD",
+          "--env",
+          "production",
+        ],
+        {
+          cwd,
+          stderr: (line) => errors.push(line),
+          runCommand: (command, args) => {
+            calls.push([command, ...args].join(" "));
+            return { status: 0, stdout: "", stderr: "" };
+          },
+        },
+      );
+      expect(code).toBe(1);
+    } finally {
+      delete process.env.AUTH_SECRET_OLD;
+    }
+
+    expect(calls).toEqual([]);
+    expect(errors.join("\n")).toContain("duplicate auth-secret kid: k1");
   });
 });
 

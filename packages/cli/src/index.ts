@@ -2377,6 +2377,7 @@ async function commandRotateSecret(
 ): Promise<string> {
   const kid = typeof parsed.flags.kid === "string" ? parsed.flags.kid : "k1";
   const secret = `${kid}.${base64urlEncode(randomBytes(32))}`;
+  validateRotatedSecrets(secret);
   if (parsed.flags.apply) {
     const envName = parsed.flags.env as string | undefined;
     const config = await readWrangler(cwd);
@@ -2388,6 +2389,7 @@ async function commandRotateSecret(
     const lines: string[] = [];
     const previous = await resolvePreviousSecret(parsed);
     if (previous) {
+      validateRotatedSecrets(secret, previous);
       const previousCommand = {
         command: "wrangler",
         args: [
@@ -2418,6 +2420,10 @@ async function commandRotateSecret(
     return lines.join("\n");
   }
   return `AUTH_SECRET=${secret}`;
+}
+
+function validateRotatedSecrets(current: string, previous?: string): void {
+  parseAuthKeyRing(current, previous);
 }
 
 async function resolvePreviousSecret(
