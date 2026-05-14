@@ -1,0 +1,18 @@
+{
+  "name": "cloudflare-auth-react-vite-template",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "AUTH_ENV": "development",
+    "AUTH_PUBLIC_ORIGIN": "http://localhost:8787",
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "cloudflare-auth-react-vite-template-dev",
+      "database_id": "local-development",
+      "migrations_dir": "migrations",
+    },
+  ],
+}

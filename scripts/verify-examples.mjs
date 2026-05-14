@@ -55,7 +55,7 @@ for (const root of ["examples", "templates"]) {
   }
 }
 
-for (const template of ["hono-basic", "worker-basic"]) {
+for (const template of ["hono-basic", "worker-basic", "react-vite-worker"]) {
   const dir = join("templates", template);
   await requireFile(join(dir, "wrangler.jsonc"));
   await requireFile(join(dir, ".dev.vars.example"));
