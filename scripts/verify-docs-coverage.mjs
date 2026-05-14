@@ -131,6 +131,25 @@ for (const entrypoint of [
   requireText("docs/api.md", docs.api, entrypoint);
 }
 
+for (const symbol of [
+  "defineAuthConfig",
+  "createAuthHandler",
+  "getSession",
+  "getUser",
+  "requireUser",
+  "requireVerifiedUser",
+  "getAuthSessionFromRequest",
+  "createD1Repositories",
+  "cleanCfAuth",
+  "terminalEmail",
+  "byEnvironment",
+  "verifyTurnstileToken",
+  "cloudflareRateLimitPrefilter",
+  "redactLogValue",
+]) {
+  requireText("docs/api.md", docs.api, symbol);
+}
+
 for (const command of [
   "cf-auth migrate --local",
   "cf-auth migrate --remote --env production",
@@ -138,6 +157,10 @@ for (const command of [
   "cf-auth migrate --status --remote --env production",
 ]) {
   requireText("docs/migrations.md", docs.migrations, command);
+}
+
+for (const text of ["cleanCfAuth", "ctx.waitUntil"]) {
+  requireText("docs/migrations.md", docs.migrations, text);
 }
 
 for (const text of [
