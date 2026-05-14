@@ -640,6 +640,44 @@ describe("auth HTTP runtime", () => {
     expect(after?.password_hash).toBe(before?.password_hash);
   });
 
+  it("does not hash passwords before rejecting inactive reset tokens", async () => {
+    const { authFetch } = await setup({
+      passwordHashing: {
+        profile: "development-fast",
+        maxConcurrentHashesPerIsolate: 1,
+        queueTimeoutMs: 1,
+      },
+    });
+    const inactiveResetToken = `cfauth.reset.k1.${"A".repeat(43)}`;
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        authFetch("/auth/password/reset/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "CF-Connecting-IP": `203.0.113.${index + 1}`,
+          },
+          body: JSON.stringify({
+            token: inactiveResetToken,
+            password: "new correct horse battery staple",
+          }),
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.status)).toEqual(
+      Array(10).fill(400),
+    );
+    await expect(
+      Promise.all(responses.map((response) => response.json())),
+    ).resolves.toEqual(
+      Array(10).fill({
+        error: { code: "invalid_token", message: "Invalid token" },
+      }),
+    );
+  });
+
   it("rejects unsafe redirects, oversized bodies, missing production origins, and disallowed preflights", async () => {
     const limited = await setup({
       request: { maxBodyBytes: 8, requireOriginOnUnsafeMethods: true },
