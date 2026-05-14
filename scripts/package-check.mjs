@@ -673,9 +673,19 @@ async function verifyReleaseControls() {
     }
   }
 
-  const changesets = JSON.parse(
-    await readFile(".changeset/config.json", "utf8"),
-  );
+  let changesets;
+  try {
+    changesets = JSON.parse(await readFile(".changeset/config.json", "utf8"));
+  } catch {
+    failures.push(".changeset/config.json: must be valid JSON");
+    changesets = {};
+  }
+  if (!isJsonObject(changesets)) {
+    failures.push(
+      ".changeset/config.json: top-level JSON value must be an object",
+    );
+    changesets = {};
+  }
   if (changesets.changelog !== "@changesets/cli/changelog") {
     failures.push(
       ".changeset/config.json: changelog must use @changesets/cli/changelog",

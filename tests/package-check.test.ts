@@ -53,6 +53,28 @@ describe("package checks", () => {
     );
   });
 
+  it("rejects invalid changesets config JSON", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(join(root, ".changeset", "config.json"), "not json\n");
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".changeset/config.json: must be valid JSON",
+    );
+  });
+
+  it("rejects non-object changesets config", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(join(root, ".changeset", "config.json"), "null\n");
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".changeset/config.json: top-level JSON value must be an object",
+    );
+  });
+
   it("rejects placeholder package ownership example versions", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
