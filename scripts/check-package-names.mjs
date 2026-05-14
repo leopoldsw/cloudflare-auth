@@ -7,10 +7,28 @@ import { isJsonObject } from "./evidence-validation.mjs";
 const evidencePath =
   process.env.CF_AUTH_PACKAGE_OWNERSHIP_PATH ?? "docs/package-ownership.json";
 const registry = "https://registry.npmjs.org/";
-const packages = await publishablePackages();
-const reservedPackages = await privateReservedPackages();
-const reservedPackageNames = new Set(reservedPackages.map((pkg) => pkg.name));
 const failures = [];
+const workspacePackages = await workspacePackageManifests();
+const packages = workspacePackages
+  .filter((entry) => !entry.pkg.private)
+  .map((entry) => ({
+    name: String(entry.pkg.name),
+    version: String(entry.pkg.version),
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const reservedPackages = workspacePackages
+  .filter(
+    (entry) =>
+      entry.pkg.private === true &&
+      (entry.pkg.name === "cf-auth" ||
+        entry.pkg.name === "create-cloudflare-auth"),
+  )
+  .map((entry) => ({
+    name: String(entry.pkg.name),
+    version: String(entry.pkg.version),
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const reservedPackageNames = new Set(reservedPackages.map((pkg) => pkg.name));
 
 const { packageEvidenceByName, reservedEvidenceByName } =
   await readOwnershipEvidence();
@@ -213,43 +231,31 @@ async function readOwnershipEvidence() {
   return { packageEvidenceByName, reservedEvidenceByName };
 }
 
-async function publishablePackages() {
+async function workspacePackageManifests() {
   const entries = await readdir("packages", { withFileTypes: true });
   const output = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const pkg = JSON.parse(
-      await readFile(join("packages", entry.name, "package.json"), "utf8"),
-    );
-    if (!pkg.private) {
-      output.push({
-        name: String(pkg.name),
-        version: String(pkg.version),
-      });
-    }
+    const path = join("packages", entry.name, "package.json");
+    const pkg = await readJsonObject(path);
+    if (pkg) output.push({ path, pkg });
   }
-  return output.sort((a, b) => a.name.localeCompare(b.name));
+  return output;
 }
 
-async function privateReservedPackages() {
-  const entries = await readdir("packages", { withFileTypes: true });
-  const output = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const pkg = JSON.parse(
-      await readFile(join("packages", entry.name, "package.json"), "utf8"),
-    );
-    if (
-      pkg.private === true &&
-      (pkg.name === "cf-auth" || pkg.name === "create-cloudflare-auth")
-    ) {
-      output.push({
-        name: String(pkg.name),
-        version: String(pkg.version),
-      });
-    }
+async function readJsonObject(path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    failures.push(`${path}: must be valid JSON`);
+    return null;
   }
-  return output.sort((a, b) => a.name.localeCompare(b.name));
+  if (!isJsonObject(parsed)) {
+    failures.push(`${path}: top-level JSON value must be an object`);
+    return null;
+  }
+  return parsed;
 }
 
 function npmView(args) {

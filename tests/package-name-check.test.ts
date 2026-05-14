@@ -77,6 +77,20 @@ describe("package name registry checks", () => {
     expect(result.stderr).toContain("top-level JSON value must be an object");
   });
 
+  it("rejects non-object workspace package manifests", async () => {
+    const fixture = await packageNameFixture();
+    await writeFile(
+      join(fixture.root, "packages", "cli", "package.json"),
+      "null\n",
+    );
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packages/cli/package.json: top-level JSON value must be an object",
+    );
+  });
+
   it("rejects non-object package ownership array entries", async () => {
     const fixture = await packageNameFixture();
     await writeFile(
