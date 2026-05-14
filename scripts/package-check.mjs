@@ -543,6 +543,7 @@ async function verifyToolchainDocs() {
     vitest: matrix.vitest,
     zod: matrix.zod,
     changesets: matrix.changesets,
+    workersCompatibilityDate: matrix.workersCompatibilityDate,
     workersCompatibilityDateFloor: matrix.workersCompatibilityDateFloor,
   })) {
     if (!docs.includes(String(value))) {
