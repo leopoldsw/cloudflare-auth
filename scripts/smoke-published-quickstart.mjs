@@ -1,8 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import {
+  assertNoWorkspaceDependencies as assertNoWorkspaceDependencySpecs,
+  readJsonObject,
+} from "./package-json-utils.mjs";
 
 const root = process.cwd();
 const packageTag =
@@ -67,26 +72,11 @@ try {
 }
 
 async function assertNoWorkspaceDependencies(appDir) {
-  const pkg = JSON.parse(await readFile(join(appDir, "package.json"), "utf8"));
-  const sections = [
-    "dependencies",
-    "devDependencies",
-    "peerDependencies",
-    "optionalDependencies",
-  ];
-  const workspaceDeps = [];
-  for (const section of sections) {
-    for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-      if (String(version).startsWith("workspace:")) {
-        workspaceDeps.push(`${section}:${name}`);
-      }
-    }
-  }
-  if (workspaceDeps.length > 0) {
-    throw new Error(
-      `Generated quickstart app contains workspace dependencies: ${workspaceDeps.join(", ")}`,
-    );
-  }
+  const pkg = await readJsonObject(
+    join(appDir, "package.json"),
+    "generated quickstart package.json",
+  );
+  assertNoWorkspaceDependencySpecs(pkg, "generated quickstart package.json");
 }
 
 function runCfAuth(args, options = {}) {

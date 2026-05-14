@@ -1,7 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import {
+  assertNoWorkspaceDependencies,
+  getObjectSection,
+  parsePnpmPackOutput,
+  readJsonObject,
+  rewriteWorkspaceDependencySpecs,
+} from "./package-json-utils.mjs";
 
 const packageDirs = [
   "core",
@@ -29,14 +37,17 @@ for (const dir of packageDirs) {
   const stagedPackageDir = join(stagedDir, dir);
   await cp(join(root, "packages", dir), stagedPackageDir, { recursive: true });
   await rewriteWorkspaceDependencies(stagedPackageDir);
-  const pack = runJson("pnpm", [
-    "--dir",
-    stagedPackageDir,
-    "pack",
-    "--pack-destination",
-    packDir,
-    "--json",
-  ]);
+  const pack = parsePnpmPackOutput(
+    run("pnpm", [
+      "--dir",
+      stagedPackageDir,
+      "pack",
+      "--pack-destination",
+      packDir,
+      "--json",
+    ]).stdout,
+    `packages/${dir}`,
+  );
   tarballs.set(pack.name, pack.filename);
 }
 
@@ -75,23 +86,52 @@ run("pnpm", [
 ]);
 
 const appPackagePath = join(appDir, "package.json");
-const appPackage = JSON.parse(await readFile(appPackagePath, "utf8"));
+const appPackage = await readJsonObject(
+  appPackagePath,
+  "generated app package.json",
+);
 assertNoWorkspaceDependencies(appPackage, "generated app package.json");
-appPackage.dependencies["@cf-auth/hono"] = fileSpec("@cf-auth/hono");
-appPackage.dependencies["@cf-auth/worker"] = fileSpec("@cf-auth/worker");
-appPackage.dependencies["@cf-auth/email-cloudflare"] = fileSpec(
+const appDependencies = getObjectSection(
+  appPackage,
+  "dependencies",
+  "generated app package.json",
+  { create: true },
+);
+appDependencies["@cf-auth/hono"] = fileSpec("@cf-auth/hono");
+appDependencies["@cf-auth/worker"] = fileSpec("@cf-auth/worker");
+appDependencies["@cf-auth/email-cloudflare"] = fileSpec(
   "@cf-auth/email-cloudflare",
 );
-appPackage.devDependencies["@cf-auth/cli"] = fileSpec("@cf-auth/cli");
-appPackage.devDependencies["@cf-auth/testing"] = fileSpec("@cf-auth/testing");
-appPackage.pnpm = {
-  ...(appPackage.pnpm ?? {}),
-  overrides: Object.fromEntries(
+const appDevDependencies = getObjectSection(
+  appPackage,
+  "devDependencies",
+  "generated app package.json",
+  { create: true },
+);
+appDevDependencies["@cf-auth/cli"] = fileSpec("@cf-auth/cli");
+appDevDependencies["@cf-auth/testing"] = fileSpec("@cf-auth/testing");
+const appPnpm = getObjectSection(
+  appPackage,
+  "pnpm",
+  "generated app package.json",
+  {
+    create: true,
+  },
+);
+const appOverrides = getObjectSection(
+  appPnpm,
+  "overrides",
+  "generated app package.json: pnpm",
+  { create: true },
+);
+Object.assign(
+  appOverrides,
+  Object.fromEntries(
     Array.from(tarballs.keys())
       .filter((name) => name.startsWith("@cf-auth/"))
       .map((name) => [name, fileSpec(name)]),
   ),
-};
+);
 assertNoWorkspaceDependencies(appPackage, "tarball smoke package.json");
 await writeFile(appPackagePath, JSON.stringify(appPackage, null, 2) + "\n");
 
@@ -138,38 +178,9 @@ function fileSpec(name) {
 
 async function rewriteWorkspaceDependencies(packageDir) {
   const packageJsonPath = join(packageDir, "package.json");
-  const pkg = JSON.parse(await readFile(packageJsonPath, "utf8"));
-  for (const section of ["dependencies", "devDependencies"]) {
-    for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-      if (String(version).startsWith("workspace:")) {
-        pkg[section][name] = fileSpec(name);
-      }
-    }
-  }
+  const pkg = await readJsonObject(packageJsonPath);
+  rewriteWorkspaceDependencySpecs(pkg, packageJsonPath, fileSpec);
   await writeFile(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n");
-}
-
-function assertNoWorkspaceDependencies(pkg, label) {
-  const workspaceDependencies = [];
-  for (const section of [
-    "dependencies",
-    "devDependencies",
-    "peerDependencies",
-    "optionalDependencies",
-  ]) {
-    for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-      if (String(version).startsWith("workspace:")) {
-        workspaceDependencies.push(`${section}.${name}`);
-      }
-    }
-  }
-  if (workspaceDependencies.length > 0) {
-    throw new Error(
-      `${label} contains workspace protocol dependencies: ${workspaceDependencies.join(
-        ", ",
-      )}`,
-    );
-  }
 }
 
 async function writePnpmBuildPolicy(dir) {
@@ -192,11 +203,6 @@ function run(command, args, options = {}) {
     throw new Error(`${command} ${args.join(" ")} failed`);
   }
   return result;
-}
-
-function runJson(command, args) {
-  const result = run(command, args);
-  return JSON.parse(result.stdout);
 }
 
 function smokeAuthTestSource() {

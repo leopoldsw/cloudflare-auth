@@ -1,7 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import {
+  getObjectSection,
+  parsePnpmPackOutput,
+  readJsonObject,
+  rewriteWorkspaceDependencySpecs,
+} from "./package-json-utils.mjs";
 
 const root = process.cwd();
 const requiredGate = "CF_AUTH_PRODUCTION_SMOKE";
@@ -89,7 +96,10 @@ function exactHttpsOrigin(value) {
 }
 
 async function writeSmokePackageJson(appDir, packageTag) {
-  const pkg = JSON.parse(await readFile(join(appDir, "package.json"), "utf8"));
+  const pkg = await readJsonObject(
+    join(appDir, "package.json"),
+    "production smoke package.json",
+  );
   const packageSpecs = packageTag
     ? {
         "@cf-auth/core": packageTag,
@@ -100,26 +110,43 @@ async function writeSmokePackageJson(appDir, packageTag) {
     : await localPackageSpecs();
   pkg.name = "cf-auth-production-smoke";
   pkg.private = true;
-  pkg.dependencies = {
-    "@cf-auth/hono": packageSpecs["@cf-auth/hono"],
-    "@cf-auth/worker": packageSpecs["@cf-auth/worker"],
-    hono: "4.12.18",
-  };
-  pkg.devDependencies = {
-    "@cf-auth/cli": packageSpecs["@cf-auth/cli"],
-    typescript: "6.0.3",
-    wrangler: "4.90.1",
-  };
+  const dependencies = getObjectSection(
+    pkg,
+    "dependencies",
+    "production smoke package.json",
+    { create: true },
+  );
+  dependencies["@cf-auth/hono"] = packageSpecs["@cf-auth/hono"];
+  dependencies["@cf-auth/worker"] = packageSpecs["@cf-auth/worker"];
+  dependencies.hono = "4.12.18";
+  const devDependencies = getObjectSection(
+    pkg,
+    "devDependencies",
+    "production smoke package.json",
+    { create: true },
+  );
+  devDependencies["@cf-auth/cli"] = packageSpecs["@cf-auth/cli"];
+  devDependencies.typescript = "6.0.3";
+  devDependencies.wrangler = "4.90.1";
   if (!packageTag) {
-    pkg.pnpm = {
-      ...(pkg.pnpm ?? {}),
-      overrides: {
-        "@cf-auth/core": packageSpecs["@cf-auth/core"],
-        "@cf-auth/hono": packageSpecs["@cf-auth/hono"],
-        "@cf-auth/worker": packageSpecs["@cf-auth/worker"],
-        "@cf-auth/cli": packageSpecs["@cf-auth/cli"],
+    const pnpm = getObjectSection(
+      pkg,
+      "pnpm",
+      "production smoke package.json",
+      {
+        create: true,
       },
-    };
+    );
+    const overrides = getObjectSection(
+      pnpm,
+      "overrides",
+      "production smoke package.json: pnpm",
+      { create: true },
+    );
+    overrides["@cf-auth/core"] = packageSpecs["@cf-auth/core"];
+    overrides["@cf-auth/hono"] = packageSpecs["@cf-auth/hono"];
+    overrides["@cf-auth/worker"] = packageSpecs["@cf-auth/worker"];
+    overrides["@cf-auth/cli"] = packageSpecs["@cf-auth/cli"];
   }
   await writeFile(
     join(appDir, "package.json"),
@@ -146,14 +173,17 @@ async function localPackageSpecs() {
       recursive: true,
     });
     await rewriteWorkspaceDependencies(stagedPackageDir, specs);
-    const pack = runJson("pnpm", [
-      "--dir",
-      stagedPackageDir,
-      "pack",
-      "--pack-destination",
-      packDir,
-      "--json",
-    ]);
+    const pack = parsePnpmPackOutput(
+      run("pnpm", [
+        "--dir",
+        stagedPackageDir,
+        "pack",
+        "--pack-destination",
+        packDir,
+        "--json",
+      ]).stdout,
+      `packages/${dir}`,
+    );
     specs[pack.name] = `file:${pack.filename}`;
   }
   return specs;
@@ -161,16 +191,12 @@ async function localPackageSpecs() {
 
 async function rewriteWorkspaceDependencies(packageDir, specs) {
   const packageJsonPath = join(packageDir, "package.json");
-  const pkg = JSON.parse(await readFile(packageJsonPath, "utf8"));
-  for (const section of ["dependencies", "devDependencies"]) {
-    for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-      if (String(version).startsWith("workspace:")) {
-        const spec = specs[name];
-        if (!spec) throw new Error(`Missing local package spec for ${name}`);
-        pkg[section][name] = spec;
-      }
-    }
-  }
+  const pkg = await readJsonObject(packageJsonPath);
+  rewriteWorkspaceDependencySpecs(pkg, packageJsonPath, (name) => {
+    const spec = specs[name];
+    if (!spec) throw new Error(`Missing local package spec for ${name}`);
+    return spec;
+  });
   await writeFile(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n");
 }
 
@@ -256,11 +282,6 @@ function runCfAuth(cwd, args, options = {}) {
   return run("pnpm", ["--dir", cwd, "exec", "cf-auth", ...args], {
     allowFailure: options.allowFailure,
   });
-}
-
-function runJson(command, args) {
-  const result = run(command, args);
-  return JSON.parse(result.stdout);
 }
 
 function run(command, args, options = {}) {
