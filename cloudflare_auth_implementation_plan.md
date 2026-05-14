@@ -914,12 +914,17 @@ Generated `wrangler.jsonc`:
 
 ```jsonc
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "compatibility_date": "2026-05-14",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
 }
 ```
 
-At generation time, use the current date. Do not hard-code May 13, 2026 after this plan date.
+At generation time, use the current date. Generated Worker configs must also reference the Wrangler schema and enable observability so deployed apps have baseline logs and traces. Do not hard-code May 13, 2026 after this plan date.
 
 ---
 
@@ -1167,6 +1172,10 @@ Generated `wrangler.jsonc` for a local-first app with a named production environ
   "main": "src/index.ts",
   "compatibility_date": "2026-05-14",
   "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
 
   "vars": {
     "AUTH_ENV": "development",
