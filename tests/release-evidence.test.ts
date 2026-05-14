@@ -120,6 +120,74 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("user agents");
   });
 
+  it("rejects non-ISO evidence dates", async () => {
+    const alphaEvidence = validAlphaEvidence();
+    alphaEvidence.localSetups[0]!.completedAt = "May 14, 2026";
+    const alphaPath = await writeEvidence("alpha-non-iso-date", alphaEvidence);
+    const alphaResult = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: alphaPath,
+    });
+
+    const betaEvidence = validBetaEvidence();
+    betaEvidence.reviewedAt = "May 14, 2026";
+    const betaPath = await writeEvidence("beta-non-iso-date", betaEvidence);
+    const betaResult = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: betaPath,
+    });
+
+    const packageEvidence = validPackageEvidence();
+    packageEvidence.verifiedAt = "May 14, 2026";
+    const packagePath = await writeEvidence(
+      "package-ownership-non-iso-date",
+      packageEvidence,
+    );
+    const packageResult = runScript("scripts/verify-package-ownership.mjs", {
+      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+      CF_AUTH_PACKAGE_OWNERSHIP_PATH: packagePath,
+    });
+
+    const deployButtonEvidence = validDeployButtonEvidence();
+    deployButtonEvidence.verifiedAt = "May 14, 2026";
+    const deployButtonPath = await writeEvidence(
+      "deploy-button-non-iso-date",
+      deployButtonEvidence,
+    );
+    const deployButtonResult = runScript(
+      "scripts/verify-deploy-button-evidence.mjs",
+      {
+        CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+        CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: deployButtonPath,
+      },
+    );
+
+    const securityTracker = validSecurityTracker();
+    securityTracker.reviewedAt = "May 14, 2026";
+    const securityTrackerPath = await writeEvidence(
+      "security-tracker-non-iso-date",
+      securityTracker,
+    );
+    const securityTrackerResult = runScript(
+      "scripts/verify-security-release-tracker.mjs",
+      {
+        CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+        CF_AUTH_SECURITY_TRACKER_PATH: securityTrackerPath,
+      },
+    );
+
+    for (const result of [
+      alphaResult,
+      betaResult,
+      packageResult,
+      deployButtonResult,
+      securityTrackerResult,
+    ]) {
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("must be an ISO date string");
+    }
+  });
+
   it("requires alpha evidence for stable package versions", async () => {
     const cwd = await packageVersionFixture("1.0.0");
     const result = runScript("scripts/verify-alpha-evidence.mjs", {}, cwd);

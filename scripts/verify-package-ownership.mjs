@@ -1,6 +1,8 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { isIsoDateString } from "./evidence-validation.mjs";
+
 const evidencePath =
   process.env.CF_AUTH_PACKAGE_OWNERSHIP_PATH ?? "docs/package-ownership.json";
 const packages = await publishablePackages();
@@ -158,7 +160,7 @@ function requireString(value, path) {
 
 function requireDate(value, path) {
   requireString(value, path);
-  if (typeof value === "string" && Number.isNaN(Date.parse(value))) {
+  if (typeof value === "string" && !isIsoDateString(value)) {
     failures.push(`${evidencePath}: ${path} must be an ISO date string`);
   }
 }

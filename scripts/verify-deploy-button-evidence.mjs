@@ -5,6 +5,7 @@ import {
   containsIpLiteral,
   containsRawUserAgent,
 } from "./evidence-redaction.mjs";
+import { isIsoDateString } from "./evidence-validation.mjs";
 
 const evidencePath =
   process.env.CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH ??
@@ -136,7 +137,7 @@ function requireBetaPackageTag(value, path) {
 
 function requireDate(value, path) {
   requireString(value, path);
-  if (typeof value === "string" && Number.isNaN(Date.parse(value))) {
+  if (typeof value === "string" && !isIsoDateString(value)) {
     failures.push(`${evidencePath}: ${path} must be an ISO date string`);
   }
 }
