@@ -262,6 +262,34 @@ describe("Hono adapter and browser client", () => {
       status: 401,
     } satisfies Partial<AuthClientError>);
   });
+
+  it("client wraps non-JSON responses in typed errors", async () => {
+    const failureClient = createAuthClient({
+      basePath: "/auth",
+      fetch: async () =>
+        new Response("<h1>Bad gateway</h1>", {
+          status: 502,
+          headers: { "Content-Type": "text/html" },
+        }),
+    });
+    await expect(failureClient.getUser()).rejects.toMatchObject({
+      code: "request_failed",
+      status: 502,
+    } satisfies Partial<AuthClientError>);
+
+    const invalidSuccessClient = createAuthClient({
+      basePath: "/auth",
+      fetch: async () =>
+        new Response("not json", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        }),
+    });
+    await expect(invalidSuccessClient.getUser()).rejects.toMatchObject({
+      code: "invalid_response",
+      status: 200,
+    } satisfies Partial<AuthClientError>);
+  });
 });
 
 async function fixture(overrides: Partial<AuthConfig> = {}) {

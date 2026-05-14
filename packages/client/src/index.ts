@@ -37,13 +37,20 @@ export function createAuthClient(options: AuthClientOptions = {}) {
       },
     });
     const text = await response.text();
-    const payload = text ? (JSON.parse(text) as unknown) : {};
+    const { payload, parsed } = parseResponsePayload(text);
     if (!response.ok) {
       const error = (payload as { error?: { code?: string; message?: string } })
         .error;
       throw new AuthClientError(
         error?.code ?? "request_failed",
         error?.message ?? "Request failed",
+        response.status,
+      );
+    }
+    if (!parsed) {
+      throw new AuthClientError(
+        "invalid_response",
+        "Invalid JSON response",
         response.status,
       );
     }
@@ -99,4 +106,16 @@ export function createAuthClient(options: AuthClientOptions = {}) {
       );
     },
   };
+}
+
+function parseResponsePayload(text: string): {
+  payload: unknown;
+  parsed: boolean;
+} {
+  if (!text) return { payload: {}, parsed: true };
+  try {
+    return { payload: JSON.parse(text) as unknown, parsed: true };
+  } catch {
+    return { payload: {}, parsed: false };
+  }
 }
