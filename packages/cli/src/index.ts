@@ -366,13 +366,13 @@ async function commandDoctor(
       report: buildDoctorReport(checks, envName),
     };
   }
-  const selected = envName ? config.env?.[envName] : config;
-  if (envName && !selected) {
+  const selectedResult = selectWranglerEnvironment(config, envName);
+  if (!selectedResult.ok) {
     addCheck({
       id: "wrangler_environment",
       status: "fail",
-      message: `Wrangler environment ${envName} missing`,
-      fix: `add env.${envName} to wrangler.jsonc`,
+      message: selectedResult.message,
+      fix: selectedResult.fix,
     });
     return {
       ok: false,
@@ -380,16 +380,37 @@ async function commandDoctor(
       report: buildDoctorReport(checks, envName),
     };
   }
+  const selected = selectedResult.config;
   for (const check of checkWorkersCompatibility(config, selected ?? config)) {
     addCheck(check);
   }
-  const vars = selected?.vars ?? {};
+  if (selected.vars !== undefined && !isRecord(selected.vars)) {
+    addCheck({
+      id: "wrangler_vars",
+      status: "fail",
+      message: "Wrangler vars must be an object",
+      fix: "set vars to an object with AUTH_ENV and AUTH_PUBLIC_ORIGIN",
+    });
+  }
+  const vars = stringRecord(selected.vars);
   const remoteTarget =
     vars.AUTH_ENV === "preview" ||
     vars.AUTH_ENV === "production" ||
     Boolean(envName);
-  d1 =
-    selected?.d1_databases?.find((item) => item.binding === "AUTH_DB") ?? null;
+  if (
+    selected.d1_databases !== undefined &&
+    !Array.isArray(selected.d1_databases)
+  ) {
+    addCheck({
+      id: "d1_binding",
+      status: "fail",
+      message: "Wrangler d1_databases must be an array",
+      fix: "set d1_databases to an array containing the AUTH_DB binding",
+    });
+  }
+  d1 = Array.isArray(selected.d1_databases)
+    ? (selected.d1_databases.find(isAuthD1Binding) ?? null)
+    : null;
   if (!d1) {
     addCheck({
       id: "d1_binding",
@@ -514,7 +535,7 @@ async function commandDoctor(
   if (remoteTarget) {
     const localSecretNames = await readLocalSecretNames(cwd);
     const email = sourceUsesCloudflareEmail(authSource)
-      ? selected?.send_email?.find((item) => item.name === "AUTH_EMAIL")
+      ? findSendEmailBinding(selected, "AUTH_EMAIL")
       : "not-required";
     if (!email) {
       addCheck({
@@ -2865,16 +2886,81 @@ async function readWrangler(cwd: string): Promise<WranglerConfig> {
 }
 
 function selectD1(config: WranglerConfig, envName?: string) {
-  const selected = envName ? config.env?.[envName] : config;
-  const database = selected?.d1_databases?.find(
-    (item) => item.binding === "AUTH_DB",
-  );
+  const selectedResult = selectWranglerEnvironment(config, envName);
+  const selected = selectedResult.ok ? selectedResult.config : undefined;
+  const database = Array.isArray(selected?.d1_databases)
+    ? selected.d1_databases.find(isAuthD1Binding)
+    : undefined;
   if (!database) throw new Error("D1 binding AUTH_DB is missing.");
   return database;
 }
 
 function hasNamedEnvironments(config: WranglerConfig): boolean {
-  return Boolean(config.env && Object.keys(config.env).length > 0);
+  return isRecord(config.env) && Object.keys(config.env).length > 0;
+}
+
+function selectWranglerEnvironment(
+  config: WranglerConfig,
+  envName: string | undefined,
+):
+  | { ok: true; config: WranglerConfig }
+  | { ok: false; message: string; fix: string } {
+  if (!envName) return { ok: true, config };
+  if (config.env !== undefined && !isRecord(config.env)) {
+    return {
+      ok: false,
+      message: "Wrangler env must be an object",
+      fix: "set env to an object containing named Wrangler environments",
+    };
+  }
+  const selected = config.env?.[envName];
+  if (selected === undefined) {
+    return {
+      ok: false,
+      message: `Wrangler environment ${envName} missing`,
+      fix: `add env.${envName} to wrangler.jsonc`,
+    };
+  }
+  if (!isRecord(selected)) {
+    return {
+      ok: false,
+      message: `Wrangler environment ${envName} must be an object`,
+      fix: `set env.${envName} to an object with auth bindings and vars`,
+    };
+  }
+  return { ok: true, config: selected as WranglerConfig };
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => {
+      return typeof entry[1] === "string";
+    }),
+  );
+}
+
+function isAuthD1Binding(value: unknown): value is {
+  binding: string;
+  database_name?: string;
+  database_id?: string;
+  migrations_dir?: string;
+} {
+  return (
+    isRecord(value) &&
+    value.binding === "AUTH_DB" &&
+    (value.database_name === undefined ||
+      typeof value.database_name === "string") &&
+    (value.database_id === undefined ||
+      typeof value.database_id === "string") &&
+    (value.migrations_dir === undefined ||
+      typeof value.migrations_dir === "string")
+  );
+}
+
+function findSendEmailBinding(config: WranglerConfig, name: string) {
+  if (!Array.isArray(config.send_email)) return undefined;
+  return config.send_email.find((item) => isRecord(item) && item.name === name);
 }
 
 function wranglerPath(cwd: string): string {
@@ -3000,16 +3086,22 @@ async function repairWranglerConfig(
     changed;
   changed = ensureObservability(config) || changed;
 
-  config.env ??= {};
-  if (!config.env.production) {
+  if (!isRecord(config.env)) {
+    config.env = {};
+    changed = true;
+  }
+  if (!isRecord(config.env.production)) {
     config.env.production = {
       name: appName,
     };
     changed = true;
   }
-  const production = config.env.production;
+  const production = config.env.production as WranglerConfig;
   if (production.compatibility_date || production.compatibility_flags) {
     changed = ensureWorkersCompatibility(production) || changed;
+  }
+  if (production.observability !== undefined) {
+    changed = ensureObservability(production) || changed;
   }
   changed =
     ensureVars(production, {
@@ -3023,13 +3115,14 @@ async function repairWranglerConfig(
       "REPLACE_WITH_DATABASE_ID",
       false,
     ) || changed;
-  if (
-    !production.send_email?.some((binding) => binding.name === "AUTH_EMAIL")
-  ) {
-    production.send_email = [
-      ...(production.send_email ?? []),
-      { name: "AUTH_EMAIL" },
-    ];
+  const sendEmailBindings = Array.isArray(production.send_email)
+    ? production.send_email.filter(
+        (binding): binding is { name: string } =>
+          isRecord(binding) && typeof binding.name === "string",
+      )
+    : [];
+  if (!sendEmailBindings.some((binding) => binding.name === "AUTH_EMAIL")) {
+    production.send_email = [...sendEmailBindings, { name: "AUTH_EMAIL" }];
     changed = true;
   }
 
@@ -3065,7 +3158,10 @@ function ensureWorkersCompatibility(config: WranglerConfig): boolean {
     config.compatibility_date = workersCompatibilityDate;
     changed = true;
   }
-  config.compatibility_flags ??= [];
+  if (!Array.isArray(config.compatibility_flags)) {
+    config.compatibility_flags = [];
+    changed = true;
+  }
   if (!config.compatibility_flags.includes(workersNodeCompatibilityFlag)) {
     config.compatibility_flags.push(workersNodeCompatibilityFlag);
     changed = true;
@@ -3074,7 +3170,7 @@ function ensureWorkersCompatibility(config: WranglerConfig): boolean {
 }
 
 function ensureObservability(config: WranglerConfig): boolean {
-  if (config.observability) return false;
+  if (isRecord(config.observability)) return false;
   config.observability = {
     enabled: true,
     head_sampling_rate: 1,
@@ -3087,7 +3183,10 @@ function ensureVars(
   values: Record<string, string>,
 ): boolean {
   let changed = false;
-  config.vars ??= {};
+  if (!isRecord(config.vars)) {
+    config.vars = {};
+    changed = true;
+  }
   for (const [key, value] of Object.entries(values)) {
     if (!config.vars[key]) {
       config.vars[key] = value;
@@ -3104,8 +3203,11 @@ function ensureD1Binding(
   replacePlaceholder: boolean,
 ): boolean {
   let changed = false;
-  config.d1_databases ??= [];
-  let binding = config.d1_databases.find((item) => item.binding === "AUTH_DB");
+  if (!Array.isArray(config.d1_databases)) {
+    config.d1_databases = [];
+    changed = true;
+  }
+  let binding = config.d1_databases.find(isAuthD1Binding);
   if (!binding) {
     binding = {
       binding: "AUTH_DB",

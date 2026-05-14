@@ -365,6 +365,86 @@ describe("CLI MVP", () => {
     );
   });
 
+  it("repairs malformed Wrangler auth sections without crashing", async () => {
+    const cwd = await tempDir();
+    const app = join(cwd, "malformed-wrangler-app");
+    await mkdir(join(app, "src"), { recursive: true });
+    await writeFile(
+      join(app, "package.json"),
+      JSON.stringify({
+        name: "malformed-wrangler-app",
+        dependencies: { hono: "4.12.18" },
+      }),
+    );
+    await writeFile(
+      join(app, "wrangler.jsonc"),
+      JSON.stringify({
+        name: "malformed-wrangler-app-dev",
+        main: "src/index.ts",
+        compatibility_flags: "nodejs_compat",
+        observability: "enabled",
+        vars: "bad-vars",
+        d1_databases: "bad-d1",
+        env: {
+          production: {
+            compatibility_flags: "nodejs_compat",
+            observability: "enabled",
+            vars: "bad-vars",
+            d1_databases: "bad-d1",
+            send_email: "bad-email",
+          },
+        },
+      }),
+    );
+    const output: string[] = [];
+
+    const code = await runCli(["init", "malformed-wrangler-app"], {
+      cwd,
+      stdout: (line) => output.push(line),
+    });
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain(
+      "Repaired Wrangler auth bindings and vars.",
+    );
+    const wrangler = JSON.parse(
+      await readFile(join(app, "wrangler.jsonc"), "utf8"),
+    ) as {
+      compatibility_flags: string[];
+      observability: { enabled: boolean; head_sampling_rate: number };
+      vars: Record<string, string>;
+      d1_databases: Array<{ binding: string; database_id: string }>;
+      env: {
+        production: {
+          compatibility_flags: string[];
+          observability: { enabled: boolean; head_sampling_rate: number };
+          vars: Record<string, string>;
+          d1_databases: Array<{ binding: string; database_id: string }>;
+          send_email: Array<{ name: string }>;
+        };
+      };
+    };
+    expect(wrangler.compatibility_flags).toContain("nodejs_compat");
+    expect(wrangler.observability.head_sampling_rate).toBe(1);
+    expect(wrangler.vars.AUTH_ENV).toBe("development");
+    expect(wrangler.d1_databases[0]).toMatchObject({
+      binding: "AUTH_DB",
+      database_id: "local-development",
+    });
+    expect(wrangler.env.production.compatibility_flags).toContain(
+      "nodejs_compat",
+    );
+    expect(wrangler.env.production.observability.head_sampling_rate).toBe(1);
+    expect(wrangler.env.production.vars.AUTH_ENV).toBe("production");
+    expect(wrangler.env.production.d1_databases[0]).toMatchObject({
+      binding: "AUTH_DB",
+      database_id: "REPLACE_WITH_DATABASE_ID",
+    });
+    expect(wrangler.env.production.send_email).toContainEqual({
+      name: "AUTH_EMAIL",
+    });
+  });
+
   it("repairs missing auth Wrangler bindings without changing source", async () => {
     const cwd = await tempDir();
     const app = join(cwd, "repair-app");
@@ -723,6 +803,45 @@ describe("CLI MVP", () => {
     expect(scalarCode).toBe(1);
     expect(scalarErrors.join("\n")).toContain(
       "wrangler.jsonc: top-level JSON value must be an object",
+    );
+  });
+
+  it("doctor reports malformed nested Wrangler sections cleanly", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    let text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const badEnvConfig = JSON.parse(text) as { env?: unknown };
+    badEnvConfig.env = "bad-env";
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(badEnvConfig));
+    const envErrors: string[] = [];
+
+    const envCode = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => envErrors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(envCode).toBe(1);
+    expect(envErrors.join("\n")).toContain("Wrangler env must be an object");
+
+    await writeWrangler(cwd);
+    text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const badD1Config = JSON.parse(text) as {
+      env: { production: { d1_databases?: unknown } };
+    };
+    badD1Config.env.production.d1_databases = "bad-d1";
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(badD1Config));
+    const d1Errors: string[] = [];
+
+    const d1Code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => d1Errors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(d1Code).toBe(1);
+    expect(d1Errors.join("\n")).toContain(
+      "Wrangler d1_databases must be an array",
     );
   });
 
