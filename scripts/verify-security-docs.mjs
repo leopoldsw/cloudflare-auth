@@ -1,4 +1,5 @@
 import { access, readFile } from "node:fs/promises";
+import { join, normalize } from "node:path";
 
 const docs = {
   metrics: await readFile("docs/metrics.md", "utf8"),
@@ -45,7 +46,7 @@ for (const threat of threatRows) {
       `docs/security-model.md: ${threat} row must link to regression test evidence`,
     );
   } else {
-    await requireLinkedTestsExist(row, threat);
+    await requireLinkedEvidenceExists(row, threat);
   }
 }
 
@@ -117,16 +118,22 @@ function requireText(file, text, needle) {
   }
 }
 
-async function requireLinkedTestsExist(row, threat) {
-  const links = [...row.matchAll(/\]\(\.\.\/(tests\/[^)#]+)(?:#[^)]+)?\)/gu)];
+async function requireLinkedEvidenceExists(row, threat) {
+  const links = [...row.matchAll(/\]\(([^)#]+)(?:#[^)]+)?\)/gu)];
   for (const match of links) {
-    const path = match[1];
+    const target = match[1];
+    if (!target || isExternalLink(target)) continue;
+    const path = normalize(join("docs", target));
     try {
       await access(path);
     } catch {
       failures.push(
-        `docs/security-model.md: ${threat} row links to missing test evidence ${path}`,
+        `docs/security-model.md: ${threat} row links to missing evidence target ${path}`,
       );
     }
   }
+}
+
+function isExternalLink(target) {
+  return /^[a-z][a-z0-9+.-]*:/iu.test(target) || target.startsWith("#");
 }

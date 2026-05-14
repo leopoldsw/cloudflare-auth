@@ -173,6 +173,22 @@ describe("release gates", () => {
     expect(result.stderr).toContain("push protection");
   });
 
+  it("requires security model evidence links to resolve", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "docs/security-model.md",
+      "| Bot pressure | mitigation | [tests](../tests/routes.test.ts) |",
+      "| Bot pressure | mitigation | [tests](../tests/routes.test.ts), [docs](missing-turnstile.md) |",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-security-docs.mjs");
+    expect(result.stderr).toContain("Bot pressure");
+    expect(result.stderr).toContain("missing-turnstile.md");
+  });
+
   it("requires production password hashing in examples and generated templates", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
