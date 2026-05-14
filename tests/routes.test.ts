@@ -743,6 +743,15 @@ describe("auth HTTP runtime", () => {
     expect(
       allowedPreflight?.headers.get("Access-Control-Allow-Origin"),
     ).not.toBe("*");
+    expect(allowedPreflight?.headers.get("Access-Control-Allow-Methods")).toBe(
+      "GET, POST, OPTIONS",
+    );
+    expect(allowedPreflight?.headers.get("Access-Control-Allow-Headers")).toBe(
+      "Content-Type",
+    );
+    expect(
+      allowedPreflight?.headers.get("Access-Control-Allow-Credentials"),
+    ).toBe("true");
     expect(allowedPreflight?.headers.get("Vary")).toBe("Origin");
 
     const disallowedPreflight = await handler.fetch(
