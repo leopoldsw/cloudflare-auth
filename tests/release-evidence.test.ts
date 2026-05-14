@@ -271,6 +271,58 @@ describe("release evidence verifiers", () => {
     }
   });
 
+  it("requires forced release evidence files to exist", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cf-auth-missing-evidence-"));
+    const cases = [
+      {
+        script: "scripts/verify-alpha-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+          CF_AUTH_ALPHA_EVIDENCE_PATH: join(dir, "alpha.json"),
+        },
+        message: "private-alpha evidence is required",
+      },
+      {
+        script: "scripts/verify-beta-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+          CF_AUTH_BETA_EVIDENCE_PATH: join(dir, "beta.json"),
+        },
+        message: "public-beta evidence is required",
+      },
+      {
+        script: "scripts/verify-deploy-button-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+          CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: join(dir, "deploy-button.json"),
+        },
+        message: "Deploy to Cloudflare button evidence is required",
+      },
+      {
+        script: "scripts/verify-package-ownership.mjs",
+        env: {
+          CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+          CF_AUTH_PACKAGE_OWNERSHIP_PATH: join(dir, "package-ownership.json"),
+        },
+        message: "package ownership evidence is required",
+      },
+      {
+        script: "scripts/verify-security-release-tracker.mjs",
+        env: {
+          CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+          CF_AUTH_SECURITY_TRACKER_PATH: join(dir, "security-tracker.json"),
+        },
+        message: "security release tracker is required",
+      },
+    ];
+
+    for (const item of cases) {
+      const result = runScript(item.script, item.env);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(item.message);
+    }
+  });
+
   it("requires alpha evidence for stable package versions", async () => {
     const cwd = await packageVersionFixture("1.0.0");
     const result = runScript("scripts/verify-alpha-evidence.mjs", {}, cwd);
