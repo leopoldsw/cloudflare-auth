@@ -302,6 +302,13 @@ describe("crypto, passwords, tokens, and sessions", () => {
     ).toThrow(AuthCryptoError);
     expect(() =>
       resolveSessionCookie({
+        ...base,
+        requestOrigin: "https://app.other.com",
+        domain: ".example.com",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      resolveSessionCookie({
         mode: "development",
         requestOrigin: "http://localhost:8787",
         cookieName: "__Secure-cfauth-session",

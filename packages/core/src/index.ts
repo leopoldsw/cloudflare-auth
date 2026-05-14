@@ -1091,6 +1091,18 @@ export function resolveSessionCookie(input: {
       "invalid_cookie_config",
     );
   }
+  if (domain) {
+    const cookieDomainHost = domain.slice(1);
+    if (
+      origin.hostname !== cookieDomainHost &&
+      !origin.hostname.endsWith(domain)
+    ) {
+      throw new AuthCryptoError(
+        "session cookie Domain must match the request host",
+        "invalid_cookie_config",
+      );
+    }
+  }
   const sameSite = input.sameSite === "strict" ? "Strict" : "Lax";
   const name =
     input.cookieName !== undefined && input.cookieName !== "auto"

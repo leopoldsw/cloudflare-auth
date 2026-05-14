@@ -16,6 +16,7 @@ Logout revokes the session row and clears the cookie using the same name, path, 
 Cross-subdomain cookies require explicit `session.domain` configuration using
 a leading-dot parent domain such as `.example.com`. `Domain` values with
 schemes, paths, wildcards, IP addresses, trailing dots, or header separators
-are rejected. Host-only production cookies keep the `__Host-` prefix and must
-not configure `Domain`; cross-subdomain cookies use the `__Secure-` prefix and
+are rejected, and the domain must match the request host or one of its parent
+domains. Host-only production cookies keep the `__Host-` prefix and must not
+configure `Domain`; cross-subdomain cookies use the `__Secure-` prefix and
 require HTTPS.
