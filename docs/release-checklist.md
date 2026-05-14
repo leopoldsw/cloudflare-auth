@@ -15,6 +15,7 @@
 - `pnpm verify:deploy-template`
 - `pnpm verify:migrations`
 - `pnpm verify:examples`
+- `pnpm verify:security-tracker`
 - `pnpm release:gates`
 - `CF_AUTH_TARBALL_INSTALL=1 pnpm smoke:tarballs`
 - `pnpm benchmark:password`
@@ -46,6 +47,7 @@
 - config schema reviewed and release-approved
 - upgrade tests cover every beta schema version
 - security review decision record signed
+- security release tracker verifier passes
 - Dependabot, dependency review, and CodeQL automation are enabled
 - opt-in Wrangler dev smoke workflow passes for the release candidate
 - opt-in Cloudflare production smoke workflow passes for the release candidate

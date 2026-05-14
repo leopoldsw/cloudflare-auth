@@ -44,6 +44,7 @@ jobs:
       - run: pnpm verify:deploy-template
       - run: pnpm verify:migrations
       - run: pnpm verify:examples
+      - run: pnpm verify:security-tracker
       - run: pnpm release:gates
       - run: pnpm smoke:tarballs
         env:

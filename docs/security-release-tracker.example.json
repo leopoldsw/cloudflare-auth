@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-05-14T00:00:00.000Z",
+  "reviewedBy": "maintainer-name",
+  "openHighCriticalAuthSecurityIssues": [],
+  "advisories": [
+    {
+      "id": "GHSA-example",
+      "severity": "high",
+      "status": "resolved"
+    }
+  ]
+}

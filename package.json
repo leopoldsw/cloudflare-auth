@@ -24,6 +24,7 @@
     "verify:deploy-template": "node scripts/verify-deploy-template.mjs",
     "verify:examples": "node scripts/verify-examples.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
+    "verify:security-tracker": "node scripts/verify-security-release-tracker.mjs",
     "release:gates": "node scripts/release-gates.mjs",
     "smoke:wrangler-dev": "node scripts/smoke-wrangler-dev.mjs",
     "smoke:cloudflare-production": "node scripts/smoke-production-cloudflare.mjs",

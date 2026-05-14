@@ -22,6 +22,7 @@ await requireFile(".github/workflows/published-quickstart-smoke.yml");
 await requireFile("scripts/export-deploy-template.mjs");
 await requireFile("scripts/verify-alpha-evidence.mjs");
 await requireFile("scripts/verify-deploy-template.mjs");
+await requireFile("scripts/verify-security-release-tracker.mjs");
 await requireText("README.md", "SECURITY.md");
 await requireText("SECURITY.md", "Expected Response Window");
 await requireText("docs/release-checklist.md", "unresolved high/critical");
@@ -42,6 +43,11 @@ if (stablePackages.length > 0) {
   await requireReleaseApproval("docs/api-report.md", "Public API report");
   await requireReleaseApproval("docs/config-schema.md", "Config schema");
   await requireSecurityReviewDecision();
+  await requireFile("docs/security-release-tracker.json");
+  await requireText(
+    "docs/security-release-tracker.json",
+    '"openHighCriticalAuthSecurityIssues"',
+  );
   await requireFile("tests/upgrade.test.ts");
   await requireFile("tests/fixtures/upgrade/beta-schema-versions.json");
   await requireUpgradeFixtures();
