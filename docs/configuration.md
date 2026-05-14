@@ -32,6 +32,11 @@ Runtime and storage:
 | `runtime.trustedHosts` | `["localhost:8787", "127.0.0.1:8787"]` | Extra accepted request hosts for preview/production host validation. |
 | `database.binding`     | `AUTH_DB`                              | D1 binding name.                                                     |
 
+`AUTH_PUBLIC_ORIGIN` is required in preview and production. In development,
+omitting it is only supported for trusted localhost requests when the active
+email adapter is `terminalEmail(...)`; generated projects still set it
+explicitly.
+
 Sessions and requests:
 
 | Key                                    | Default | Notes                                                                                              |

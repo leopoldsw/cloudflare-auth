@@ -13,6 +13,7 @@ import {
 import {
   createAuthHandler,
   defineAuthConfig,
+  terminalEmail,
   type AuthConfig,
   type AuthConfigInput,
 } from "@cf-auth/worker";
@@ -289,6 +290,67 @@ describe("auth HTTP runtime", () => {
 
     expect(response?.status).toBe(200);
     await expect(response?.json()).resolves.toEqual({ user: null });
+  });
+
+  it("limits development public-origin fallback to trusted localhost terminal email", async () => {
+    const terminalFallback = await setup({
+      email: terminalEmail({ print() {} }),
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["localhost:8787"],
+      },
+    });
+    const {
+      AUTH_PUBLIC_ORIGIN: _terminalPublicOrigin,
+      ...terminalEnvWithoutOrigin
+    } = terminalFallback.env;
+    const localFallback = await terminalFallback.handler.fetch(
+      new Request(`${origin}/auth/user`, {
+        headers: { "CF-Ray": "ray-local-fallback" },
+      }),
+      terminalEnvWithoutOrigin,
+      terminalFallback.ctx,
+    );
+    expect(localFallback?.status).toBe(200);
+    await expect(localFallback?.json()).resolves.toEqual({ user: null });
+
+    const untrustedFallback = await terminalFallback.handler.fetch(
+      new Request("https://example.com/auth/user", {
+        headers: { "CF-Ray": "ray-untrusted-fallback" },
+      }),
+      terminalEnvWithoutOrigin,
+      terminalFallback.ctx,
+    );
+    expect(untrustedFallback?.status).toBe(500);
+    await expect(untrustedFallback?.json()).resolves.toMatchObject({
+      error: { code: "config_error" },
+      requestId: "ray-untrusted-fallback",
+    });
+
+    const customEmailFallback = await setup({
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["localhost:8787"],
+      },
+    });
+    const {
+      AUTH_PUBLIC_ORIGIN: _customPublicOrigin,
+      ...customEnvWithoutOrigin
+    } = customEmailFallback.env;
+    const customEmailResponse = await customEmailFallback.handler.fetch(
+      new Request(`${origin}/auth/user`, {
+        headers: { "CF-Ray": "ray-custom-email-fallback" },
+      }),
+      customEnvWithoutOrigin,
+      customEmailFallback.ctx,
+    );
+    expect(customEmailResponse?.status).toBe(500);
+    await expect(customEmailResponse?.json()).resolves.toMatchObject({
+      error: { code: "config_error" },
+      requestId: "ray-custom-email-fallback",
+    });
   });
 
   it("rejects invalid feature flag combinations", () => {

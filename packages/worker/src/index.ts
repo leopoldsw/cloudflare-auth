@@ -3374,8 +3374,13 @@ function resolveRuntime(
     config.runtime.publicOrigin === "from-env"
       ? env.AUTH_PUBLIC_ORIGIN
       : config.runtime.publicOrigin;
-  if (!publicOrigin && mode !== "development")
+  if (
+    !publicOrigin &&
+    (mode !== "development" ||
+      !canUseDevelopmentRequestOriginFallback(config, requestUrl))
+  ) {
     throw new AuthCryptoError("AUTH_PUBLIC_ORIGIN is missing", "config_error");
+  }
   const requestOrigin = requestUrl.origin;
   const resolvedPublicOrigin = publicOrigin ?? requestOrigin;
   if (!isExactPublicOriginForMode(resolvedPublicOrigin, mode)) {
@@ -3433,6 +3438,17 @@ function resolveRuntime(
     cookie,
     logger: consoleLogger,
   };
+}
+
+function canUseDevelopmentRequestOriginFallback(
+  config: AuthConfig,
+  requestUrl: URL,
+): boolean {
+  return (
+    config.email.kind === "terminal" &&
+    ["localhost", "127.0.0.1"].includes(requestUrl.hostname) &&
+    config.runtime.trustedHosts.includes(requestUrl.host)
+  );
 }
 
 function writeRuntimeConfigFailureEvent(input: {
