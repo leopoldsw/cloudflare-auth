@@ -41,6 +41,6 @@
 - config schema reviewed and release-approved
 - upgrade tests cover every beta schema version
 - security review decision record signed
-- dependency review automation is enabled
+- Dependabot, dependency review, and CodeQL automation are enabled
 - opt-in Wrangler dev smoke workflow passes for the release candidate
 - README, LICENSE, export maps, package contents, and provenance settings pass `pnpm package:check`

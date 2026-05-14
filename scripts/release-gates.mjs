@@ -14,6 +14,8 @@ for (const dir of packageDirs) {
 }
 
 const failures = [];
+await requireFile(".github/dependabot.yml");
+await requireFile(".github/workflows/codeql.yml");
 await requireFile(".github/workflows/dependency-review.yml");
 await requireText("README.md", "SECURITY.md");
 await requireText("SECURITY.md", "Expected Response Window");
