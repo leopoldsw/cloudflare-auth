@@ -602,6 +602,8 @@ describe("release evidence verifiers", () => {
     const cwd = await packageOwnershipFixture({
       publishCfAuthShim: true,
       staleCfAuthReservation: true,
+      publishCreatePackage: false,
+      staleCreateReservation: false,
     });
     const result = runScript(
       "scripts/verify-package-ownership.mjs",
@@ -618,6 +620,33 @@ describe("release evidence verifiers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("cf-auth");
+    expect(result.stderr).toContain(
+      "must not be listed under reservedPackages",
+    );
+  });
+
+  it("rejects reserved package evidence after the create package becomes publishable", async () => {
+    const cwd = await packageOwnershipFixture({
+      publishCfAuthShim: false,
+      staleCfAuthReservation: false,
+      publishCreatePackage: true,
+      staleCreateReservation: true,
+    });
+    const result = runScript(
+      "scripts/verify-package-ownership.mjs",
+      {
+        CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+        CF_AUTH_PACKAGE_OWNERSHIP_PATH: join(
+          cwd,
+          "docs",
+          "package-ownership.json",
+        ),
+      },
+      cwd,
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("create-cloudflare-auth");
     expect(result.stderr).toContain(
       "must not be listed under reservedPackages",
     );
@@ -825,10 +854,15 @@ async function packageVersionFixture(version: string): Promise<string> {
 async function packageOwnershipFixture(options: {
   publishCfAuthShim: boolean;
   staleCfAuthReservation: boolean;
+  publishCreatePackage: boolean;
+  staleCreateReservation: boolean;
 }): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-package-ownership-"));
   await mkdir(join(root, "packages", "cli"), { recursive: true });
   await mkdir(join(root, "packages", "cf-auth-shim"), { recursive: true });
+  await mkdir(join(root, "packages", "create-cloudflare-auth"), {
+    recursive: true,
+  });
   await mkdir(join(root, "docs"), { recursive: true });
   await writeFile(
     join(root, "packages", "cli", "package.json"),
@@ -843,22 +877,34 @@ async function packageOwnershipFixture(options: {
     })}\n`,
   );
   await writeFile(
+    join(root, "packages", "create-cloudflare-auth", "package.json"),
+    `${JSON.stringify({
+      name: "create-cloudflare-auth",
+      version: "0.1.0-beta.0",
+      private: !options.publishCreatePackage,
+    })}\n`,
+  );
+  await writeFile(
     join(root, "docs", "package-ownership.json"),
-    `${JSON.stringify(
-      packageOwnershipFixtureEvidence(options.staleCfAuthReservation),
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(packageOwnershipFixtureEvidence(options), null, 2)}\n`,
   );
   return root;
 }
 
-function packageOwnershipFixtureEvidence(staleCfAuthReservation: boolean) {
+function packageOwnershipFixtureEvidence(options: {
+  publishCfAuthShim: boolean;
+  staleCfAuthReservation: boolean;
+  publishCreatePackage: boolean;
+  staleCreateReservation: boolean;
+}) {
+  const packages = ["@cf-auth/cli"];
+  if (options.publishCfAuthShim) packages.push("cf-auth");
+  if (options.publishCreatePackage) packages.push("create-cloudflare-auth");
   return {
     schemaVersion: 1,
     verifiedAt: "2026-05-14T00:00:00.000Z",
     verifiedBy: "release-reviewer",
-    packages: ["@cf-auth/cli", "cf-auth"].map((name) => ({
+    packages: packages.map((name) => ({
       name,
       registry: "https://registry.npmjs.org/",
       version: "0.1.0-beta.0",
@@ -866,16 +912,27 @@ function packageOwnershipFixtureEvidence(staleCfAuthReservation: boolean) {
       publisherTwoFactorEnabled: true,
       provenancePublish: true,
     })),
-    reservedPackages: staleCfAuthReservation
-      ? [
-          {
-            name: "cf-auth",
-            registry: "https://registry.npmjs.org/",
-            registryVersion: "1.0.2",
-            publishableAfterOwnershipConfirmed: true,
-          },
-        ]
-      : [],
+    reservedPackages: [
+      ...(options.publishCfAuthShim && !options.staleCfAuthReservation
+        ? []
+        : [
+            {
+              name: "cf-auth",
+              registry: "https://registry.npmjs.org/",
+              registryVersion: "1.0.2",
+              publishableAfterOwnershipConfirmed: true,
+            },
+          ]),
+      ...(options.publishCreatePackage && !options.staleCreateReservation
+        ? []
+        : [
+            {
+              name: "create-cloudflare-auth",
+              registry: "https://registry.npmjs.org/",
+              publishableAfterOwnershipConfirmed: true,
+            },
+          ]),
+    ],
   };
 }
 

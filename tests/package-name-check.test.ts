@@ -50,6 +50,20 @@ describe("package name registry checks", () => {
       "must not be listed under reservedPackages",
     );
   });
+
+  it("rejects stale reserved evidence after the create package becomes publishable", async () => {
+    const fixture = await packageNameFixture({
+      publishCreatePackage: true,
+      staleCreateReservation: true,
+    });
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("create-cloudflare-auth");
+    expect(result.stderr).toContain(
+      "must not be listed under reservedPackages",
+    );
+  });
 });
 
 async function packageNameFixture(
@@ -58,6 +72,8 @@ async function packageNameFixture(
     packageVersion?: string;
     publishCfAuthShim?: boolean;
     staleCfAuthReservation?: boolean;
+    publishCreatePackage?: boolean;
+    staleCreateReservation?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-package-names-"));
@@ -99,6 +115,16 @@ async function packageNameFixture(
       provenancePublish: true,
     });
   }
+  if (options.publishCreatePackage) {
+    packageEvidence.push({
+      name: "create-cloudflare-auth",
+      registry: "https://registry.npmjs.org/",
+      version: options.packageVersion ?? "0.1.0-beta.0",
+      ownershipConfirmed: true,
+      publisherTwoFactorEnabled: true,
+      provenancePublish: true,
+    });
+  }
   for (const [dir, name] of publishable) {
     await writePackageJson(root, dir, {
       name,
@@ -113,7 +139,7 @@ async function packageNameFixture(
   await writePackageJson(root, "create-cloudflare-auth", {
     name: "create-cloudflare-auth",
     version: options.packageVersion ?? "0.1.0-beta.0",
-    private: true,
+    private: !options.publishCreatePackage,
   });
 
   await writeFile(
@@ -135,11 +161,15 @@ async function packageNameFixture(
                   publishableAfterOwnershipConfirmed: true,
                 },
               ]),
-          {
-            name: "create-cloudflare-auth",
-            registry: "https://registry.npmjs.org/",
-            publishableAfterOwnershipConfirmed: true,
-          },
+          ...(options.publishCreatePackage && !options.staleCreateReservation
+            ? []
+            : [
+                {
+                  name: "create-cloudflare-auth",
+                  registry: "https://registry.npmjs.org/",
+                  publishableAfterOwnershipConfirmed: true,
+                },
+              ]),
         ],
       },
       null,
