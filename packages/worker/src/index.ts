@@ -1323,6 +1323,8 @@ async function handleMagicLinkRequest(
         runtime.config.magicLink.expiresInMinutes * 60 * 1000,
       ),
     );
+  } else {
+    performDummyTokenWork(runtime, "magic", "magic_link");
   }
   return json({ ok: true });
 }
@@ -1418,6 +1420,8 @@ async function handleEmailVerifyRequest(
     await runtime.repos.users.findUserByNormalizedEmail(normalizedEmail);
   if (user && user.disabled_at === null && user.email_verified_at === null) {
     scheduleAuthTask(runtime, sendVerificationEmail(user, runtime, redirectTo));
+  } else {
+    performDummyTokenWork(runtime, "verify", "email_verification");
   }
   return json({ ok: true });
 }
@@ -1520,6 +1524,8 @@ async function handlePasswordResetRequest(
         runtime.config.passwordReset.expiresInMinutes * 60 * 1000,
       ),
     );
+  } else {
+    performDummyTokenWork(runtime, "reset", "password_reset");
   }
   return json({ ok: true });
 }
@@ -1750,6 +1756,15 @@ function scheduleAuthTask(runtime: RuntimeContext, task: Promise<void>): void {
       });
     }),
   );
+}
+
+function performDummyTokenWork(
+  runtime: RuntimeContext,
+  rawPurpose: "magic" | "verify" | "reset",
+  type: "magic_link" | "email_verification" | "password_reset",
+): void {
+  const token = generateRawAuthToken(rawPurpose, runtime.keyRing.current);
+  hashRawAuthToken(token, runtime.keyRing, type);
 }
 
 function tokenPage(
