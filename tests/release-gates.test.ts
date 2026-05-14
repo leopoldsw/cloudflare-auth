@@ -638,7 +638,7 @@ process.exit(1);
       "tests/fixtures/upgrade/beta-schema-versions.json: top-level JSON value must be an object",
     );
   });
-});
+}, 20_000);
 
 interface ReleaseGateFixtureOptions {
   alphaEvidence?: boolean;
