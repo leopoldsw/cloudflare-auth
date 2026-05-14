@@ -5,7 +5,10 @@ import {
   containsIpLiteral,
   containsRawUserAgent,
 } from "./evidence-redaction.mjs";
-import { isIsoDateString } from "./evidence-validation.mjs";
+import {
+  isFutureIsoDateString,
+  isIsoDateString,
+} from "./evidence-validation.mjs";
 
 const trackerPath =
   process.env.CF_AUTH_SECURITY_TRACKER_PATH ??
@@ -104,6 +107,8 @@ function requireDate(value, path) {
   requireString(value, path);
   if (typeof value === "string" && !isIsoDateString(value)) {
     failures.push(`${trackerPath}: ${path} must be an ISO date string`);
+  } else if (typeof value === "string" && isFutureIsoDateString(value)) {
+    failures.push(`${trackerPath}: ${path} must not be in the future`);
   }
 }
 

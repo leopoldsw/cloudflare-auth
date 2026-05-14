@@ -53,3 +53,11 @@ export function isIsoDateString(value) {
     localDate.getUTCMilliseconds() === millisecond
   );
 }
+
+export function isFutureIsoDateString(
+  value,
+  nowMs = Date.now(),
+  clockSkewMs = 5 * 60 * 1000,
+) {
+  return isIsoDateString(value) && Date.parse(value) > nowMs + clockSkewMs;
+}
