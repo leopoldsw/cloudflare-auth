@@ -999,16 +999,16 @@ function runCheckedCommand(
   );
   const display = displayCommand(command.command, command.args);
   if (result.status !== 0) {
-    const detail = (result.stderr || result.stdout).trim();
+    const detail = redactCliOutput((result.stderr || result.stdout).trim());
     throw new Error(
       detail
         ? `Command failed: ${display}\n${detail}`
         : `Command failed: ${display}`,
     );
   }
-  const output = [result.stdout.trim(), result.stderr.trim()]
-    .filter(Boolean)
-    .join("\n");
+  const output = redactCliOutput(
+    [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n"),
+  );
   return output ? `${display}\n${output}` : display;
 }
 
