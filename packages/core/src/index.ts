@@ -8,6 +8,37 @@ import {
 import { isIP } from "node:net";
 export const corePackageName = "@cf-auth/core";
 
+export function redactLogValue(value: string): string {
+  return value
+    .replace(
+      /("[A-Za-z0-9_-]*(?:password(?:[_-]?hash)?|secret(?:[_-]?material)?|cookie|authorization|api[_-]?key|auth[_-]?token|session[_-]?token|(?:raw[_-]?)?token(?:[_-]?hash)?)"\s*:\s*)"[^"]*"/giu,
+      '$1"[REDACTED]"',
+    )
+    .replace(
+      /\b((?:password(?:[_-]?hash)?|secret(?:[_-]?material)?|cookie|authorization|api[_-]?key|auth[_-]?token|session[_-]?token|(?:raw[_-]?)?token(?:[_-]?hash)?|AUTH_SECRET|AUTH_SECRET_PREVIOUS)=)[^\s,;&"']+/giu,
+      "$1[REDACTED]",
+    )
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/giu, "$1[REDACTED]")
+    .replace(
+      /\b((?:__Host-|__Secure-)?cfauth-session=)[^\s;,]+/giu,
+      "$1[REDACTED]",
+    )
+    .replace(
+      /hmac-sha256\$v=1\$kid=[A-Za-z0-9_-]{1,32}\$purpose=(?:session|magic_link|email_verification|password_reset)\$hash=[A-Za-z0-9_-]{43}/gu,
+      "[REDACTED_TOKEN_HASH]",
+    )
+    .replace(
+      /scrypt\$v=1\$n=\d+\$r=\d+\$p=\d+\$keylen=\d+\$maxmem=\d+\$salt=[A-Za-z0-9_-]+\$hash=[A-Za-z0-9_-]+/gu,
+      "[REDACTED_PASSWORD_HASH]",
+    )
+    .replace(
+      /cfauth\.(ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43}/gu,
+      "[REDACTED_TOKEN]",
+    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[REDACTED_EMAIL]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, "[REDACTED_IP]");
+}
+
 export type VerificationTokenType =
   | "magic_link"
   | "email_verification"

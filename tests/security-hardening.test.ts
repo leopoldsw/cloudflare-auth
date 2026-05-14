@@ -238,7 +238,7 @@ describe("security hardening helpers", () => {
         endpoints: ["magic_link_request"],
         verify: async ({ token }) => {
           throw new Error(
-            `verifier failed token=${token} email=person@example.com AUTH_SECRET=k1.${secretMaterial}`,
+            `verifier failed token=${token} email=person@example.com remoteIp=203.0.113.9 AUTH_SECRET=k1.${secretMaterial}`,
           );
         },
       },
@@ -260,7 +260,9 @@ describe("security hardening helpers", () => {
     expect(body).toContain("AUTH_SECRET=[REDACTED]");
     expect(body).not.toContain(rawToken);
     expect(body).not.toContain("person@example.com");
+    expect(body).not.toContain("203.0.113.9");
     expect(body).not.toContain(secretMaterial);
+    expect(body).toContain("[REDACTED_IP]");
   });
 
   it("short-circuits D1 rate-limit writes when a Cloudflare binding denies", async () => {
@@ -359,6 +361,7 @@ describe("security hardening helpers", () => {
       password: "correct horse battery staple",
       passwordHash,
       email: "person@example.com",
+      remoteIp: "203.0.113.9",
       raw_token: rawToken,
       token_hash: tokenHash,
       sessionToken: rawToken,
@@ -383,7 +386,9 @@ describe("security hardening helpers", () => {
     expect(redacted).not.toContain(passwordHash);
     expect(redacted).not.toContain("correct horse battery staple");
     expect(redacted).not.toContain("person@example.com");
+    expect(redacted).not.toContain("203.0.113.9");
     expect(redacted).toContain("[REDACTED_EMAIL]");
+    expect(redacted).toContain("[REDACTED_IP]");
     expect(redacted).toContain("[REDACTED_TOKEN_HASH]");
     expect(redacted).toContain("[REDACTED_PASSWORD_HASH]");
   });

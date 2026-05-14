@@ -12,6 +12,7 @@ import {
   hashPassword,
   normalizeEmail,
   parseAuthKeyRing,
+  redactLogValue as redactCoreLogValue,
   resolveSessionCookie,
   validateRedirectTarget,
 } from "@cf-auth/core";
@@ -78,6 +79,7 @@ describe("package boundary exports", () => {
       parseAuthKeyRing,
       hashPassword,
       resolveSessionCookie,
+      redactCoreLogValue,
       defineAuthConfig,
       createAuthHandler,
       getAuthSessionFromRequest,
