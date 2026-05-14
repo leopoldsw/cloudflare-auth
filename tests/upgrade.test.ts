@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
 
 interface UpgradeManifest {
   schemaVersion: 1;
@@ -10,6 +11,14 @@ interface UpgradeManifest {
     schemaVersion: number;
     fixture: string;
   }>;
+}
+
+interface UpgradeExpected {
+  schemaVersion: string;
+  schemaMigrations: string[];
+  users: number;
+  activeSessions: number;
+  invalidatedTokens: number;
 }
 
 describe("upgrade fixtures", () => {
@@ -35,6 +44,47 @@ describe("upgrade fixtures", () => {
       const files = await readdir(fixtureDir);
       expect(files).toContain("schema.sql");
       expect(files).toContain("expected.json");
+    }
+  });
+
+  it("migrates beta fixtures to the current schema while preserving auth state", async () => {
+    const manifest = await readUpgradeManifest();
+    for (const beta of manifest.betaVersions) {
+      const fixtureDir = join("tests", "fixtures", "upgrade", beta.fixture);
+      const db = createSqliteD1Database();
+      await db.exec(await readFile(join(fixtureDir, "schema.sql"), "utf8"));
+      await applyD1Migrations(db, await migrationsAfter(beta.schemaVersion));
+
+      const expected = JSON.parse(
+        await readFile(join(fixtureDir, "expected.json"), "utf8"),
+      ) as UpgradeExpected;
+      expect(
+        await scalar(
+          db,
+          "SELECT value FROM auth_meta WHERE key = 'schema_version'",
+        ),
+      ).toBe(expected.schemaVersion);
+      const migrations = await db
+        .prepare("SELECT version FROM auth_schema_migrations ORDER BY version")
+        .all<{ version: string }>();
+      expect(migrations.results?.map((row) => row.version)).toEqual(
+        expected.schemaMigrations,
+      );
+      expect(await scalar(db, "SELECT count(*) FROM users")).toBe(
+        expected.users,
+      );
+      expect(
+        await scalar(
+          db,
+          "SELECT count(*) FROM sessions WHERE revoked_at IS NULL",
+        ),
+      ).toBe(expected.activeSessions);
+      expect(
+        await scalar(
+          db,
+          "SELECT count(*) FROM verification_tokens WHERE used_at IS NOT NULL OR revoked_at IS NOT NULL",
+        ),
+      ).toBe(expected.invalidatedTokens);
     }
   });
 });
@@ -72,4 +122,25 @@ function isStableOneOrLater(version: string | undefined): boolean {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-.+)?$/);
   if (!match || version.includes("-")) return false;
   return Number(match[1]) >= 1;
+}
+
+async function migrationsAfter(schemaVersion: number): Promise<string[]> {
+  const files = (await readdir("migrations"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  const migrations: string[] = [];
+  for (const file of files) {
+    const version = Number(file.slice(0, 4));
+    if (version > schemaVersion) {
+      migrations.push(await readFile(join("migrations", file), "utf8"));
+    }
+  }
+  return migrations;
+}
+
+async function scalar(db: D1Database, sql: string): Promise<string | number> {
+  const row = await db.prepare(sql).first<Record<string, string | number>>();
+  const value = row ? Object.values(row)[0] : undefined;
+  expect(typeof value === "string" || typeof value === "number").toBe(true);
+  return value as string | number;
 }

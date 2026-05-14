@@ -30,6 +30,16 @@ before beta packages exist. Once beta packages exist, every beta schema version
 must have a fixture listed there before a stable 1.0 release can pass
 `pnpm test` and `pnpm release:gates`.
 
+Each fixture directory contains:
+
+- `schema.sql`: a full D1 auth schema/data snapshot at that beta schema version
+- `expected.json`: expected post-upgrade counts and schema metadata
+
+`expected.json` records `schemaVersion`, `schemaMigrations`, `users`,
+`activeSessions`, and `invalidatedTokens`. The upgrade test loads the beta
+snapshot, applies later migrations from `migrations/`, and compares those
+values after migration.
+
 ## Config Changes
 
 Config changes must be explicit. Do not silently change password hashing parameters, cookie domain behavior, redirect allowlists, request-origin allowlists, or email adapter behavior during an upgrade.
