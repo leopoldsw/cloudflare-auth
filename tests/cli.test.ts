@@ -1398,6 +1398,30 @@ export default app;
     );
   });
 
+  it("redacts sensitive environment names in doctor report JSON", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const output: string[] = [];
+    const code = await runCli(
+      ["doctor", "--report", "--env", "person@example.com"],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: remoteSecretRunner(),
+      },
+    );
+    const report = JSON.parse(output.join("\n")) as {
+      environment: string;
+      checks: Array<{ message: string; fix?: string }>;
+    };
+    const reportText = JSON.stringify(report);
+
+    expect(code).toBe(1);
+    expect(report.environment).toBe("[REDACTED_EMAIL]");
+    expect(reportText).toContain("add [REDACTED_EMAIL] to wrangler.jsonc");
+    expect(reportText).not.toContain("person@example.com");
+  });
+
   it("logs wrapped Wrangler commands in verbose mode without contaminating reports", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);

@@ -601,6 +601,11 @@ function buildDoctorReport(
   checks: DoctorCheck[],
   envName: string | undefined,
 ): DoctorReport {
+  const reportChecks = checks.map((check) => ({
+    ...check,
+    message: redactCliOutput(check.message),
+    ...(check.fix ? { fix: redactCliOutput(check.fix) } : {}),
+  }));
   const summary = {
     pass: checks.filter((check) => check.status === "pass").length,
     fail: checks.filter((check) => check.status === "fail").length,
@@ -611,9 +616,9 @@ function buildDoctorReport(
     schemaVersion: 1,
     ok: summary.fail === 0,
     generatedAt: new Date().toISOString(),
-    environment: envName ?? "default",
+    environment: redactCliOutput(envName ?? "default"),
     summary,
-    checks,
+    checks: reportChecks,
     redaction: {
       rawSecrets: "omitted",
       rawTokens: "omitted",
