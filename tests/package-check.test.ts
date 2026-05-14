@@ -101,6 +101,22 @@ describe("package checks", () => {
     );
   });
 
+  it("derives release workflow coverage from verifier scripts", async () => {
+    const root = await packageCheckFixture();
+    const packagePath = join(root, "package.json");
+    const pkg = JSON.parse(await readFile(packagePath, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    pkg.scripts["verify:new-gate"] = "node scripts/verify-new-gate.mjs";
+    await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: missing pnpm verify:new-gate",
+    );
+  });
+
   it("requires dry-run publish artifact upload", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

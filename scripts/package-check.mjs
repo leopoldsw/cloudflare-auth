@@ -564,6 +564,12 @@ async function verifyReleaseControls() {
       failures.push(`.github/workflows/release.yml: missing ${needle}`);
     }
   }
+  for (const script of releaseWorkflowScripts(rootPackage.scripts ?? {})) {
+    const needle = `pnpm ${script}`;
+    if (!releaseWorkflow.includes(needle)) {
+      failures.push(`.github/workflows/release.yml: missing ${needle}`);
+    }
+  }
   requireOrderedText(".github/workflows/release.yml", releaseWorkflow, [
     "pnpm install --frozen-lockfile",
     "pnpm format:check",
@@ -696,6 +702,27 @@ async function verifyReleaseControls() {
       }
     }
   }
+}
+
+function releaseWorkflowScripts(scripts) {
+  const required = new Set([
+    "format:check",
+    "lint",
+    "typecheck",
+    "test",
+    "test:workers",
+    "build",
+    "check:package-names",
+    "package:check",
+    "version-matrix:check",
+    "release:gates",
+    "smoke:tarballs",
+    "benchmark:password",
+    "publish:dry-run",
+  ]);
+  return Object.keys(scripts)
+    .filter((script) => required.has(script) || script.startsWith("verify:"))
+    .sort();
 }
 
 function requireOrderedText(file, text, needles) {
