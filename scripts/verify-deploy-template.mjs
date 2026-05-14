@@ -16,6 +16,8 @@ const packageJson = JSON.parse(
 const versionMatrix = JSON.parse(
   await readFile("scripts/version-matrix.json", "utf8"),
 );
+const expectedPackageTag =
+  process.env.CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG?.trim() || "beta";
 const wrangler = JSON.parse(
   await readFile(join(output, "wrangler.jsonc"), "utf8"),
 );
@@ -72,6 +74,11 @@ function checkPackageJson(pkg) {
           `package.json: ${section}.${name} must not use ${version}`,
         );
       }
+      if (name.startsWith("@cf-auth/") && version !== expectedPackageTag) {
+        failures.push(
+          `package.json: ${section}.${name} must use ${expectedPackageTag}`,
+        );
+      }
     }
   }
   if (
@@ -93,6 +100,14 @@ function checkPackageJson(pkg) {
         `package.json: missing Cloudflare binding description for ${binding}`,
       );
     }
+  }
+  const secretDescription =
+    pkg.cloudflare?.bindings?.AUTH_SECRET?.description ?? "";
+  const expectedSecretCommand = `npx --package @cf-auth/cli@${expectedPackageTag} cf-auth rotate-secret --print`;
+  if (!secretDescription.includes(expectedSecretCommand)) {
+    failures.push(
+      `package.json: AUTH_SECRET description must use ${expectedSecretCommand}`,
+    );
   }
 }
 
@@ -171,6 +186,10 @@ function checkReadme(text) {
   }
   if (!text.includes("AUTH_PUBLIC_ORIGIN") || !text.includes("AUTH_SECRET")) {
     failures.push("README.md: missing required variable instructions");
+  }
+  const expectedSecretCommand = `npx --package @cf-auth/cli@${expectedPackageTag} cf-auth rotate-secret --print`;
+  if (!text.includes(expectedSecretCommand)) {
+    failures.push(`README.md: missing ${expectedSecretCommand}`);
   }
 }
 

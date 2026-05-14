@@ -21,6 +21,7 @@ const publicOrigin =
   "https://example.com";
 const packageTag =
   process.env.CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG?.trim() || "beta";
+const cliPackageSpec = `@cf-auth/cli@${packageTag}`;
 
 await assertEmptyOrMissing(target);
 await mkdir(target, { recursive: true });
@@ -86,8 +87,7 @@ async function writePackageJson(dir) {
           "D1 database used by Cloudflare Auth. Deploy to Cloudflare provisions this from wrangler.jsonc.",
       },
       AUTH_SECRET: {
-        description:
-          "Generate with `npx --package @cf-auth/cli@latest cf-auth rotate-secret --print` and store only the value after AUTH_SECRET=.",
+        description: `Generate with \`npx --package ${cliPackageSpec} cf-auth rotate-secret --print\` and store only the value after AUTH_SECRET=.`,
       },
       AUTH_PUBLIC_ORIGIN: {
         description:
@@ -157,7 +157,7 @@ Use this repository as the target for a Deploy to Cloudflare button:
 During setup, provide:
 
 - \`AUTH_PUBLIC_ORIGIN\`: the exact deployed Worker origin, with no path or trailing slash.
-- \`AUTH_SECRET\`: a value generated with \`npx --package @cf-auth/cli@latest cf-auth rotate-secret --print\`.
+- \`AUTH_SECRET\`: a value generated with \`npx --package ${cliPackageSpec} cf-auth rotate-secret --print\`.
 
 The deploy script applies D1 migrations using the \`AUTH_DB\` binding before running \`wrangler deploy\`.
 `,

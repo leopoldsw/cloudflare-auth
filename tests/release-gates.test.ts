@@ -901,7 +901,7 @@ await writeFile(dir + "/package.json", JSON.stringify({
   cloudflare: {
     bindings: {
       AUTH_DB: { description: "D1 database" },
-      AUTH_SECRET: { description: "Auth secret" },
+      AUTH_SECRET: { description: "Generate with \`npx --package @cf-auth/cli@beta cf-auth rotate-secret --print\`." },
       AUTH_PUBLIC_ORIGIN: { description: "Public origin" }
     }
   }
@@ -914,7 +914,7 @@ await writeFile(dir + "/wrangler.jsonc", JSON.stringify({
   vars: { AUTH_ENV: "production", AUTH_PUBLIC_ORIGIN: "https://auth.example.test" },
   d1_databases: [{ binding: "AUTH_DB", database_name: "auth", database_id: "auth", migrations_dir: "migrations" }]
 }, null, 2));
-await writeFile(dir + "/README.md", "https://deploy.workers.cloudflare.com/?url=https://github.com/acme/cloudflare-auth-template\\nAUTH_PUBLIC_ORIGIN\\nAUTH_SECRET\\n");
+await writeFile(dir + "/README.md", "https://deploy.workers.cloudflare.com/?url=https://github.com/acme/cloudflare-auth-template\\nAUTH_PUBLIC_ORIGIN\\nAUTH_SECRET\\nnpx --package @cf-auth/cli@beta cf-auth rotate-secret --print\\n");
 await writeFile(dir + "/.dev.vars.example", "AUTH_SECRET=k1.REPLACE_WITH_32_BYTE_BASE64URL_SECRET\\n");
 `,
   );
