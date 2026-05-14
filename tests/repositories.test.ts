@@ -15,6 +15,8 @@ const magicHash2 =
   "hmac-sha256$v=1$kid=k1$purpose=magic_link$hash=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD";
 const resetHash =
   "hmac-sha256$v=1$kid=k1$purpose=password_reset$hash=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+const verifyHash =
+  "hmac-sha256$v=1$kid=k1$purpose=email_verification$hash=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
 
 async function migratedDb() {
   const db = createSqliteD1Database();
@@ -179,6 +181,169 @@ describe("D1 migrations and repositories", () => {
       }),
     ).resolves.toBeNull();
     expect(JSON.stringify(consumed)).not.toContain("cfauth.magic");
+  });
+
+  it("consumes token flows with user and session state in one batch", async () => {
+    await createUser("usr_flow");
+    await repos.verificationTokens.createVerificationToken({
+      id: "vtok_magic_flow",
+      userId: "usr_flow",
+      type: "magic_link",
+      tokenHash: magicHash,
+      redirectTo: "/dashboard",
+      createdAt: 100,
+      expiresAt: 1_000,
+    });
+
+    const magic =
+      await repos.verificationTokens.consumeMagicLinkAndCreateSession({
+        tokenHash: magicHash,
+        consumeId: "con_magic_flow",
+        consumedAt: 200,
+        now: 200,
+        session: {
+          id: "ses_magic_flow",
+          tokenHash: sessionHash,
+          createdAt: 200,
+          expiresAt: 1_000,
+        },
+      });
+    expect(magic).toMatchObject({
+      redirectTo: "/dashboard",
+      user: { id: "usr_flow", email_verified_at: 200 },
+      session: { id: "ses_magic_flow", token_hash: sessionHash },
+    });
+    await expect(
+      repos.verificationTokens.consumeMagicLinkAndCreateSession({
+        tokenHash: magicHash,
+        consumeId: "con_magic_replay",
+        consumedAt: 201,
+        now: 201,
+        session: {
+          id: "ses_magic_replay",
+          tokenHash: sessionHash2,
+          createdAt: 201,
+          expiresAt: 1_001,
+        },
+      }),
+    ).resolves.toBeNull();
+
+    await repos.verificationTokens.createVerificationToken({
+      id: "vtok_verify_flow",
+      userId: "usr_flow",
+      type: "email_verification",
+      tokenHash: verifyHash,
+      createdAt: 210,
+      expiresAt: 1_000,
+    });
+    const verified = await repos.verificationTokens.consumeEmailVerification({
+      tokenHash: verifyHash,
+      consumeId: "con_verify_flow",
+      consumedAt: 220,
+      now: 220,
+      verifiedAt: 220,
+      updatedAt: 220,
+      session: {
+        id: "ses_verify_flow",
+        tokenHash: sessionHash2,
+        createdAt: 220,
+        expiresAt: 1_020,
+      },
+    });
+    expect(verified).toMatchObject({
+      user: { id: "usr_flow", email_verified_at: 200 },
+      session: { id: "ses_verify_flow", token_hash: sessionHash2 },
+    });
+  });
+
+  it("atomically creates a magic-link JIT user and session", async () => {
+    await repos.verificationTokens.createVerificationToken({
+      id: "vtok_jit",
+      normalizedEmail: "jit-repo@example.com",
+      type: "magic_link",
+      tokenHash: magicHash,
+      createdAt: 100,
+      expiresAt: 1_000,
+    });
+
+    const consumed =
+      await repos.verificationTokens.consumeMagicLinkAndCreateSession({
+        tokenHash: magicHash,
+        consumeId: "con_jit",
+        consumedAt: 200,
+        now: 200,
+        jitUser: { id: "usr_jit", createdAt: 200 },
+        session: {
+          id: "ses_jit",
+          tokenHash: sessionHash,
+          createdAt: 200,
+          expiresAt: 1_000,
+        },
+      });
+
+    expect(consumed).toMatchObject({
+      createdUser: true,
+      user: {
+        id: "usr_jit",
+        email: "jit-repo@example.com",
+        email_verified_at: 200,
+      },
+      session: { id: "ses_jit", user_id: "usr_jit" },
+      token: { user_id: "usr_jit", normalized_email: null },
+    });
+  });
+
+  it("does not consume user-bound tokens for disabled users", async () => {
+    await repos.users.createUser({
+      id: "usr_disabled_token",
+      email: "disabled-token@example.com",
+      normalizedEmail: "disabled-token@example.com",
+      passwordHash: "old-password-hash",
+      createdAt: 100,
+    });
+    await repos.verificationTokens.createVerificationToken({
+      id: "vtok_disabled_reset",
+      userId: "usr_disabled_token",
+      type: "password_reset",
+      tokenHash: resetHash,
+      createdAt: 110,
+      expiresAt: 1_000,
+    });
+    await repos.users.setUserDisabled("usr_disabled_token", 150);
+
+    await expect(
+      repos.verificationTokens.findActiveVerificationTokenByHash(
+        resetHash,
+        "password_reset",
+        200,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      repos.verificationTokens.consumePasswordReset({
+        tokenHash: resetHash,
+        consumeId: "con_disabled_reset",
+        consumedAt: 200,
+        now: 200,
+        passwordHash: "new-password-hash",
+        updatedAt: 200,
+        markEmailVerifiedAt: 200,
+        revokeExistingSessionsAt: 200,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      db
+        .prepare(
+          "SELECT used_at, consume_id FROM verification_tokens WHERE id = ?",
+        )
+        .bind("vtok_disabled_reset")
+        .first(),
+    ).resolves.toMatchObject({ used_at: null, consume_id: null });
+    await expect(
+      db
+        .prepare("SELECT password_hash FROM users WHERE id = ?")
+        .bind("usr_disabled_token")
+        .first("password_hash"),
+    ).resolves.toBe("old-password-hash");
   });
 
   it("enforces token subject and used/revoked invariants", async () => {

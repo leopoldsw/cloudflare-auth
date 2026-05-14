@@ -134,6 +134,69 @@ export interface ConsumeVerificationTokenInput {
   now: number;
 }
 
+export interface CreateSessionFromTokenInput {
+  id: string;
+  tokenHash: string;
+  createdAt: number;
+  expiresAt: number;
+  userAgentHash?: string | null;
+  ipHash?: string | null;
+  metadataJson?: string;
+}
+
+export interface TokenConsumeEventInput {
+  id: string;
+  eventType: string;
+  createdAt: number;
+  ipHash?: string | null;
+  userAgentHash?: string | null;
+  requestId?: string | null;
+  metadataJson?: string;
+}
+
+export interface ConsumeMagicLinkAndCreateSessionInput extends Omit<
+  ConsumeVerificationTokenInput,
+  "type"
+> {
+  session: CreateSessionFromTokenInput;
+  jitUser?: {
+    id: string;
+    createdAt: number;
+  };
+  event?: TokenConsumeEventInput;
+}
+
+export interface ConsumeEmailVerificationInput extends Omit<
+  ConsumeVerificationTokenInput,
+  "type"
+> {
+  verifiedAt: number;
+  updatedAt: number;
+  session?: CreateSessionFromTokenInput;
+  event?: TokenConsumeEventInput;
+}
+
+export interface ConsumePasswordResetInput extends Omit<
+  ConsumeVerificationTokenInput,
+  "type"
+> {
+  passwordHash: string;
+  updatedAt: number;
+  markEmailVerifiedAt?: number | null;
+  revokeExistingSessionsAt?: number | null;
+  session?: CreateSessionFromTokenInput;
+  event?: TokenConsumeEventInput;
+}
+
+export interface ConsumeAuthFlowResult {
+  token: VerificationTokenRow;
+  user: UserRow;
+  session?: SessionRow;
+  redirectTo: string | null;
+  createdUser?: boolean;
+  revokedSessions?: number;
+}
+
 export interface WriteAuthEventInput {
   id: string;
   userId?: string | null;
@@ -198,6 +261,15 @@ export interface VerificationTokenRepository {
   consumeVerificationToken(
     input: ConsumeVerificationTokenInput,
   ): Promise<VerificationTokenRow | null>;
+  consumeMagicLinkAndCreateSession(
+    input: ConsumeMagicLinkAndCreateSessionInput,
+  ): Promise<ConsumeAuthFlowResult | null>;
+  consumeEmailVerification(
+    input: ConsumeEmailVerificationInput,
+  ): Promise<ConsumeAuthFlowResult | null>;
+  consumePasswordReset(
+    input: ConsumePasswordResetInput,
+  ): Promise<ConsumeAuthFlowResult | null>;
   incrementTokenAttempts(tokenId: string): Promise<void>;
   deleteExpiredVerificationTokens(now: number): Promise<number>;
 }

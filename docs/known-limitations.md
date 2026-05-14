@@ -9,7 +9,7 @@ Cloudflare Auth v1 is intentionally narrow.
 - OAuth, SAML, passkeys, MFA, organizations, roles, hosted dashboards, and billing are outside v1.
 - Cloudflare Email is optional; terminal email is development-only and rejected outside development.
 - The Cloudflare rate-limit binding is a coarse prefilter. D1 remains the authoritative rate limiter for auth decisions.
-- Password reset token validation happens before hashing, but token consume, password update, and session revocation are separate repository operations.
+- Password reset token validation happens before hashing; token consume, password update, session revocation, and optional replacement-session creation are committed in one D1 batch.
 - No-argument Hono `requireUser()` stores the latest mounted config in module scope. Pass the config explicitly when multiple auth configurations run in one isolate.
 
 See `docs/non-goals.md` for the full v1 exclusion list.

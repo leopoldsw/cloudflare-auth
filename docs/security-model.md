@@ -26,5 +26,5 @@
 Known residual risks:
 
 - D1 is the source of truth for rate limits; Cloudflare's rate-limit binding is a coarse prefilter and should not be treated as an account lockout mechanism.
-- Password reset confirmation validates the token before hashing the replacement password, but password update, token consume, and session revocation are separate repository operations.
+- Password reset confirmation validates the token before hashing the replacement password, then consumes the token, updates password state, revokes old sessions, and optionally creates a replacement session in one D1 batch.
 - Hono's no-argument `requireUser()` helper stores the latest mounted config in module scope. Pass the config explicitly when hosting multiple auth configurations in one isolate.

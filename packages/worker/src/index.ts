@@ -4,7 +4,12 @@ import {
   AuthCryptoError,
   type AuthRepositories,
   AuthRepositoryError,
+  type ConsumeAuthFlowResult,
+  type ConsumeEmailVerificationInput,
+  type ConsumeMagicLinkAndCreateSessionInput,
+  type ConsumePasswordResetInput,
   type CreateSessionInput,
+  type CreateSessionFromTokenInput,
   type CreateUserInput,
   type CreateVerificationTokenInput,
   type EventRepository,
@@ -12,6 +17,7 @@ import {
   type SessionRepository,
   type SessionRow,
   type SessionWithUserRow,
+  type TokenConsumeEventInput,
   type UserRepository,
   type UserRow,
   type VerificationTokenRepository,
@@ -91,6 +97,93 @@ function sessionWithUser(row: Record<string, unknown>): SessionWithUserRow {
       metadata_json: row.user_metadata_json as string,
     },
   };
+}
+
+function tokenFlowResult(
+  token: VerificationTokenRow | undefined,
+  user: UserRow | undefined,
+  session?: SessionRow,
+  extra: Pick<ConsumeAuthFlowResult, "createdUser" | "revokedSessions"> = {},
+): ConsumeAuthFlowResult | null {
+  if (!token || !user || user.disabled_at !== null) return null;
+  const result: ConsumeAuthFlowResult = {
+    token,
+    user,
+    redirectTo: token.redirect_to,
+    ...extra,
+  };
+  if (session) result.session = session;
+  return result;
+}
+
+function assertSessionFromToken(input: CreateSessionFromTokenInput): string {
+  assertHmacTokenEnvelope(input.tokenHash);
+  return assertValidMetadataJson(input.metadataJson);
+}
+
+function tokenEventStatement(
+  db: D1Database,
+  event: TokenConsumeEventInput | undefined,
+  consumeId: string,
+  type: VerificationTokenRow["type"],
+): D1PreparedStatement | null {
+  if (!event) return null;
+  return db
+    .prepare(
+      `INSERT INTO auth_events (
+        id, user_id, event_type, created_at, ip_hash, user_agent_hash, request_id, metadata_json
+      )
+      SELECT ?, user_id, ?, ?, ?, ?, ?, ?
+      FROM verification_tokens
+      WHERE consume_id = ? AND type = ? AND user_id IS NOT NULL`,
+    )
+    .bind(
+      event.id,
+      event.eventType,
+      event.createdAt,
+      event.ipHash ?? null,
+      event.userAgentHash ?? null,
+      event.requestId ?? null,
+      assertValidMetadataJson(event.metadataJson),
+      consumeId,
+      type,
+    );
+}
+
+function selectTokenByConsumeStatement(
+  db: D1Database,
+  consumeId: string,
+  type: VerificationTokenRow["type"],
+): D1PreparedStatement {
+  return db
+    .prepare(
+      "SELECT * FROM verification_tokens WHERE consume_id = ? AND type = ?",
+    )
+    .bind(consumeId, type);
+}
+
+function selectUserByConsumedTokenStatement(
+  db: D1Database,
+  consumeId: string,
+  type: VerificationTokenRow["type"],
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT users.*
+      FROM users
+      JOIN verification_tokens ON verification_tokens.user_id = users.id
+      WHERE verification_tokens.consume_id = ?
+        AND verification_tokens.type = ?`,
+    )
+    .bind(consumeId, type);
+}
+
+function selectSessionStatement(
+  db: D1Database,
+  session: CreateSessionFromTokenInput | undefined,
+): D1PreparedStatement | null {
+  if (!session) return null;
+  return db.prepare("SELECT * FROM sessions WHERE id = ?").bind(session.id);
 }
 
 export function createD1Repositories(db: D1Database): AuthRepositories {
@@ -330,7 +423,15 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
              AND used_at IS NULL
              AND consume_id IS NULL
              AND revoked_at IS NULL
-             AND expires_at > ?`,
+             AND expires_at > ?
+             AND (
+               user_id IS NULL
+               OR EXISTS (
+                 SELECT 1 FROM users
+                 WHERE users.id = verification_tokens.user_id
+                   AND users.disabled_at IS NULL
+               )
+             )`,
         )
         .bind(tokenHash, type, now)
         .first<VerificationTokenRow>();
@@ -397,6 +498,442 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
       )) as unknown as [D1RunResult, { results?: VerificationTokenRow[] }];
       if (changes(updateResult) !== 1) return null;
       return selectResult.results?.[0] ?? null;
+    },
+    async consumeMagicLinkAndCreateSession(
+      input: ConsumeMagicLinkAndCreateSessionInput,
+    ): Promise<ConsumeAuthFlowResult | null> {
+      assertHmacTokenEnvelope(input.tokenHash);
+      const sessionMetadataJson = assertSessionFromToken(input.session);
+      const eventStatement = tokenEventStatement(
+        db,
+        input.event,
+        input.consumeId,
+        "magic_link",
+      );
+
+      if (input.jitUser) {
+        const statements = [
+          db
+            .prepare(
+              `UPDATE verification_tokens
+               SET used_at = ?, consume_id = ?, attempts = attempts + 1
+               WHERE token_hash = ?
+                 AND type = 'magic_link'
+                 AND used_at IS NULL
+                 AND consume_id IS NULL
+                 AND revoked_at IS NULL
+                 AND expires_at > ?
+                 AND user_id IS NULL
+                 AND normalized_email IS NOT NULL
+                 AND NOT EXISTS (
+                   SELECT 1 FROM users
+                   WHERE users.normalized_email = verification_tokens.normalized_email
+                     AND users.disabled_at IS NOT NULL
+                 )`,
+            )
+            .bind(
+              input.consumedAt,
+              input.consumeId,
+              input.tokenHash,
+              input.now,
+            ),
+          db
+            .prepare(
+              `INSERT OR IGNORE INTO users (
+                id, email, normalized_email, username, normalized_username,
+                password_hash, email_verified_at, created_at, updated_at, metadata_json
+              )
+              SELECT ?, normalized_email, normalized_email, NULL, NULL, NULL, ?, ?, ?, '{}'
+              FROM verification_tokens
+              WHERE consume_id = ? AND type = 'magic_link'`,
+            )
+            .bind(
+              input.jitUser.id,
+              input.consumedAt,
+              input.jitUser.createdAt,
+              input.jitUser.createdAt,
+              input.consumeId,
+            ),
+          db
+            .prepare(
+              `UPDATE verification_tokens
+               SET user_id = (
+                   SELECT users.id
+                   FROM users
+                   WHERE users.normalized_email = verification_tokens.normalized_email
+                     AND users.disabled_at IS NULL
+                 ),
+                 normalized_email = NULL
+               WHERE consume_id = ?
+                 AND type = 'magic_link'
+                 AND user_id IS NULL
+                 AND normalized_email IS NOT NULL`,
+            )
+            .bind(input.consumeId),
+          db
+            .prepare(
+              `UPDATE users
+               SET email_verified_at = COALESCE(email_verified_at, ?),
+                   updated_at = ?
+               WHERE id = (
+                 SELECT user_id FROM verification_tokens
+                 WHERE consume_id = ? AND type = 'magic_link'
+               )`,
+            )
+            .bind(input.consumedAt, input.consumedAt, input.consumeId),
+          db
+            .prepare(
+              `INSERT INTO sessions (
+                id, user_id, token_hash, created_at, expires_at,
+                last_seen_at, revoked_at, user_agent_hash, ip_hash, metadata_json
+              )
+              SELECT ?, user_id, ?, ?, ?, NULL, NULL, ?, ?, ?
+              FROM verification_tokens
+              WHERE consume_id = ? AND type = 'magic_link' AND user_id IS NOT NULL`,
+            )
+            .bind(
+              input.session.id,
+              input.session.tokenHash,
+              input.session.createdAt,
+              input.session.expiresAt,
+              input.session.userAgentHash ?? null,
+              input.session.ipHash ?? null,
+              sessionMetadataJson,
+              input.consumeId,
+            ),
+          ...(eventStatement ? [eventStatement] : []),
+          selectTokenByConsumeStatement(db, input.consumeId, "magic_link"),
+          selectUserByConsumedTokenStatement(db, input.consumeId, "magic_link"),
+          selectSessionStatement(db, input.session),
+        ].filter(Boolean) as D1PreparedStatement[];
+        const results = (await db.batch(statements)) as unknown as D1Result[];
+        const eventOffset = eventStatement ? 1 : 0;
+        if (changes(results[0]) !== 1) return null;
+        if (changes(results[2]) !== 1 || changes(results[4]) !== 1) {
+          throw new AuthRepositoryError(
+            "magic link consume did not create required state",
+            "token_consume_inconsistent",
+          );
+        }
+        return tokenFlowResult(
+          (results[5 + eventOffset]?.results as VerificationTokenRow[])?.[0],
+          (results[6 + eventOffset]?.results as UserRow[])?.[0],
+          (results[7 + eventOffset]?.results as SessionRow[])?.[0],
+          { createdUser: changes(results[1]) === 1 },
+        );
+      }
+
+      const statements = [
+        db
+          .prepare(
+            `UPDATE verification_tokens
+             SET used_at = ?, consume_id = ?, attempts = attempts + 1
+             WHERE token_hash = ?
+               AND type = 'magic_link'
+               AND used_at IS NULL
+               AND consume_id IS NULL
+               AND revoked_at IS NULL
+               AND expires_at > ?
+               AND user_id IS NOT NULL
+               AND normalized_email IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM users
+                 WHERE users.id = verification_tokens.user_id
+                   AND users.disabled_at IS NULL
+               )`,
+          )
+          .bind(input.consumedAt, input.consumeId, input.tokenHash, input.now),
+        db
+          .prepare(
+            `UPDATE users
+             SET email_verified_at = COALESCE(email_verified_at, ?),
+                 updated_at = ?
+             WHERE id = (
+               SELECT user_id FROM verification_tokens
+               WHERE consume_id = ? AND type = 'magic_link'
+             )`,
+          )
+          .bind(input.consumedAt, input.consumedAt, input.consumeId),
+        db
+          .prepare(
+            `INSERT INTO sessions (
+              id, user_id, token_hash, created_at, expires_at,
+              last_seen_at, revoked_at, user_agent_hash, ip_hash, metadata_json
+            )
+            SELECT ?, user_id, ?, ?, ?, NULL, NULL, ?, ?, ?
+            FROM verification_tokens
+            WHERE consume_id = ? AND type = 'magic_link' AND user_id IS NOT NULL`,
+          )
+          .bind(
+            input.session.id,
+            input.session.tokenHash,
+            input.session.createdAt,
+            input.session.expiresAt,
+            input.session.userAgentHash ?? null,
+            input.session.ipHash ?? null,
+            sessionMetadataJson,
+            input.consumeId,
+          ),
+        ...(eventStatement ? [eventStatement] : []),
+        selectTokenByConsumeStatement(db, input.consumeId, "magic_link"),
+        selectUserByConsumedTokenStatement(db, input.consumeId, "magic_link"),
+        selectSessionStatement(db, input.session),
+      ].filter(Boolean) as D1PreparedStatement[];
+      const results = (await db.batch(statements)) as unknown as D1Result[];
+      const eventOffset = eventStatement ? 1 : 0;
+      if (changes(results[0]) !== 1) return null;
+      if (changes(results[1]) !== 1 || changes(results[2]) !== 1) {
+        throw new AuthRepositoryError(
+          "magic link consume did not create required state",
+          "token_consume_inconsistent",
+        );
+      }
+      return tokenFlowResult(
+        (results[3 + eventOffset]?.results as VerificationTokenRow[])?.[0],
+        (results[4 + eventOffset]?.results as UserRow[])?.[0],
+        (results[5 + eventOffset]?.results as SessionRow[])?.[0],
+        { createdUser: false },
+      );
+    },
+    async consumeEmailVerification(
+      input: ConsumeEmailVerificationInput,
+    ): Promise<ConsumeAuthFlowResult | null> {
+      assertHmacTokenEnvelope(input.tokenHash);
+      const sessionMetadataJson = input.session
+        ? assertSessionFromToken(input.session)
+        : null;
+      const eventStatement = tokenEventStatement(
+        db,
+        input.event,
+        input.consumeId,
+        "email_verification",
+      );
+      const sessionStatement = input.session
+        ? db
+            .prepare(
+              `INSERT INTO sessions (
+                id, user_id, token_hash, created_at, expires_at,
+                last_seen_at, revoked_at, user_agent_hash, ip_hash, metadata_json
+              )
+              SELECT ?, user_id, ?, ?, ?, NULL, NULL, ?, ?, ?
+              FROM verification_tokens
+              WHERE consume_id = ? AND type = 'email_verification' AND user_id IS NOT NULL`,
+            )
+            .bind(
+              input.session.id,
+              input.session.tokenHash,
+              input.session.createdAt,
+              input.session.expiresAt,
+              input.session.userAgentHash ?? null,
+              input.session.ipHash ?? null,
+              sessionMetadataJson,
+              input.consumeId,
+            )
+        : null;
+      const statements = [
+        db
+          .prepare(
+            `UPDATE verification_tokens
+             SET used_at = ?, consume_id = ?, attempts = attempts + 1
+             WHERE token_hash = ?
+               AND type = 'email_verification'
+               AND used_at IS NULL
+               AND consume_id IS NULL
+               AND revoked_at IS NULL
+               AND expires_at > ?
+               AND user_id IS NOT NULL
+               AND normalized_email IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM users
+                 WHERE users.id = verification_tokens.user_id
+                   AND users.disabled_at IS NULL
+               )`,
+          )
+          .bind(input.consumedAt, input.consumeId, input.tokenHash, input.now),
+        db
+          .prepare(
+            `UPDATE users
+             SET email_verified_at = COALESCE(email_verified_at, ?),
+                 updated_at = ?
+             WHERE id = (
+               SELECT user_id FROM verification_tokens
+               WHERE consume_id = ? AND type = 'email_verification'
+             )`,
+          )
+          .bind(input.verifiedAt, input.updatedAt, input.consumeId),
+        sessionStatement,
+        eventStatement,
+        selectTokenByConsumeStatement(
+          db,
+          input.consumeId,
+          "email_verification",
+        ),
+        selectUserByConsumedTokenStatement(
+          db,
+          input.consumeId,
+          "email_verification",
+        ),
+        selectSessionStatement(db, input.session),
+      ].filter(Boolean) as D1PreparedStatement[];
+      const results = (await db.batch(statements)) as unknown as D1Result[];
+      let index = 0;
+      const tokenUpdate = results[index++];
+      const userUpdate = results[index++];
+      const sessionInsert = sessionStatement ? results[index++] : undefined;
+      if (eventStatement) index++;
+      const tokenSelect = results[index++];
+      const userSelect = results[index++];
+      const sessionSelect = input.session ? results[index] : undefined;
+      if (changes(tokenUpdate) !== 1) return null;
+      if (changes(userUpdate) !== 1) {
+        throw new AuthRepositoryError(
+          "email verification consume did not update user",
+          "token_consume_inconsistent",
+        );
+      }
+      if (input.session && changes(sessionInsert) !== 1) {
+        throw new AuthRepositoryError(
+          "email verification consume did not create session",
+          "token_consume_inconsistent",
+        );
+      }
+      return tokenFlowResult(
+        (tokenSelect?.results as VerificationTokenRow[])?.[0],
+        (userSelect?.results as UserRow[])?.[0],
+        (sessionSelect?.results as SessionRow[] | undefined)?.[0],
+      );
+    },
+    async consumePasswordReset(
+      input: ConsumePasswordResetInput,
+    ): Promise<ConsumeAuthFlowResult | null> {
+      assertHmacTokenEnvelope(input.tokenHash);
+      const sessionMetadataJson = input.session
+        ? assertSessionFromToken(input.session)
+        : null;
+      const eventStatement = tokenEventStatement(
+        db,
+        input.event,
+        input.consumeId,
+        "password_reset",
+      );
+      const revokeStatement =
+        input.revokeExistingSessionsAt !== null &&
+        input.revokeExistingSessionsAt !== undefined
+          ? db
+              .prepare(
+                `UPDATE sessions
+                 SET revoked_at = ?
+                 WHERE revoked_at IS NULL
+                   AND user_id = (
+                     SELECT user_id FROM verification_tokens
+                     WHERE consume_id = ? AND type = 'password_reset'
+                   )`,
+              )
+              .bind(input.revokeExistingSessionsAt, input.consumeId)
+          : null;
+      const sessionStatement = input.session
+        ? db
+            .prepare(
+              `INSERT INTO sessions (
+                id, user_id, token_hash, created_at, expires_at,
+                last_seen_at, revoked_at, user_agent_hash, ip_hash, metadata_json
+              )
+              SELECT ?, user_id, ?, ?, ?, NULL, NULL, ?, ?, ?
+              FROM verification_tokens
+              WHERE consume_id = ? AND type = 'password_reset' AND user_id IS NOT NULL`,
+            )
+            .bind(
+              input.session.id,
+              input.session.tokenHash,
+              input.session.createdAt,
+              input.session.expiresAt,
+              input.session.userAgentHash ?? null,
+              input.session.ipHash ?? null,
+              sessionMetadataJson,
+              input.consumeId,
+            )
+        : null;
+      const statements = [
+        db
+          .prepare(
+            `UPDATE verification_tokens
+             SET used_at = ?, consume_id = ?, attempts = attempts + 1
+             WHERE token_hash = ?
+               AND type = 'password_reset'
+               AND used_at IS NULL
+               AND consume_id IS NULL
+               AND revoked_at IS NULL
+               AND expires_at > ?
+               AND user_id IS NOT NULL
+               AND normalized_email IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM users
+                 WHERE users.id = verification_tokens.user_id
+                   AND users.disabled_at IS NULL
+               )`,
+          )
+          .bind(input.consumedAt, input.consumeId, input.tokenHash, input.now),
+        db
+          .prepare(
+            `UPDATE users
+             SET password_hash = ?,
+                 email_verified_at = CASE
+                   WHEN ? IS NOT NULL THEN COALESCE(email_verified_at, ?)
+                   ELSE email_verified_at
+                 END,
+                 updated_at = ?
+             WHERE id = (
+               SELECT user_id FROM verification_tokens
+               WHERE consume_id = ? AND type = 'password_reset'
+             )`,
+          )
+          .bind(
+            input.passwordHash,
+            input.markEmailVerifiedAt ?? null,
+            input.markEmailVerifiedAt ?? null,
+            input.updatedAt,
+            input.consumeId,
+          ),
+        revokeStatement,
+        sessionStatement,
+        eventStatement,
+        selectTokenByConsumeStatement(db, input.consumeId, "password_reset"),
+        selectUserByConsumedTokenStatement(
+          db,
+          input.consumeId,
+          "password_reset",
+        ),
+        selectSessionStatement(db, input.session),
+      ].filter(Boolean) as D1PreparedStatement[];
+      const results = (await db.batch(statements)) as unknown as D1Result[];
+      let index = 0;
+      const tokenUpdate = results[index++];
+      const userUpdate = results[index++];
+      const revokeResult = revokeStatement ? results[index++] : undefined;
+      const sessionInsert = sessionStatement ? results[index++] : undefined;
+      if (eventStatement) index++;
+      const tokenSelect = results[index++];
+      const userSelect = results[index++];
+      const sessionSelect = input.session ? results[index] : undefined;
+      if (changes(tokenUpdate) !== 1) return null;
+      if (changes(userUpdate) !== 1) {
+        throw new AuthRepositoryError(
+          "password reset consume did not update user",
+          "token_consume_inconsistent",
+        );
+      }
+      if (input.session && changes(sessionInsert) !== 1) {
+        throw new AuthRepositoryError(
+          "password reset consume did not create session",
+          "token_consume_inconsistent",
+        );
+      }
+      return tokenFlowResult(
+        (tokenSelect?.results as VerificationTokenRow[])?.[0],
+        (userSelect?.results as UserRow[])?.[0],
+        (sessionSelect?.results as SessionRow[] | undefined)?.[0],
+        { revokedSessions: changes(revokeResult) },
+      );
     },
     async incrementTokenAttempts(tokenId: string) {
       await db
@@ -1195,7 +1732,13 @@ async function handleSignup(
       ? json({ ok: true })
       : json({ user: publicUser(user) });
   }
-  return jsonWithSession({ user: publicUser(user) }, runtime, user, now);
+  return jsonWithSession(
+    { user: publicUser(user) },
+    runtime,
+    user,
+    request,
+    now,
+  );
 }
 
 async function handleLogin(
@@ -1304,7 +1847,13 @@ async function handleLogin(
   queueAuthEvent(runtime, request, "password_login_success", {
     userId: user.id,
   });
-  return jsonWithSession({ user: publicUser(user) }, runtime, user, Date.now());
+  return jsonWithSession(
+    { user: publicUser(user) },
+    runtime,
+    user,
+    request,
+    Date.now(),
+  );
 }
 
 async function handleLogout(
@@ -1437,13 +1986,33 @@ async function handleMagicLinkConsume(
     });
     throw error;
   }
+  const active = runtime.config.magicLink.allowSignups
+    ? await runtime.repos.verificationTokens.findActiveVerificationTokenByHash(
+        tokenHash,
+        "magic_link",
+        Date.now(),
+      )
+    : null;
+  const now = Date.now();
+  const prepared = prepareSessionForRequest(runtime, request, now);
+  const jitUser =
+    active?.normalized_email && !active.user_id
+      ? { id: randomId("usr_"), createdAt: now }
+      : undefined;
   const consumed =
-    await runtime.repos.verificationTokens.consumeVerificationToken({
+    await runtime.repos.verificationTokens.consumeMagicLinkAndCreateSession({
       tokenHash,
-      type: "magic_link",
       consumeId: randomId("con_"),
-      consumedAt: Date.now(),
-      now: Date.now(),
+      consumedAt: now,
+      now,
+      session: prepared.session,
+      ...(jitUser ? { jitUser } : {}),
+      event: tokenConsumeEventInput(
+        runtime,
+        request,
+        "magic_link_consume_success",
+        { jitSignup: Boolean(jitUser) },
+      ),
     });
   if (!consumed) {
     queueAuthEvent(runtime, request, "magic_link_consume_failed", {
@@ -1451,44 +2020,14 @@ async function handleMagicLinkConsume(
     });
     return errorResponse("Invalid token", 400, "invalid_token");
   }
-  let user = consumed.user_id
-    ? await runtime.repos.users.findUserById(consumed.user_id)
-    : null;
-  if (
-    !user &&
-    consumed.normalized_email &&
-    runtime.config.magicLink.allowSignups
-  ) {
-    user = await runtime.repos.users.createUser({
-      id: randomId("usr_"),
-      email: consumed.normalized_email,
-      normalizedEmail: consumed.normalized_email,
-      emailVerifiedAt: Date.now(),
-      createdAt: Date.now(),
-    });
-  }
-  if (!user || user.disabled_at !== null) {
-    queueAuthEvent(runtime, request, "magic_link_consume_failed", {
-      userId: user?.id ?? null,
-      metadata: {
-        reason: user ? "disabled_user" : "user_missing",
-      },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  await runtime.repos.users.markEmailVerified(user.id, Date.now());
-  queueAuthEvent(runtime, request, "magic_link_consume_success", {
-    userId: user.id,
-    metadata: { jitSignup: !consumed.user_id },
-  });
-  return sessionConsumeResponse(
+  return sessionConsumeResponseWithToken(
     {
-      user: publicUser(user),
+      user: publicUser(consumed.user),
       redirectTo:
-        consumed.redirect_to ?? runtime.config.redirects.defaultAfterLogin,
+        consumed.redirectTo ?? runtime.config.redirects.defaultAfterLogin,
     },
     runtime,
-    user,
+    prepared.rawToken,
     mode,
   );
 }
@@ -1587,55 +2126,44 @@ async function handleEmailVerifyConsume(
     });
     throw error;
   }
+  const now = Date.now();
+  const prepared = runtime.config.emailVerification
+    .createSessionAfterVerification
+    ? prepareSessionForRequest(runtime, request, now)
+    : null;
   const consumed =
-    await runtime.repos.verificationTokens.consumeVerificationToken({
+    await runtime.repos.verificationTokens.consumeEmailVerification({
       tokenHash,
-      type: "email_verification",
       consumeId: randomId("con_"),
-      consumedAt: Date.now(),
-      now: Date.now(),
+      consumedAt: now,
+      now,
+      verifiedAt: now,
+      updatedAt: now,
+      ...(prepared ? { session: prepared.session } : {}),
+      event: tokenConsumeEventInput(
+        runtime,
+        request,
+        "email_verification_consume_success",
+        {
+          sessionCreated:
+            runtime.config.emailVerification.createSessionAfterVerification,
+        },
+      ),
     });
-  if (!consumed?.user_id) {
+  if (!consumed) {
     queueAuthEvent(runtime, request, "email_verification_consume_failed", {
       metadata: { reason: "invalid_or_replayed" },
     });
     return errorResponse("Invalid token", 400, "invalid_token");
   }
-  const userBeforeVerify = await runtime.repos.users.findUserById(
-    consumed.user_id,
-  );
-  if (!userBeforeVerify || userBeforeVerify.disabled_at !== null) {
-    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
-      userId: userBeforeVerify?.id ?? null,
-      metadata: {
-        reason: userBeforeVerify ? "disabled_user" : "user_missing",
-      },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  await runtime.repos.users.markEmailVerified(consumed.user_id, Date.now());
-  const user = await runtime.repos.users.findUserById(consumed.user_id);
-  if (!user) {
-    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
-      metadata: { reason: "user_missing_after_verify" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  queueAuthEvent(runtime, request, "email_verification_consume_success", {
-    userId: user.id,
-    metadata: {
-      sessionCreated:
-        runtime.config.emailVerification.createSessionAfterVerification,
-    },
-  });
   const payload = {
-    user: publicUser(user),
+    user: publicUser(consumed.user),
     redirectTo:
-      consumed.redirect_to ??
+      consumed.redirectTo ??
       runtime.config.redirects.defaultAfterEmailVerification,
   };
-  return runtime.config.emailVerification.createSessionAfterVerification
-    ? sessionConsumeResponse(payload, runtime, user, mode)
+  return prepared
+    ? sessionConsumeResponseWithToken(payload, runtime, prepared.rawToken, mode)
     : consumeResponse(payload, mode);
 }
 
@@ -1760,70 +2288,56 @@ async function handlePasswordResetConfirm(
       profile: runtime.config.passwordHashing.profile,
     }),
   );
-  const consumed =
-    await runtime.repos.verificationTokens.consumeVerificationToken({
-      tokenHash,
-      type: "password_reset",
-      consumeId: randomId("con_"),
-      consumedAt: Date.now(),
-      now: Date.now(),
-    });
-  if (!consumed?.user_id) {
+  const now = Date.now();
+  const prepared = runtime.config.passwordReset.createSessionAfterReset
+    ? prepareSessionForRequest(runtime, request, now)
+    : null;
+  const consumed = await runtime.repos.verificationTokens.consumePasswordReset({
+    tokenHash,
+    consumeId: randomId("con_"),
+    consumedAt: now,
+    now,
+    passwordHash,
+    updatedAt: now,
+    markEmailVerifiedAt: runtime.config.passwordReset.markEmailVerifiedOnReset
+      ? now
+      : null,
+    revokeExistingSessionsAt: runtime.config.passwordReset
+      .revokeExistingSessions
+      ? now
+      : null,
+    ...(prepared ? { session: prepared.session } : {}),
+    event: tokenConsumeEventInput(
+      runtime,
+      request,
+      "password_reset_confirm_success",
+      {
+        sessionCreated: runtime.config.passwordReset.createSessionAfterReset,
+      },
+    ),
+  });
+  if (!consumed) {
     queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
       metadata: { reason: "invalid_or_replayed" },
     });
     return errorResponse("Invalid token", 400, "invalid_token");
   }
-  const userBeforeUpdate = await runtime.repos.users.findUserById(
-    consumed.user_id,
-  );
-  if (!userBeforeUpdate || userBeforeUpdate.disabled_at !== null) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      userId: userBeforeUpdate?.id ?? null,
+  if (runtime.config.passwordReset.revokeExistingSessions) {
+    queueAuthEvent(runtime, request, "session_revoked", {
+      userId: consumed.user.id,
       metadata: {
-        reason: userBeforeUpdate ? "disabled_user" : "user_missing",
+        reason: "password_reset",
+        count: consumed.revokedSessions ?? 0,
       },
     });
-    return errorResponse("Invalid token", 400, "invalid_token");
   }
-  await runtime.repos.users.updatePasswordHash(
-    consumed.user_id,
-    passwordHash,
-    Date.now(),
-  );
-  if (runtime.config.passwordReset.markEmailVerifiedOnReset)
-    await runtime.repos.users.markEmailVerified(consumed.user_id, Date.now());
-  if (runtime.config.passwordReset.revokeExistingSessions) {
-    await runtime.repos.sessions.revokeAllUserSessions(
-      consumed.user_id,
-      Date.now(),
-    );
-    queueAuthEvent(runtime, request, "session_revoked", {
-      userId: consumed.user_id,
-      metadata: { reason: "password_reset" },
-    });
-  }
-  const user = await runtime.repos.users.findUserById(consumed.user_id);
-  if (!user) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      metadata: { reason: "user_missing_after_update" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  queueAuthEvent(runtime, request, "password_reset_confirm_success", {
-    userId: user.id,
-    metadata: {
-      sessionCreated: runtime.config.passwordReset.createSessionAfterReset,
-    },
-  });
   const payload = {
-    user: publicUser(user),
+    user: publicUser(consumed.user),
     redirectTo:
-      consumed.redirect_to ??
-      runtime.config.redirects.defaultAfterPasswordReset,
+      consumed.redirectTo ?? runtime.config.redirects.defaultAfterPasswordReset,
   };
-  return runtime.config.passwordReset.createSessionAfterReset
-    ? sessionConsumeResponse(payload, runtime, user, mode)
+  return prepared
+    ? sessionConsumeResponseWithToken(payload, runtime, prepared.rawToken, mode)
     : consumeResponse(payload, mode);
 }
 
@@ -2063,37 +2577,99 @@ function handleDevEmails(runtime: RuntimeContext): Response {
   return json({ emails: runtime.config.email.outbox });
 }
 
+function prepareSessionForRequest(
+  runtime: RuntimeContext,
+  request: Request,
+  now: number,
+): { rawToken: string; session: CreateSessionFromTokenInput } {
+  const rawToken = generateRawAuthToken("ses", runtime.keyRing.current);
+  return {
+    rawToken,
+    session: {
+      id: randomId("ses_"),
+      tokenHash: hashRawAuthToken(rawToken, runtime.keyRing, "session"),
+      createdAt: now,
+      expiresAt: now + runtime.config.session.maxAgeDays * 24 * 60 * 60 * 1000,
+      ipHash: deriveEventHash({
+        keyRing: runtime.keyRing,
+        purpose: "event-ip-hash",
+        value: canonicalizeIp(clientIp(request)),
+      }),
+      userAgentHash: deriveEventHash({
+        keyRing: runtime.keyRing,
+        purpose: "event-user-agent-hash",
+        value: canonicalizeUserAgent(request.headers.get("User-Agent")),
+      }),
+    },
+  };
+}
+
+function tokenConsumeEventInput(
+  runtime: RuntimeContext,
+  request: Request,
+  eventType: string,
+  metadata: Record<string, string | number | boolean | null> = {},
+): TokenConsumeEventInput {
+  return {
+    id: randomId("evt_"),
+    eventType,
+    createdAt: Date.now(),
+    ipHash: deriveEventHash({
+      keyRing: runtime.keyRing,
+      purpose: "event-ip-hash",
+      value: canonicalizeIp(clientIp(request)),
+    }),
+    userAgentHash: deriveEventHash({
+      keyRing: runtime.keyRing,
+      purpose: "event-user-agent-hash",
+      value: canonicalizeUserAgent(request.headers.get("User-Agent")),
+    }),
+    requestId: runtime.requestId,
+    metadataJson: JSON.stringify(metadata),
+  };
+}
+
 async function jsonWithSession(
   payload: unknown,
   runtime: RuntimeContext,
   user: UserRow,
+  request: Request,
   now: number,
 ): Promise<Response> {
-  const token = generateRawAuthToken("ses", runtime.keyRing.current);
-  const tokenHash = hashRawAuthToken(token, runtime.keyRing, "session");
+  const prepared = prepareSessionForRequest(runtime, request, now);
   await runtime.repos.sessions.createSession({
-    id: randomId("ses_"),
+    id: prepared.session.id,
     userId: user.id,
-    tokenHash,
-    createdAt: now,
-    expiresAt: now + runtime.config.session.maxAgeDays * 24 * 60 * 60 * 1000,
+    tokenHash: prepared.session.tokenHash,
+    createdAt: prepared.session.createdAt,
+    expiresAt: prepared.session.expiresAt,
+    ipHash: prepared.session.ipHash ?? null,
+    userAgentHash: prepared.session.userAgentHash ?? null,
   });
+  return jsonWithExistingSession(payload, runtime, prepared.rawToken);
+}
+
+function jsonWithExistingSession(
+  payload: unknown,
+  runtime: RuntimeContext,
+  rawToken: string,
+): Response {
   return json(payload, 200, {
     "Set-Cookie": serializeSessionCookie(
       runtime.cookie,
-      token,
+      rawToken,
       runtime.config.session.maxAgeDays * 24 * 60 * 60,
     ),
   });
 }
 
-async function sessionConsumeResponse<T extends { redirectTo: string }>(
+function sessionConsumeResponseWithToken<T extends { redirectTo: string }>(
   payload: T,
   runtime: RuntimeContext,
-  user: UserRow,
+  rawToken: string,
   mode: "json" | "form",
-): Promise<Response> {
-  const response = await jsonWithSession(payload, runtime, user, Date.now());
+): Response {
+  const response = jsonWithExistingSession(payload, runtime, rawToken);
   if (mode === "json") return response;
   return redirect(
     payload.redirectTo,
