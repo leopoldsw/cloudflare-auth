@@ -3142,10 +3142,22 @@ const consoleLogger: AuthLogger = {
 export function redactLogValue(value: string): string {
   return value
     .replace(
+      /("[A-Za-z0-9_-]*(?:password|secret|cookie|authorization|api[_-]?key|authToken|token)"\s*:\s*)"[^"]*"/giu,
+      '$1"[REDACTED]"',
+    )
+    .replace(
+      /\b((?:password|secret|cookie|authorization|api[_-]?key|authToken|token|AUTH_SECRET|AUTH_SECRET_PREVIOUS)=)[^\s,;&"']+/giu,
+      "$1[REDACTED]",
+    )
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/giu, "$1[REDACTED]")
+    .replace(
       /cfauth\.(ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43}/gu,
       "[REDACTED_TOKEN]",
     )
-    .replace(/AUTH_SECRET=[^\s]+/gu, "AUTH_SECRET=[REDACTED]");
+    .replace(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu,
+      "[REDACTED_EMAIL]",
+    );
 }
 
 function redactMetadata(

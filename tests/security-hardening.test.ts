@@ -213,10 +213,35 @@ describe("security hardening helpers", () => {
   it("redacts auth tokens and secrets from log strings", () => {
     const rawToken = `cfauth.magic.k1.${"A".repeat(43)}`;
     const redacted = redactLogValue(
-      `token=${rawToken} AUTH_SECRET=k1.${"B".repeat(43)}`,
+      `token=${rawToken} AUTH_SECRET=k1.${"B".repeat(43)} AUTH_SECRET_PREVIOUS=k0.${"C".repeat(43)}`,
     );
-    expect(redacted).toContain("token=[REDACTED_TOKEN]");
+    expect(redacted).toContain("token=[REDACTED]");
     expect(redacted).toContain("AUTH_SECRET=[REDACTED]");
+    expect(redacted).toContain("AUTH_SECRET_PREVIOUS=[REDACTED]");
     expect(redacted).not.toContain(rawToken);
+    expect(redacted).not.toContain("B".repeat(43));
+    expect(redacted).not.toContain("C".repeat(43));
+  });
+
+  it("redacts token URLs, passwords, emails, and authorization material", () => {
+    const rawToken = `cfauth.reset.k1.${"D".repeat(43)}`;
+    const redacted = redactLogValue(
+      JSON.stringify({
+        url: `https://example.com/auth/password/reset?token=${rawToken}`,
+        password: "correct horse battery staple",
+        email: "person@example.com",
+        tokenType: "password_reset",
+        authorization: "Bearer sk-test-secret",
+      }),
+    );
+
+    expect(redacted).toContain('"password":"[REDACTED]"');
+    expect(redacted).toContain('"authorization":"[REDACTED]"');
+    expect(redacted).toContain('"tokenType":"password_reset"');
+    expect(() => JSON.parse(redacted)).not.toThrow();
+    expect(redacted).not.toContain(rawToken);
+    expect(redacted).not.toContain("correct horse battery staple");
+    expect(redacted).not.toContain("person@example.com");
+    expect(redacted).toContain("[REDACTED_EMAIL]");
   });
 });
