@@ -119,6 +119,23 @@ describe("release gates", () => {
     );
   });
 
+  it("requires config schema docs for every stable config key", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "docs/config-schema.md",
+      "passwordHashing.queueTimeoutMs",
+      "passwordHashing.timeoutMs",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-docs-coverage.mjs");
+    expect(result.stderr).toContain(
+      "docs/config-schema.md: missing passwordHashing.queueTimeoutMs",
+    );
+  });
+
   it("requires password benchmark evidence in release gates", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -525,6 +542,77 @@ async function writeLocalVerifierFixtures(root: string) {
   await writeDeployTemplateFixtures(root);
 }
 
+const configFixtureKeys = [
+  "appName",
+  "basePath",
+  "runtime.mode",
+  "runtime.publicOrigin",
+  "runtime.trustedHosts",
+  "database.binding",
+  "session.cookieName",
+  "session.maxAgeDays",
+  "session.sameSite",
+  "session.secure",
+  "session.domain",
+  "session.requireVerifiedEmail",
+  "request.maxBodyBytes",
+  "request.requireOriginOnUnsafeMethods",
+  "request.enumerationMinResponseMs",
+  "request.enumerationJitterMs",
+  "security.allowedRequestOrigins",
+  "security.allowedPreviewRequestOrigins",
+  "passwordHashing.profile",
+  "passwordHashing.maxConcurrentHashesPerIsolate",
+  "passwordHashing.queueTimeoutMs",
+  "signup.enabled",
+  "signup.requireEmailVerificationBeforeSession",
+  "signup.enumerationSafe",
+  "signup.username.enabled",
+  "signup.username.required",
+  "login.emailPassword",
+  "login.usernamePassword",
+  "login.magicLink",
+  "login.requireVerifiedEmail",
+  "magicLink.allowSignups",
+  "magicLink.expiresInMinutes",
+  "magicLink.activeTokenPolicy",
+  "passwordReset.enabled",
+  "passwordReset.expiresInMinutes",
+  "passwordReset.revokeExistingSessions",
+  "passwordReset.createSessionAfterReset",
+  "passwordReset.markEmailVerifiedOnReset",
+  "passwordReset.activeTokenPolicy",
+  "emailVerification.enabled",
+  "emailVerification.expiresInHours",
+  "emailVerification.createSessionAfterVerification",
+  "emailVerification.activeTokenPolicy",
+  "turnstile.mode",
+  "turnstile.endpoints",
+  "turnstile.verify",
+  "email",
+  "redirects.defaultAfterLogin",
+  "redirects.defaultAfterLogout",
+  "redirects.defaultAfterEmailVerification",
+  "redirects.defaultAfterPasswordReset",
+  "redirects.allowedOrigins",
+  "redirects.allowedPreviewOrigins",
+];
+
+function configSchemaFixtureText(releaseApproval: string) {
+  return [
+    releaseApproval,
+    "AUTH_DB",
+    "AUTH_SECRET",
+    "AUTH_SECRET_PREVIOUS",
+    "AUTH_ENV",
+    "AUTH_PUBLIC_ORIGIN",
+    "TURNSTILE_SECRET_KEY",
+    "AUTH_RATE_LIMITER",
+    "AUTH_EMAIL",
+    ...configFixtureKeys,
+  ].join("\n");
+}
+
 async function writeDocsCoverageFixtures(root: string) {
   await writeFixtureFile(
     root,
@@ -546,76 +634,12 @@ async function writeDocsCoverageFixtures(root: string) {
   await writeFixtureFile(
     root,
     "docs/configuration.md",
-    [
-      "appName",
-      "basePath",
-      "runtime.mode",
-      "runtime.publicOrigin",
-      "runtime.trustedHosts",
-      "database.binding",
-      "session.cookieName",
-      "session.maxAgeDays",
-      "session.sameSite",
-      "session.secure",
-      "session.domain",
-      "session.requireVerifiedEmail",
-      "request.maxBodyBytes",
-      "request.requireOriginOnUnsafeMethods",
-      "request.enumerationMinResponseMs",
-      "request.enumerationJitterMs",
-      "security.allowedRequestOrigins",
-      "security.allowedPreviewRequestOrigins",
-      "passwordHashing.profile",
-      "passwordHashing.maxConcurrentHashesPerIsolate",
-      "passwordHashing.queueTimeoutMs",
-      "signup.enabled",
-      "signup.requireEmailVerificationBeforeSession",
-      "signup.enumerationSafe",
-      "signup.username.enabled",
-      "signup.username.required",
-      "login.emailPassword",
-      "login.usernamePassword",
-      "login.magicLink",
-      "login.requireVerifiedEmail",
-      "magicLink.allowSignups",
-      "magicLink.expiresInMinutes",
-      "magicLink.activeTokenPolicy",
-      "passwordReset.enabled",
-      "passwordReset.expiresInMinutes",
-      "passwordReset.revokeExistingSessions",
-      "passwordReset.createSessionAfterReset",
-      "passwordReset.markEmailVerifiedOnReset",
-      "passwordReset.activeTokenPolicy",
-      "emailVerification.enabled",
-      "emailVerification.expiresInHours",
-      "emailVerification.createSessionAfterVerification",
-      "emailVerification.activeTokenPolicy",
-      "turnstile.mode",
-      "turnstile.endpoints",
-      "turnstile.verify",
-      "email",
-      "redirects.defaultAfterLogin",
-      "redirects.defaultAfterLogout",
-      "redirects.defaultAfterEmailVerification",
-      "redirects.defaultAfterPasswordReset",
-      "redirects.allowedOrigins",
-      "redirects.allowedPreviewOrigins",
-    ].join("\n"),
+    configFixtureKeys.join("\n"),
   );
   await writeFixtureFile(
     root,
     "docs/config-schema.md",
-    [
-      "Release approval: pending.",
-      "AUTH_DB",
-      "AUTH_SECRET",
-      "AUTH_SECRET_PREVIOUS",
-      "AUTH_ENV",
-      "AUTH_PUBLIC_ORIGIN",
-      "TURNSTILE_SECRET_KEY",
-      "AUTH_RATE_LIMITER",
-      "AUTH_EMAIL",
-    ].join("\n"),
+    configSchemaFixtureText("Release approval: pending."),
   );
   await writeFixtureFile(root, "docs/api-report.md", "Public API Report");
   await writeFixtureFile(
@@ -1004,17 +1028,9 @@ async function writeStableEvidence(root: string) {
   await writeFixtureFile(
     root,
     "docs/config-schema.md",
-    [
+    configSchemaFixtureText(
       "Release approval: release-approved by maintainer on 2026-05-14",
-      "AUTH_DB",
-      "AUTH_SECRET",
-      "AUTH_SECRET_PREVIOUS",
-      "AUTH_ENV",
-      "AUTH_PUBLIC_ORIGIN",
-      "TURNSTILE_SECRET_KEY",
-      "AUTH_RATE_LIMITER",
-      "AUTH_EMAIL",
-    ].join("\n"),
+    ),
   );
   await writeFixtureFile(
     root,
@@ -1225,6 +1241,17 @@ async function writeFixtureFile(root: string, path: string, content: string) {
   const target = join(root, path);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, `${content}\n`);
+}
+
+async function replaceFixtureText(
+  root: string,
+  path: string,
+  search: string,
+  replacement: string,
+) {
+  const target = join(root, path);
+  const text = await readFile(target, "utf8");
+  await writeFile(target, text.replace(search, replacement));
 }
 
 function runReleaseGates(cwd: string) {

@@ -23,6 +23,62 @@ Stable top-level keys:
 - `email`
 - `redirects`
 
+Stable nested keys:
+
+- `appName`
+- `basePath`
+- `runtime.mode`
+- `runtime.publicOrigin`
+- `runtime.trustedHosts`
+- `database.binding`
+- `session.cookieName`
+- `session.maxAgeDays`
+- `session.sameSite`
+- `session.secure`
+- `session.domain`
+- `session.requireVerifiedEmail`
+- `request.maxBodyBytes`
+- `request.requireOriginOnUnsafeMethods`
+- `request.enumerationMinResponseMs`
+- `request.enumerationJitterMs`
+- `security.allowedRequestOrigins`
+- `security.allowedPreviewRequestOrigins`
+- `passwordHashing.profile`
+- `passwordHashing.maxConcurrentHashesPerIsolate`
+- `passwordHashing.queueTimeoutMs`
+- `signup.enabled`
+- `signup.requireEmailVerificationBeforeSession`
+- `signup.enumerationSafe`
+- `signup.username.enabled`
+- `signup.username.required`
+- `login.emailPassword`
+- `login.usernamePassword`
+- `login.magicLink`
+- `login.requireVerifiedEmail`
+- `magicLink.allowSignups`
+- `magicLink.expiresInMinutes`
+- `magicLink.activeTokenPolicy`
+- `passwordReset.enabled`
+- `passwordReset.expiresInMinutes`
+- `passwordReset.revokeExistingSessions`
+- `passwordReset.createSessionAfterReset`
+- `passwordReset.markEmailVerifiedOnReset`
+- `passwordReset.activeTokenPolicy`
+- `emailVerification.enabled`
+- `emailVerification.expiresInHours`
+- `emailVerification.createSessionAfterVerification`
+- `emailVerification.activeTokenPolicy`
+- `turnstile.mode`
+- `turnstile.endpoints`
+- `turnstile.verify`
+- `email`
+- `redirects.defaultAfterLogin`
+- `redirects.defaultAfterLogout`
+- `redirects.defaultAfterEmailVerification`
+- `redirects.defaultAfterPasswordReset`
+- `redirects.allowedOrigins`
+- `redirects.allowedPreviewOrigins`
+
 Environment keys:
 
 - `AUTH_DB`: D1 binding

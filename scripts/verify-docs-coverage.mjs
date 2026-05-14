@@ -29,7 +29,7 @@ for (const command of [
   requireText("docs/cli.md", docs.cli, command);
 }
 
-for (const key of [
+const configKeys = [
   "appName",
   "basePath",
   "runtime.mode",
@@ -83,8 +83,12 @@ for (const key of [
   "redirects.defaultAfterPasswordReset",
   "redirects.allowedOrigins",
   "redirects.allowedPreviewOrigins",
-]) {
+];
+for (const key of configKeys) {
   requireText("docs/configuration.md", docs.config, key);
+}
+for (const key of configKeys) {
+  requireText("docs/config-schema.md", docs.configSchema, key);
 }
 
 for (const key of [
