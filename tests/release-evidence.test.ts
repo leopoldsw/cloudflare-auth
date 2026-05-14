@@ -262,6 +262,26 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("issueSearchUrl");
     expect(result.stderr).toContain("advisorySearchUrl");
   });
+
+  it("rejects security tracker evidence with incomplete search URLs", async () => {
+    const evidence = validSecurityTracker();
+    evidence.issueSearchUrl =
+      "https://github.com/acme/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth";
+    evidence.advisorySearchUrl =
+      "https://github.com/acme/cloudflare-auth/issues?q=is%3Aopen";
+    const path = await writeEvidence(
+      "security-tracker-incomplete-url",
+      evidence,
+    );
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("open high/critical auth issues");
+    expect(result.stderr).toContain("GitHub security advisory URL");
+  });
 });
 
 async function writeEvidence(name: string, value: unknown): Promise<string> {

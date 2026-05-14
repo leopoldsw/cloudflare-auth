@@ -47,7 +47,9 @@ function validateTracker(value, rawText) {
   requireString(value.reviewedBy, "reviewedBy");
   requireDate(value.reviewedAt, "reviewedAt");
   requireUrl(value.issueSearchUrl, "issueSearchUrl");
+  requireIssueSearchUrl(value.issueSearchUrl);
   requireUrl(value.advisorySearchUrl, "advisorySearchUrl");
+  requireAdvisorySearchUrl(value.advisorySearchUrl);
 
   const openIssues = Array.isArray(value.openHighCriticalAuthSecurityIssues)
     ? value.openHighCriticalAuthSecurityIssues
@@ -109,6 +111,47 @@ function requireUrl(value, path) {
     }
   } catch {
     failures.push(`${trackerPath}: ${path} must be a valid URL`);
+  }
+}
+
+function requireIssueSearchUrl(value) {
+  if (typeof value !== "string") return;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (url.hostname !== "github.com" || !url.pathname.endsWith("/issues")) {
+    failures.push(
+      `${trackerPath}: issueSearchUrl must be a GitHub issues search URL`,
+    );
+    return;
+  }
+  const query = (url.searchParams.get("q") ?? "").toLowerCase();
+  const requiredTerms = ["is:issue", "is:open", "auth", "high", "critical"];
+  if (!requiredTerms.every((term) => query.includes(term))) {
+    failures.push(
+      `${trackerPath}: issueSearchUrl must search open high/critical auth issues`,
+    );
+  }
+}
+
+function requireAdvisorySearchUrl(value) {
+  if (typeof value !== "string") return;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (
+    url.hostname !== "github.com" ||
+    !url.pathname.endsWith("/security/advisories")
+  ) {
+    failures.push(
+      `${trackerPath}: advisorySearchUrl must be a GitHub security advisory URL`,
+    );
   }
 }
 
