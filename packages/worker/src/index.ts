@@ -1885,8 +1885,13 @@ async function parseBody(
   const text = await request.text();
   if (Buffer.byteLength(text) > runtime.config.request.maxBodyBytes)
     throw new AuthCryptoError("Request body too large", "body_too_large");
-  if (contentType.startsWith("application/json"))
-    return JSON.parse(text || "{}") as Record<string, unknown>;
+  if (contentType.startsWith("application/json")) {
+    try {
+      return JSON.parse(text || "{}") as Record<string, unknown>;
+    } catch {
+      throw new AuthCryptoError("Invalid JSON body", "validation_failed");
+    }
+  }
   if (contentType.startsWith("application/x-www-form-urlencoded"))
     return Object.fromEntries(new URLSearchParams(text));
   if (!contentType && !text) return {};

@@ -440,6 +440,16 @@ describe("auth HTTP runtime", () => {
     });
     expect(unsafe.status).toBe(400);
 
+    const invalidJson = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    expect(invalidJson.status).toBe(400);
+    await expect(invalidJson.json()).resolves.toMatchObject({
+      error: { code: "validation_failed" },
+    });
+
     const prod = await handler.fetch(
       new Request("https://example.com/auth/logout", { method: "POST" }),
       {
