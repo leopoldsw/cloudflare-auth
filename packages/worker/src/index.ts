@@ -1585,6 +1585,12 @@ export function createAuthHandler(
       try {
         runtime = resolveRuntime(config, request, envInput, ctx);
       } catch (error) {
+        if (
+          error instanceof AuthCryptoError &&
+          error.code === "untrusted_host"
+        ) {
+          return errorResponse(error, 403, "untrusted_host");
+        }
         return errorResponse(error, 500, "config_error");
       }
       if (request.method === "OPTIONS")

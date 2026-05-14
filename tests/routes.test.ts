@@ -566,6 +566,20 @@ describe("auth HTTP runtime", () => {
       error: { code: "config_error" },
     });
 
+    const untrustedHost = await handler.fetch(
+      new Request("https://evil.example/auth/user"),
+      {
+        AUTH_SECRET: authSecret,
+        AUTH_ENV: "production",
+        AUTH_PUBLIC_ORIGIN: "https://example.com",
+      },
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+    expect(untrustedHost?.status).toBe(403);
+    await expect(untrustedHost?.json()).resolves.toMatchObject({
+      error: { code: "untrusted_host" },
+    });
+
     const allowedPreflight = await handler.fetch(
       new Request(`${origin}/auth/signup`, {
         method: "OPTIONS",
