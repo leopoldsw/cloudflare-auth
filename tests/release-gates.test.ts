@@ -742,12 +742,20 @@ async function writeMigrationFixtures(root: string) {
   await writeFixtureFile(
     root,
     "migrations/0001_initial.sql",
-    "CREATE TABLE auth_schema_migrations(version TEXT);\n",
+    [
+      "CREATE TABLE auth_schema_migrations(version TEXT);",
+      "CREATE TABLE auth_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+      "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0001', 'initial', 0);",
+      "INSERT INTO auth_meta (key, value) VALUES ('schema_version', '1');",
+    ].join("\n"),
   );
   await writeFixtureFile(
     root,
     "migrations/0002_indexes.sql",
-    "INSERT INTO auth_schema_migrations VALUES ('0002');\nUPDATE auth_meta SET schema_version = 2;\n",
+    [
+      "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0002', 'indexes', 0);",
+      "UPDATE auth_meta SET value = '2' WHERE key = 'schema_version';",
+    ].join("\n"),
   );
 }
 
@@ -845,12 +853,20 @@ async function writeExamplesFixtures(root: string) {
     await writeFixtureFile(
       root,
       `${template}/migrations/0001_initial.sql`,
-      "CREATE TABLE auth_schema_migrations(version TEXT);\n",
+      [
+        "CREATE TABLE auth_schema_migrations(version TEXT);",
+        "CREATE TABLE auth_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0001', 'initial', 0);",
+        "INSERT INTO auth_meta (key, value) VALUES ('schema_version', '1');",
+      ].join("\n"),
     );
     await writeFixtureFile(
       root,
       `${template}/migrations/0002_indexes.sql`,
-      "INSERT INTO auth_schema_migrations VALUES ('0002');\nUPDATE auth_meta SET schema_version = 2;\n",
+      [
+        "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0002', 'indexes', 0);",
+        "UPDATE auth_meta SET value = '2' WHERE key = 'schema_version';",
+      ].join("\n"),
     );
   }
 }

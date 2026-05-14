@@ -7,6 +7,12 @@ const failures = [];
 
 for (const file of files) {
   const sql = await readFile(`migrations/${file}`, "utf8");
+  const filenameMatch = file.match(/^(\d{4})_[a-z0-9_]+\.sql$/u);
+  const version = filenameMatch?.[1] ?? file.slice(0, 4);
+  const schemaVersion = String(Number(version));
+  if (!filenameMatch) {
+    failures.push(`${file}: migration filename must be ####_name.sql`);
+  }
   if (/\bBEGIN\b|\bCOMMIT\b/i.test(sql))
     failures.push(`${file}: migrations must not include BEGIN/COMMIT`);
   if (/\bPRAGMA\s+foreign_keys\s*=\s*off\b/i.test(sql)) {
@@ -23,13 +29,21 @@ for (const file of files) {
       `${file}: table rewrite migrations must use PRAGMA defer_foreign_keys = on`,
     );
   }
-  const version = file.slice(0, 4);
   if (!sql.includes("auth_schema_migrations"))
     failures.push(`${file}: missing auth_schema_migrations update`);
+  else if (!recordsMigrationVersion(sql, version)) {
+    failures.push(`${file}: auth_schema_migrations must record ${version}`);
+  }
   if (file !== "0001_initial.sql" && !sql.includes("auth_meta"))
     failures.push(`${file}: missing auth_meta update`);
-  if (!file.startsWith(version))
-    failures.push(`${file}: invalid version prefix`);
+  else if (
+    file !== "0001_initial.sql" &&
+    !updatesAuthMetaVersion(sql, schemaVersion)
+  ) {
+    failures.push(
+      `${file}: auth_meta schema_version must update to ${schemaVersion}`,
+    );
+  }
 }
 
 if (!files.includes("0001_initial.sql"))
@@ -47,4 +61,18 @@ function containsTableRewrite(sql) {
     /\bDROP\s+TABLE\b/i.test(sql) ||
     /\bALTER\s+TABLE\b[^;]+\bRENAME\s+TO\b/i.test(sql)
   );
+}
+
+function recordsMigrationVersion(sql, version) {
+  return new RegExp(
+    String.raw`\bINSERT\s+INTO\s+auth_schema_migrations\b[\s\S]*\bVALUES\s*\([^;]*['"]${version}['"]`,
+    "iu",
+  ).test(sql);
+}
+
+function updatesAuthMetaVersion(sql, schemaVersion) {
+  return new RegExp(
+    String.raw`\bUPDATE\s+auth_meta\b[\s\S]*\bSET\s+value\s*=\s*['"]${schemaVersion}['"]`,
+    "iu",
+  ).test(sql);
 }

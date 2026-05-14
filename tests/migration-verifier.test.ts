@@ -40,9 +40,67 @@ describe("migration verifier", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("must not disable foreign key enforcement");
   });
+
+  it("rejects invalid migration filenames", async () => {
+    const root = await migrationFixture({
+      secondMigration: migrationSql({
+        body: "CREATE INDEX sessions_id_idx ON sessions(id);",
+      }),
+      extraMigrations: [
+        [
+          "bad_name.sql",
+          migrationSql({
+            body: "CREATE INDEX users_id_idx ON users(id);",
+            version: "0003",
+            name: "users-id",
+            schemaVersion: "3",
+          }),
+        ],
+      ],
+    });
+    const result = runMigrationVerifier(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "bad_name.sql: migration filename must be ####_name.sql",
+    );
+  });
+
+  it("rejects mismatched auth_schema_migrations versions", async () => {
+    const root = await migrationFixture({
+      secondMigration: migrationSql({
+        body: "CREATE INDEX sessions_id_idx ON sessions(id);",
+        version: "0003",
+      }),
+    });
+    const result = runMigrationVerifier(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "0002_indexes.sql: auth_schema_migrations must record 0002",
+    );
+  });
+
+  it("rejects mismatched auth_meta schema versions", async () => {
+    const root = await migrationFixture({
+      secondMigration: migrationSql({
+        body: "CREATE INDEX sessions_id_idx ON sessions(id);",
+        schemaVersion: "3",
+      }),
+    });
+    const result = runMigrationVerifier(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "0002_indexes.sql: auth_meta schema_version must update to 2",
+    );
+  });
 });
 
-async function migrationFixture(options: { secondMigration: string }) {
+async function migrationFixture(options: {
+  secondMigration: string;
+  extraMigrations?: Array<[string, string]>;
+}) {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-migrations-"));
   await mkdir(join(root, "migrations"), { recursive: true });
   await writeFile(
@@ -58,6 +116,9 @@ async function migrationFixture(options: { secondMigration: string }) {
     join(root, "migrations", "0002_indexes.sql"),
     options.secondMigration,
   );
+  for (const [file, sql] of options.extraMigrations ?? []) {
+    await writeFile(join(root, "migrations", file), sql);
+  }
   return root;
 }
 
@@ -66,15 +127,17 @@ function migrationSql(options: {
   version?: string;
   name?: string;
   includeAuthMeta?: boolean;
+  schemaVersion?: string;
 }) {
   const version = options.version ?? "0002";
   const name = options.name ?? "indexes";
+  const schemaVersion = options.schemaVersion ?? String(Number(version));
   return [
     options.body,
     `INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('${version}', '${name}', 0);`,
     options.includeAuthMeta === false
       ? ""
-      : "UPDATE auth_meta SET value = '2' WHERE key = 'schema_version';",
+      : `UPDATE auth_meta SET value = '${schemaVersion}' WHERE key = 'schema_version';`,
   ]
     .filter(Boolean)
     .join("\n");
