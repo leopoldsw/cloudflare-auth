@@ -13,6 +13,10 @@ export interface PublicAuthUser {
   createdAt: number;
 }
 
+export interface TurnstileClientInput {
+  turnstileToken?: string;
+}
+
 export class AuthClientError extends Error {
   constructor(
     readonly code: string,
@@ -57,20 +61,38 @@ export function createAuthClient(options: AuthClientOptions = {}) {
     return payload as T;
   }
   return {
-    signUp(input: { email: string; username?: string; password: string }) {
+    signUp(
+      input: {
+        email: string;
+        username?: string;
+        password: string;
+      } & TurnstileClientInput,
+    ) {
       return request<{ user?: PublicAuthUser; ok?: true }>("/signup", {
         method: "POST",
         body: JSON.stringify(input),
       });
     },
-    signInWithPassword(input: { identifier: string; password: string }) {
+    signInWithPassword(
+      input: { identifier: string; password: string } & TurnstileClientInput,
+    ) {
       return request<{ user: PublicAuthUser }>("/login", {
         method: "POST",
         body: JSON.stringify(input),
       });
     },
-    signInWithMagicLink(input: { email: string; redirectTo?: string }) {
+    signInWithMagicLink(
+      input: { email: string; redirectTo?: string } & TurnstileClientInput,
+    ) {
       return request<{ ok: true }>("/magic-link/request", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    consumeMagicLink(
+      input: { token: string } & TurnstileClientInput,
+    ): Promise<{ user: PublicAuthUser; redirectTo: string }> {
+      return request("/magic-link/consume", {
         method: "POST",
         body: JSON.stringify(input),
       });
@@ -81,22 +103,36 @@ export function createAuthClient(options: AuthClientOptions = {}) {
     getUser() {
       return request<{ user: PublicAuthUser | null }>("/user");
     },
-    requestEmailVerification(input: { email: string; redirectTo?: string }) {
+    requestEmailVerification(
+      input: { email: string; redirectTo?: string } & TurnstileClientInput,
+    ) {
       return request<{ ok: true }>("/email/verify/request", {
         method: "POST",
         body: JSON.stringify(input),
       });
     },
-    requestPasswordReset(input: {
-      email: string;
-      afterResetRedirectTo?: string;
-    }) {
+    verifyEmail(
+      input: { token: string } & TurnstileClientInput,
+    ): Promise<{ user: PublicAuthUser; redirectTo: string }> {
+      return request("/email/verify/consume", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    requestPasswordReset(
+      input: {
+        email: string;
+        afterResetRedirectTo?: string;
+      } & TurnstileClientInput,
+    ) {
       return request<{ ok: true }>("/password/reset/request", {
         method: "POST",
         body: JSON.stringify(input),
       });
     },
-    resetPassword(input: { token: string; password: string }) {
+    resetPassword(
+      input: { token: string; password: string } & TurnstileClientInput,
+    ) {
       return request<{ user: PublicAuthUser; redirectTo: string }>(
         "/password/reset/confirm",
         {

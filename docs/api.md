@@ -80,14 +80,18 @@ const auth = createAuthClient({ basePath: "/auth" });
 await auth.signUp({ email, username, password });
 await auth.signInWithPassword({ identifier, password });
 await auth.signInWithMagicLink({ email, redirectTo: "/dashboard" });
+await auth.consumeMagicLink({ token });
 await auth.signOut();
 await auth.getUser();
 await auth.requestEmailVerification({ email, redirectTo: "/dashboard" });
+await auth.verifyEmail({ token });
 await auth.requestPasswordReset({ email, afterResetRedirectTo: "/login" });
 await auth.resetPassword({ token, password });
 ```
 
-The client sends `credentials: "include"` by default and throws `AuthClientError` with `code`, `message`, and `status`.
+Mutation methods accept an optional `turnstileToken` for Turnstile-protected
+endpoints. The client sends `credentials: "include"` by default and throws
+`AuthClientError` with `code`, `message`, and `status`.
 
 ## Server Helpers
 
@@ -151,7 +155,7 @@ not part of the v1 public API.
 | `@cf-auth/core`             | Core row and repository contracts, normalization helpers, redirect validation, raw-token generation and parsing, HMAC token hashing, key-ring parsing, password hash profiles and envelopes, cookie serialization, shared log redaction, derived rate-limit keys, and derived auth-event hashes.                                                                          |
 | `@cf-auth/worker`           | `defineAuthConfig`, `createAuthHandler`, `getSession`, `getUser`, `requireUser`, `requireVerifiedUser`, `getAuthSessionFromRequest`, `createD1Repositories`, `cleanCfAuth`, `terminalEmail`, `byEnvironment`, `verifyTurnstileToken`, `cloudflareRateLimitPrefilter`, `redactLogValue`, config types, email adapter types, Turnstile types, and runtime package metadata. |
 | `@cf-auth/hono`             | `createAuthRoutes`, `optionalUser`, `requireUser`, `requireVerifiedUser`, `getAuthUser`, and `honoPackageName`.                                                                                                                                                                                                                                                           |
-| `@cf-auth/client`           | `createAuthClient`, `AuthClientError`, `AuthClientOptions`, `PublicAuthUser`, and `clientPackageName`.                                                                                                                                                                                                                                                                    |
+| `@cf-auth/client`           | `createAuthClient`, `AuthClientError`, `AuthClientOptions`, `PublicAuthUser`, `TurnstileClientInput`, and `clientPackageName`.                                                                                                                                                                                                                                            |
 | `@cf-auth/email-cloudflare` | `cloudflareEmail`, `defaultMagicLinkTemplate`, `defaultEmailVerificationTemplate`, `defaultPasswordResetTemplate`, Cloudflare Email binding/template option types, and `emailCloudflarePackageName`.                                                                                                                                                                      |
 | `@cf-auth/testing`          | `createSqliteD1Database`, `applyD1Migrations`, `createMockEmailAdapter`, `MockAuthEmail`, and `testingPackageName`.                                                                                                                                                                                                                                                       |
 

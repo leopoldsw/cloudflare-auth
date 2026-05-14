@@ -290,6 +290,93 @@ describe("Hono adapter and browser client", () => {
       status: 200,
     } satisfies Partial<AuthClientError>);
   });
+
+  it("client forwards Turnstile tokens to auth mutations and token consumes", async () => {
+    const user = {
+      id: "usr_client",
+      email: "client@example.com",
+      username: null,
+      emailVerified: true,
+      createdAt: 100,
+    };
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const client = createAuthClient({
+      basePath: "/auth",
+      fetch: async (input, init) => {
+        calls.push({
+          url: String(input),
+          body:
+            typeof init?.body === "string"
+              ? (JSON.parse(init.body) as unknown)
+              : null,
+        });
+        if (String(input).endsWith("/request")) {
+          return Response.json({ ok: true });
+        }
+        return Response.json({ user, redirectTo: "/dashboard" });
+      },
+    });
+
+    await client.signUp({
+      email: "client@example.com",
+      password: "correct horse battery staple",
+      turnstileToken: "turnstile-signup",
+    });
+    await client.signInWithPassword({
+      identifier: "client@example.com",
+      password: "correct horse battery staple",
+      turnstileToken: "turnstile-password",
+    });
+    await client.signInWithMagicLink({
+      email: "client@example.com",
+      redirectTo: "/dashboard",
+      turnstileToken: "turnstile-magic-request",
+    });
+    await client.consumeMagicLink({
+      token: "cfauth.magic.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      turnstileToken: "turnstile-magic-consume",
+    });
+    await client.requestEmailVerification({
+      email: "client@example.com",
+      redirectTo: "/dashboard",
+      turnstileToken: "turnstile-verify-request",
+    });
+    await client.verifyEmail({
+      token: "cfauth.verify.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      turnstileToken: "turnstile-verify-consume",
+    });
+    await client.requestPasswordReset({
+      email: "client@example.com",
+      afterResetRedirectTo: "/dashboard",
+      turnstileToken: "turnstile-reset-request",
+    });
+    await client.resetPassword({
+      token: "cfauth.reset.k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      password: "new correct horse battery staple",
+      turnstileToken: "turnstile-reset-confirm",
+    });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "/auth/signup",
+      "/auth/login",
+      "/auth/magic-link/request",
+      "/auth/magic-link/consume",
+      "/auth/email/verify/request",
+      "/auth/email/verify/consume",
+      "/auth/password/reset/request",
+      "/auth/password/reset/confirm",
+    ]);
+    expect(calls.map((call) => call.body)).toEqual([
+      expect.objectContaining({ turnstileToken: "turnstile-signup" }),
+      expect.objectContaining({ turnstileToken: "turnstile-password" }),
+      expect.objectContaining({ turnstileToken: "turnstile-magic-request" }),
+      expect.objectContaining({ turnstileToken: "turnstile-magic-consume" }),
+      expect.objectContaining({ turnstileToken: "turnstile-verify-request" }),
+      expect.objectContaining({ turnstileToken: "turnstile-verify-consume" }),
+      expect.objectContaining({ turnstileToken: "turnstile-reset-request" }),
+      expect.objectContaining({ turnstileToken: "turnstile-reset-confirm" }),
+    ]);
+  });
 });
 
 async function fixture(overrides: Partial<AuthConfig> = {}) {
