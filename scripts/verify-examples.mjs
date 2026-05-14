@@ -12,25 +12,10 @@ const rootMigrations = new Map(
     ]),
   ),
 );
-const dirs = (await readdir("examples", { withFileTypes: true })).filter(
-  (entry) => entry.isDirectory(),
-);
 const failures = [];
 
-for (const entry of dirs) {
-  const dir = join("examples", entry.name);
-  const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
-  if (!pkg.scripts?.build) failures.push(`${dir}: missing build script`);
-  if (!pkg.scripts?.test) failures.push(`${dir}: missing test script`);
-  if (!pkg.engines || pkg.engines.node !== ">=22.12.0")
-    failures.push(`${dir}: engine mismatch`);
-  for (const script of ["build", "test"]) {
-    const result = spawnSync("pnpm", ["--dir", dir, script], {
-      stdio: "inherit",
-    });
-    if (result.status !== 0) failures.push(`${dir}: pnpm ${script} failed`);
-  }
-}
+await verifyBuildableProjects("examples");
+await verifyBuildableProjects("templates");
 
 for (const root of ["examples", "templates"]) {
   const entries = (await readdir(root, { withFileTypes: true })).filter(
@@ -99,5 +84,25 @@ async function requireFile(path) {
     await readFile(path, "utf8");
   } catch {
     failures.push(`${path}: missing required template file`);
+  }
+}
+
+async function verifyBuildableProjects(root) {
+  const dirs = (await readdir(root, { withFileTypes: true })).filter((entry) =>
+    entry.isDirectory(),
+  );
+  for (const entry of dirs) {
+    const dir = join(root, entry.name);
+    const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+    if (!pkg.scripts?.build) failures.push(`${dir}: missing build script`);
+    if (!pkg.scripts?.test) failures.push(`${dir}: missing test script`);
+    if (!pkg.engines || pkg.engines.node !== ">=22.12.0")
+      failures.push(`${dir}: engine mismatch`);
+    for (const script of ["build", "test"]) {
+      const result = spawnSync("pnpm", ["--dir", dir, script], {
+        stdio: "inherit",
+      });
+      if (result.status !== 0) failures.push(`${dir}: pnpm ${script} failed`);
+    }
   }
 }
