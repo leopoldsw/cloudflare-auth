@@ -15,9 +15,11 @@ for (const dir of packageDirs) {
 
 const failures = [];
 await requireFile(".github/dependabot.yml");
+await requireFile(".github/workflows/ci.yml");
 await requireFile(".github/workflows/codeql.yml");
 await requireFile(".github/workflows/cloudflare-production-smoke.yml");
 await requireFile(".github/workflows/dependency-review.yml");
+await requireFile(".github/workflows/examples.yml");
 await requireFile(".github/workflows/published-quickstart-smoke.yml");
 await requireFile(".github/workflows/wrangler-dev-smoke.yml");
 await requireFile(".github/ISSUE_TEMPLATE/alpha-feedback.yml");
