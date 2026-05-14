@@ -63,44 +63,6 @@ for (const entrypoint of packageEntrypoints) {
   requireText("docs/api.md", docs.api, entrypoint);
 }
 
-for (const symbol of [
-  "runCli",
-  "createAuthClient",
-  "AuthClientError",
-  "normalizeEmail",
-  "validateRedirectTarget",
-  "parseAuthKeyRing",
-  "hashPassword",
-  "resolveSessionCookie",
-  "defineAuthConfig",
-  "createAuthHandler",
-  "getSession",
-  "getUser",
-  "requireUser",
-  "requireVerifiedUser",
-  "getAuthSessionFromRequest",
-  "createD1Repositories",
-  "cleanCfAuth",
-  "terminalEmail",
-  "byEnvironment",
-  "verifyTurnstileToken",
-  "turnstileEndpointNames",
-  "cloudflareRateLimitPrefilter",
-  "redactLogValue",
-  "createAuthRoutes",
-  "getAuthUser",
-  "optionalUser",
-  "cloudflareEmail",
-  "defaultMagicLinkTemplate",
-  "defaultEmailVerificationTemplate",
-  "defaultPasswordResetTemplate",
-  "createSqliteD1Database",
-  "applyD1Migrations",
-  "createMockEmailAdapter",
-]) {
-  requireText("docs/api.md", docs.api, symbol);
-}
-
 const rootExports = await rootExportNames();
 for (const exportName of rootExports) {
   requireText("docs/api.md", docs.api, exportName);

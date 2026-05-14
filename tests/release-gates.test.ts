@@ -138,6 +138,18 @@ describe("release gates", () => {
 
   it("runs public API docs coverage for root-export symbols", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "packages/cli/src/index.ts",
+      "async function runCli",
+      "export function hashPassword() {}\nasync function runCli",
+    );
+    await replaceFixtureText(
+      root,
+      "docs/api-report.md",
+      "Public API Report",
+      "Public API Report\nhashPassword",
+    );
     const docsPath = join(root, "docs", "api.md");
     const docs = await readFile(docsPath, "utf8");
     await writeFile(docsPath, docs.replace("hashPassword", "hash_password"));
