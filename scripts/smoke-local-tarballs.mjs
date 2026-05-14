@@ -18,9 +18,11 @@ const root = process.cwd();
 const temp = await mkdtemp(join(tmpdir(), "cf-auth-tarball-smoke-"));
 const packDir = join(temp, "packs");
 const stagedDir = join(temp, "staged");
+const createRunnerDir = join(temp, "create-runner");
 const appDir = join(temp, "app");
 await mkdir(packDir, { recursive: true });
 await mkdir(stagedDir, { recursive: true });
+await mkdir(createRunnerDir, { recursive: true });
 
 const tarballs = new Map();
 for (const dir of packageDirs) {
@@ -38,8 +40,36 @@ for (const dir of packageDirs) {
   tarballs.set(pack.name, pack.filename);
 }
 
-run("node", [
-  join(root, "packages", "create-cloudflare-auth", "dist", "bin.js"),
+await writeFile(
+  join(createRunnerDir, "package.json"),
+  JSON.stringify(
+    {
+      name: "cf-auth-create-runner",
+      private: true,
+      devDependencies: {
+        "create-cloudflare-auth": fileSpec("create-cloudflare-auth"),
+      },
+      pnpm: {
+        onlyBuiltDependencies: ["esbuild", "sharp", "workerd"],
+      },
+    },
+    null,
+    2,
+  ) + "\n",
+);
+await writePnpmBuildPolicy(createRunnerDir);
+run("pnpm", [
+  "--dir",
+  createRunnerDir,
+  "install",
+  "--prefer-offline",
+  "--no-frozen-lockfile",
+]);
+run("pnpm", [
+  "--dir",
+  createRunnerDir,
+  "exec",
+  "create-cloudflare-auth",
   appDir,
   "--yes",
 ]);
@@ -111,6 +141,13 @@ async function rewriteWorkspaceDependencies(packageDir) {
     }
   }
   await writeFile(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+async function writePnpmBuildPolicy(dir) {
+  await writeFile(
+    join(dir, "pnpm-workspace.yaml"),
+    "allowBuilds:\n  esbuild: true\n  sharp: true\n  workerd: true\n",
+  );
 }
 
 function run(command, args, options = {}) {
