@@ -110,6 +110,7 @@ for (const dir of packageDirs) {
 }
 
 await verifyPackageNamingDocs();
+await verifyCiControls();
 await verifyReleaseControls();
 
 if (failures.length) {
@@ -282,6 +283,34 @@ async function verifyReleaseControls() {
         failures.push(`${file}: missing ${needle}`);
       }
     }
+  }
+}
+
+async function verifyCiControls() {
+  const ciWorkflow = await readFile(".github/workflows/ci.yml", "utf8");
+  for (const needle of [
+    "pnpm install --frozen-lockfile",
+    "pnpm format:check",
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm test",
+    "pnpm build",
+    "pnpm package:check",
+    "pnpm version-matrix:check",
+  ]) {
+    if (!ciWorkflow.includes(needle)) {
+      failures.push(`.github/workflows/ci.yml: missing ${needle}`);
+    }
+  }
+
+  const examplesWorkflow = await readFile(
+    ".github/workflows/examples.yml",
+    "utf8",
+  );
+  if (!examplesWorkflow.includes("pnpm verify:examples")) {
+    failures.push(
+      ".github/workflows/examples.yml: missing pnpm verify:examples",
+    );
   }
 }
 
