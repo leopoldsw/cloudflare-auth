@@ -249,6 +249,17 @@ describe("auth HTTP runtime", () => {
       body: JSON.stringify({ token: magicToken }),
     });
     expect(magicConsume.status).toBe(404);
+    const magicRequest = await magic.authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "disabled-magic@example.com" }),
+    });
+    expect(magicRequest.status).toBe(404);
+    await expect(authRowCounts(magic.db)).resolves.toEqual({
+      events: 0,
+      rateLimits: 0,
+      tokens: 0,
+    });
 
     const verify = await setup({
       emailVerification: {
@@ -263,6 +274,23 @@ describe("auth HTTP runtime", () => {
       `/auth/email/verify?token=${verifyToken}`,
     );
     expect(verifyPage.status).toBe(404);
+    const verifyConsume = await verify.authFetch("/auth/email/verify/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: verifyToken }),
+    });
+    expect(verifyConsume.status).toBe(404);
+    const verifyRequest = await verify.authFetch("/auth/email/verify/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "disabled-verify@example.com" }),
+    });
+    expect(verifyRequest.status).toBe(404);
+    await expect(authRowCounts(verify.db)).resolves.toEqual({
+      events: 0,
+      rateLimits: 0,
+      tokens: 0,
+    });
 
     const reset = await setup({
       passwordReset: {
@@ -279,6 +307,29 @@ describe("auth HTTP runtime", () => {
       `/auth/password/reset?token=${resetToken}`,
     );
     expect(resetPageResponse.status).toBe(404);
+    const resetConfirm = await reset.authFetch(
+      "/auth/password/reset/confirm",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: resetToken,
+          password: "new correct horse battery staple",
+        }),
+      },
+    );
+    expect(resetConfirm.status).toBe(404);
+    const resetRequest = await reset.authFetch("/auth/password/reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "disabled-reset@example.com" }),
+    });
+    expect(resetRequest.status).toBe(404);
+    await expect(authRowCounts(reset.db)).resolves.toEqual({
+      events: 0,
+      rateLimits: 0,
+      tokens: 0,
+    });
   });
 
   it("signs up, reads current user, logs out, and logs in", async () => {
@@ -1278,4 +1329,19 @@ async function tokenCounts(db: D1Database) {
     "magic_link" | "email_verification" | "password_reset",
     { active: number; revoked: number }
   >;
+}
+
+async function authRowCounts(db: D1Database) {
+  const [tokens, rateLimits, events] = await Promise.all([
+    db
+      .prepare("SELECT count(*) AS count FROM verification_tokens")
+      .first<number>("count"),
+    db.prepare("SELECT count(*) AS count FROM rate_limits").first<number>(
+      "count",
+    ),
+    db.prepare("SELECT count(*) AS count FROM auth_events").first<number>(
+      "count",
+    ),
+  ]);
+  return { tokens, rateLimits, events };
 }
