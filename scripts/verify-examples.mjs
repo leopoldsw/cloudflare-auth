@@ -2,8 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const rootPackage = JSON.parse(await readFile("package.json", "utf8"));
-const currentVersion = rootPackage.version;
+const packageVersions = await readPackageVersions();
 const rootMigrations = new Map(
   await Promise.all(
     ["0001_initial.sql", "0002_indexes.sql"].map(async (file) => [
@@ -30,9 +29,15 @@ for (const root of ["examples", "templates"]) {
         if (String(version).startsWith("workspace:")) {
           failures.push(`${dir}: ${section}.${name} still uses ${version}`);
         }
-        if (name.startsWith("@cf-auth/") && version !== currentVersion) {
+        const expectedVersion = packageVersions.get(name);
+        if (name.startsWith("@cf-auth/") && !expectedVersion) {
           failures.push(
-            `${dir}: ${section}.${name} renders ${version}, expected ${currentVersion}`,
+            `${dir}: ${section}.${name} is not a workspace package`,
+          );
+        }
+        if (expectedVersion && version !== expectedVersion) {
+          failures.push(
+            `${dir}: ${section}.${name} renders ${version}, expected ${expectedVersion}`,
           );
         }
       }
@@ -72,11 +77,25 @@ function renderDependencySection(section) {
   return Object.fromEntries(
     Object.entries(section).map(([name, version]) => [
       name,
-      name.startsWith("@cf-auth/") && version === "workspace:*"
-        ? currentVersion
+      packageVersions.has(name) && version === "workspace:*"
+        ? packageVersions.get(name)
         : version,
     ]),
   );
+}
+
+async function readPackageVersions() {
+  const entries = (await readdir("packages", { withFileTypes: true })).filter(
+    (entry) => entry.isDirectory(),
+  );
+  const versions = new Map();
+  for (const entry of entries) {
+    const pkg = JSON.parse(
+      await readFile(join("packages", entry.name, "package.json"), "utf8"),
+    );
+    if (!pkg.private) versions.set(pkg.name, pkg.version);
+  }
+  return versions;
 }
 
 async function requireFile(path) {
