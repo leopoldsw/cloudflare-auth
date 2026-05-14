@@ -21,7 +21,11 @@ export async function readReleasePackageState() {
       failures.push(`${path}: top-level JSON value must be an object`);
       continue;
     }
-    if (!pkg.private && typeof pkg.version === "string") {
+    if (!pkg.private) {
+      if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+        failures.push(`${path}: version must be a non-empty string`);
+        continue;
+      }
       versions.push(pkg.version);
     }
   }
