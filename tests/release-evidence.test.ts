@@ -93,6 +93,23 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("cf-auth deploy --env production");
   });
 
+  it("rejects beta evidence that uses a non-beta package tag", async () => {
+    const evidence = validBetaEvidence();
+    evidence.publishedQuickstart.packageTag = "latest";
+    evidence.manualQuickstart.packageTag = "latest";
+    evidence.productionSmoke.packageTag = "latest";
+    const path = await writeEvidence("beta-latest-tag", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("publishedQuickstart.packageTag");
+    expect(result.stderr).toContain("manualQuickstart.packageTag");
+    expect(result.stderr).toContain("productionSmoke.packageTag");
+  });
+
   it("accepts deploy button evidence for the documented template path", async () => {
     const path = await writeEvidence(
       "deploy-button",

@@ -65,7 +65,7 @@ function validatePublishedQuickstart(value) {
   requireObject(value, path);
   if (!value) return;
   requireUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
-  requireString(value.packageTag, `${path}.packageTag`);
+  requireBetaPackageTag(value.packageTag, `${path}.packageTag`);
   if (value.passed !== true)
     failures.push(`${evidencePath}: ${path}.passed must be true`);
   for (const field of [
@@ -86,7 +86,7 @@ function validateManualQuickstart(value) {
   if (!value) return;
   requireString(value.maintainer, `${path}.maintainer`);
   requireDate(value.completedAt, `${path}.completedAt`);
-  requireString(value.packageTag, `${path}.packageTag`);
+  requireBetaPackageTag(value.packageTag, `${path}.packageTag`);
   for (const field of [
     "cleanDirectory",
     "documentedCommandsOnly",
@@ -103,7 +103,7 @@ function validateProductionSmoke(value) {
   requireObject(value, path);
   if (!value) return;
   requireUrl(value.workflowRunUrl, `${path}.workflowRunUrl`);
-  requireString(value.packageTag, `${path}.packageTag`);
+  requireBetaPackageTag(value.packageTag, `${path}.packageTag`);
   requireOrigin(value.origin, `${path}.origin`);
   if (value.passed !== true)
     failures.push(`${evidencePath}: ${path}.passed must be true`);
@@ -177,6 +177,15 @@ function requireString(value, path) {
   if (typeof value !== "string" || value.length === 0) {
     failures.push(`${evidencePath}: ${path} must be a non-empty string`);
   }
+}
+
+function requireBetaPackageTag(value, path) {
+  requireString(value, path);
+  if (typeof value !== "string") return;
+  if (value === "beta" || /^\d+\.\d+\.\d+-beta(?:[.-].*)?$/u.test(value)) {
+    return;
+  }
+  failures.push(`${evidencePath}: ${path} must be beta or a beta prerelease`);
 }
 
 function requireDate(value, path) {
