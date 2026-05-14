@@ -1,9 +1,18 @@
+import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      miniflare: {
+        compatibilityDate: "2026-05-13",
+        compatibilityFlags: ["nodejs_compat"],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       "@cf-auth/client": `${root}packages/client/src/index.ts`,
@@ -18,14 +27,6 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["packages/**/*.test.ts", "tests/**/*.test.ts"],
-    exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/.{idea,git,cache,output,temp}/**",
-      "tests/workers-runtime.test.ts",
-    ],
-    environment: "node",
-    globals: true,
+    include: ["tests/workers-runtime.test.ts"],
   },
 });

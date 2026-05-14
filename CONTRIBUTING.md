@@ -12,6 +12,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:workers
 pnpm build
 ```
 

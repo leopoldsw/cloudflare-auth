@@ -15,6 +15,7 @@
     "lint": "node scripts/lint.mjs",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "test": "vitest run",
+    "test:workers": "vitest run -c vitest.workers.config.ts",
     "build": "pnpm -r --filter './packages/**' --sort --workspace-concurrency=1 build",
     "package:check": "node scripts/package-check.mjs",
     "version-matrix:check": "node scripts/version-matrix-check.mjs",
