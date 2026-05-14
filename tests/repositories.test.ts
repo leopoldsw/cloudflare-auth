@@ -358,6 +358,44 @@ describe("D1 migrations and repositories", () => {
         expiresAt: 1_000,
       }),
     ).rejects.toBeInstanceOf(AuthRepositoryError);
+    await expect(
+      repos.verificationTokens.createVerificationToken({
+        id: "vtok_magic_no_subject",
+        type: "magic_link",
+        tokenHash: magicHash,
+        createdAt: 100,
+        expiresAt: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_token_subject" });
+    await expect(
+      repos.verificationTokens.createVerificationToken({
+        id: "vtok_magic_two_subjects",
+        userId: "usr_subject",
+        normalizedEmail: "person@example.com",
+        type: "magic_link",
+        tokenHash: magicHash,
+        createdAt: 100,
+        expiresAt: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_token_subject" });
+    await expect(
+      db
+        .prepare(
+          `INSERT INTO verification_tokens (
+            id, user_id, normalized_email, token_hash, type, created_at, expires_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          "vtok_schema_bad_subject",
+          null,
+          "person@example.com",
+          verifyHash,
+          "email_verification",
+          100,
+          1_000,
+        )
+        .run(),
+    ).rejects.toThrow();
 
     await repos.verificationTokens.createVerificationToken({
       id: "vtok_reset",
