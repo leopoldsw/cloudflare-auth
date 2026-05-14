@@ -58,6 +58,8 @@ Run `npx cf-auth@latest doctor --report --env production` when you need redactio
 
 Cloudflare Auth stores only HMAC-hashed session and email tokens, uses versioned password hash envelopes, validates redirect targets before token creation, consumes magic and verification links only on `POST`, uses D1 rate limits with opaque derived keys, and keeps request-origin and redirect-origin allowlists separate.
 
+Operational event queries are documented in [docs/metrics.md](docs/metrics.md). Event rows use HMACed IP and user-agent values and do not store raw identifiers, tokens, cookies, or passwords.
+
 ## Supported Frameworks
 
 The v1 surface supports Hono and plain Cloudflare Workers. The browser client SDK is framework-agnostic.

@@ -509,6 +509,66 @@ describe("auth HTTP runtime", () => {
     expect(JSON.stringify(rows.results)).not.toContain("raw@example.com");
   });
 
+  it("writes redacted auth events for core auth outcomes", async () => {
+    const { authFetch, db } = await setup();
+    const headers = {
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": "203.0.113.9",
+      "User-Agent": "Secret Test Browser",
+    };
+    await authFetch("/auth/signup", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email: "events@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    const failed = await authFetch("/auth/login", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        identifier: "events@example.com",
+        password: "wrong horse battery staple",
+      }),
+    });
+    expect(failed.status).toBe(401);
+    const ok = await authFetch("/auth/login", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        identifier: "events@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(ok.status).toBe(200);
+
+    const events = await db
+      .prepare(
+        "SELECT event_type, ip_hash, user_agent_hash, metadata_json FROM auth_events ORDER BY created_at",
+      )
+      .all<{
+        event_type: string;
+        ip_hash: string | null;
+        user_agent_hash: string | null;
+        metadata_json: string;
+      }>();
+    expect(events.results?.map((row) => row.event_type)).toEqual(
+      expect.arrayContaining([
+        "signup_success",
+        "password_login_failed",
+        "password_login_success",
+      ]),
+    );
+    for (const event of events.results ?? []) {
+      expect(event.ip_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(event.user_agent_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(JSON.stringify(event)).not.toMatch(
+        /events@example\.com|203\.0\.113\.9|Secret Test Browser|correct horse|wrong horse/,
+      );
+    }
+  });
+
   it("supports enumeration-safe signup without setting a session", async () => {
     const { authFetch } = await setup({
       signup: {

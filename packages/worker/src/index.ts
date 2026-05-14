@@ -21,6 +21,8 @@ import {
   assertValidSessionCookieName,
   assertVerificationTokenSubject,
   canonicalizeIp,
+  canonicalizeUserAgent,
+  deriveEventHash,
   deriveRateLimitKey,
   dummyVerifyPassword,
   generateRawAuthToken,
@@ -1168,9 +1170,20 @@ async function handleSignup(
       createdAt: now,
     });
   } catch (error) {
+    queueAuthEvent(runtime, request, "signup_failed", {
+      metadata: { reason: "create_user_failed" },
+    });
     if (runtime.config.signup.enumerationSafe) return json({ ok: true });
     throw error;
   }
+  queueAuthEvent(runtime, request, "signup_success", {
+    userId: user.id,
+    metadata: {
+      sessionCreated:
+        !runtime.config.signup.requireEmailVerificationBeforeSession &&
+        !runtime.config.signup.enumerationSafe,
+    },
+  });
   if (runtime.config.emailVerification.enabled)
     await sendVerificationEmail(user, runtime, null);
   if (
@@ -1230,6 +1243,12 @@ async function handleLogin(
         profile: runtime.config.passwordHashing.profile,
       }),
     );
+    queueAuthEvent(runtime, request, "dummy_password_verification", {
+      metadata: { subjectType: isEmail ? "email" : "identifier" },
+    });
+    queueAuthEvent(runtime, request, "password_login_failed", {
+      metadata: { reason: "invalid_identifier" },
+    });
     return errorResponse("Invalid credentials", 401, "invalid_credentials");
   }
   if (!user?.password_hash) {
@@ -1238,24 +1257,52 @@ async function handleLogin(
         profile: runtime.config.passwordHashing.profile,
       }),
     );
+    queueAuthEvent(runtime, request, "dummy_password_verification", {
+      metadata: {
+        subjectType: isEmail ? "email" : "identifier",
+        userPresent: Boolean(user),
+      },
+    });
+    queueAuthEvent(runtime, request, "password_login_failed", {
+      userId: user?.id ?? null,
+      metadata: { reason: user ? "password_not_set" : "user_not_found" },
+    });
     return errorResponse("Invalid credentials", 401, "invalid_credentials");
   }
   const ok = await passwordSemaphore(runtime).run(() =>
     verifyPassword(body.password, user.password_hash ?? ""),
   );
-  if (!ok)
+  if (!ok) {
+    queueAuthEvent(runtime, request, "password_login_failed", {
+      userId: user.id,
+      metadata: { reason: "invalid_password" },
+    });
     return errorResponse("Invalid credentials", 401, "invalid_credentials");
-  if (user.disabled_at !== null)
+  }
+  if (user.disabled_at !== null) {
+    queueAuthEvent(runtime, request, "disabled_user_auth_attempt", {
+      userId: user.id,
+      metadata: { flow: "password_login" },
+    });
     return errorResponse("Account disabled", 403, "account_disabled");
+  }
   if (
     runtime.config.login.requireVerifiedEmail &&
     user.email_verified_at === null
-  )
+  ) {
+    queueAuthEvent(runtime, request, "password_login_failed", {
+      userId: user.id,
+      metadata: { reason: "email_unverified" },
+    });
     return errorResponse(
       "Email verification required",
       403,
       "email_verification_required",
     );
+  }
+  queueAuthEvent(runtime, request, "password_login_success", {
+    userId: user.id,
+  });
   return jsonWithSession({ user: publicUser(user) }, runtime, user, Date.now());
 }
 
@@ -1264,8 +1311,13 @@ async function handleLogout(
   runtime: RuntimeContext,
 ): Promise<Response> {
   const session = await getSession(request, runtime);
-  if (session)
+  if (session) {
     await runtime.repos.sessions.revokeSession(session.id, Date.now());
+    queueAuthEvent(runtime, request, "session_revoked", {
+      userId: session.user_id,
+      metadata: { reason: "logout" },
+    });
+  }
   return json({ ok: true }, 200, {
     "Set-Cookie": serializeClearSessionCookie(runtime.cookie),
   });
@@ -1312,6 +1364,10 @@ async function handleMagicLinkRequest(
   const user =
     await runtime.repos.users.findUserByNormalizedEmail(normalizedEmail);
   if (user && user.disabled_at === null) {
+    queueAuthEvent(runtime, request, "magic_link_request", {
+      userId: user.id,
+      metadata: { subject: "existing_user" },
+    });
     scheduleAuthTask(
       runtime,
       createAndSendToken(
@@ -1326,6 +1382,9 @@ async function handleMagicLinkRequest(
       ),
     );
   } else if (runtime.config.magicLink.allowSignups) {
+    queueAuthEvent(runtime, request, "magic_link_request", {
+      metadata: { subject: "jit_signup" },
+    });
     scheduleAuthTask(
       runtime,
       createAndSendToken(
@@ -1340,6 +1399,9 @@ async function handleMagicLinkRequest(
       ),
     );
   } else {
+    queueAuthEvent(runtime, request, "magic_link_request", {
+      metadata: { subject: "generic" },
+    });
     performDummyTokenWork(runtime, "magic", "magic_link");
   }
   return json({ ok: true });
@@ -1371,7 +1433,12 @@ async function handleMagicLinkConsume(
       consumedAt: Date.now(),
       now: Date.now(),
     });
-  if (!consumed) return errorResponse("Invalid token", 400, "invalid_token");
+  if (!consumed) {
+    queueAuthEvent(runtime, request, "magic_link_consume_failed", {
+      metadata: { reason: "invalid_or_replayed" },
+    });
+    return errorResponse("Invalid token", 400, "invalid_token");
+  }
   let user = consumed.user_id
     ? await runtime.repos.users.findUserById(consumed.user_id)
     : null;
@@ -1388,9 +1455,20 @@ async function handleMagicLinkConsume(
       createdAt: Date.now(),
     });
   }
-  if (!user || user.disabled_at !== null)
+  if (!user || user.disabled_at !== null) {
+    queueAuthEvent(runtime, request, "magic_link_consume_failed", {
+      userId: user?.id ?? null,
+      metadata: {
+        reason: user ? "disabled_user" : "user_missing",
+      },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   await runtime.repos.users.markEmailVerified(user.id, Date.now());
+  queueAuthEvent(runtime, request, "magic_link_consume_success", {
+    userId: user.id,
+    metadata: { jitSignup: !consumed.user_id },
+  });
   return sessionConsumeResponse(
     {
       user: publicUser(user),
@@ -1435,8 +1513,23 @@ async function handleEmailVerifyRequest(
   const user =
     await runtime.repos.users.findUserByNormalizedEmail(normalizedEmail);
   if (user && user.disabled_at === null && user.email_verified_at === null) {
+    queueAuthEvent(runtime, request, "email_verification_request", {
+      userId: user.id,
+      metadata: { subject: "existing_user" },
+    });
     scheduleAuthTask(runtime, sendVerificationEmail(user, runtime, redirectTo));
   } else {
+    queueAuthEvent(runtime, request, "email_verification_request", {
+      userId: user?.id ?? null,
+      metadata: {
+        subject:
+          user && user.disabled_at !== null
+            ? "disabled_user"
+            : user && user.email_verified_at !== null
+              ? "already_verified"
+              : "generic",
+      },
+    });
     performDummyTokenWork(runtime, "verify", "email_verification");
   }
   return json({ ok: true });
@@ -1479,16 +1572,39 @@ async function handleEmailVerifyConsume(
       consumedAt: Date.now(),
       now: Date.now(),
     });
-  if (!consumed?.user_id)
+  if (!consumed?.user_id) {
+    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
+      metadata: { reason: "invalid_or_replayed" },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   const userBeforeVerify = await runtime.repos.users.findUserById(
     consumed.user_id,
   );
-  if (!userBeforeVerify || userBeforeVerify.disabled_at !== null)
+  if (!userBeforeVerify || userBeforeVerify.disabled_at !== null) {
+    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
+      userId: userBeforeVerify?.id ?? null,
+      metadata: {
+        reason: userBeforeVerify ? "disabled_user" : "user_missing",
+      },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   await runtime.repos.users.markEmailVerified(consumed.user_id, Date.now());
   const user = await runtime.repos.users.findUserById(consumed.user_id);
-  if (!user) return errorResponse("Invalid token", 400, "invalid_token");
+  if (!user) {
+    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
+      metadata: { reason: "user_missing_after_verify" },
+    });
+    return errorResponse("Invalid token", 400, "invalid_token");
+  }
+  queueAuthEvent(runtime, request, "email_verification_consume_success", {
+    userId: user.id,
+    metadata: {
+      sessionCreated:
+        runtime.config.emailVerification.createSessionAfterVerification,
+    },
+  });
   const payload = {
     user: publicUser(user),
     redirectTo:
@@ -1527,6 +1643,10 @@ async function handlePasswordResetRequest(
   const user =
     await runtime.repos.users.findUserByNormalizedEmail(normalizedEmail);
   if (user && user.disabled_at === null) {
+    queueAuthEvent(runtime, request, "password_reset_request", {
+      userId: user.id,
+      metadata: { subject: "existing_user" },
+    });
     scheduleAuthTask(
       runtime,
       createAndSendToken(
@@ -1541,6 +1661,12 @@ async function handlePasswordResetRequest(
       ),
     );
   } else {
+    queueAuthEvent(runtime, request, "password_reset_request", {
+      userId: user?.id ?? null,
+      metadata: {
+        subject: user ? "disabled_user" : "generic",
+      },
+    });
     performDummyTokenWork(runtime, "reset", "password_reset");
   }
   return json({ ok: true });
@@ -1583,11 +1709,22 @@ async function handlePasswordResetConfirm(
       "password_reset",
       Date.now(),
     );
-  if (!active?.user_id)
+  if (!active?.user_id) {
+    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+      metadata: { reason: "invalid_or_expired" },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   const activeUser = await runtime.repos.users.findUserById(active.user_id);
-  if (!activeUser || activeUser.disabled_at !== null)
+  if (!activeUser || activeUser.disabled_at !== null) {
+    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+      userId: activeUser?.id ?? null,
+      metadata: {
+        reason: activeUser ? "disabled_user" : "user_missing",
+      },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   const passwordHash = await passwordSemaphore(runtime).run(() =>
     hashPassword(body.password, {
       profile: runtime.config.passwordHashing.profile,
@@ -1601,13 +1738,24 @@ async function handlePasswordResetConfirm(
       consumedAt: Date.now(),
       now: Date.now(),
     });
-  if (!consumed?.user_id)
+  if (!consumed?.user_id) {
+    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+      metadata: { reason: "invalid_or_replayed" },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   const userBeforeUpdate = await runtime.repos.users.findUserById(
     consumed.user_id,
   );
-  if (!userBeforeUpdate || userBeforeUpdate.disabled_at !== null)
+  if (!userBeforeUpdate || userBeforeUpdate.disabled_at !== null) {
+    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+      userId: userBeforeUpdate?.id ?? null,
+      metadata: {
+        reason: userBeforeUpdate ? "disabled_user" : "user_missing",
+      },
+    });
     return errorResponse("Invalid token", 400, "invalid_token");
+  }
   await runtime.repos.users.updatePasswordHash(
     consumed.user_id,
     passwordHash,
@@ -1615,13 +1763,29 @@ async function handlePasswordResetConfirm(
   );
   if (runtime.config.passwordReset.markEmailVerifiedOnReset)
     await runtime.repos.users.markEmailVerified(consumed.user_id, Date.now());
-  if (runtime.config.passwordReset.revokeExistingSessions)
+  if (runtime.config.passwordReset.revokeExistingSessions) {
     await runtime.repos.sessions.revokeAllUserSessions(
       consumed.user_id,
       Date.now(),
     );
+    queueAuthEvent(runtime, request, "session_revoked", {
+      userId: consumed.user_id,
+      metadata: { reason: "password_reset" },
+    });
+  }
   const user = await runtime.repos.users.findUserById(consumed.user_id);
-  if (!user) return errorResponse("Invalid token", 400, "invalid_token");
+  if (!user) {
+    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+      metadata: { reason: "user_missing_after_update" },
+    });
+    return errorResponse("Invalid token", 400, "invalid_token");
+  }
+  queueAuthEvent(runtime, request, "password_reset_confirm_success", {
+    userId: user.id,
+    metadata: {
+      sessionCreated: runtime.config.passwordReset.createSessionAfterReset,
+    },
+  });
   const payload = {
     user: publicUser(user),
     redirectTo:
@@ -1754,6 +1918,57 @@ async function recordEmailSendFailure(
   } catch (eventError) {
     runtime.logger.error("email_send_failed_event_write_failed", {
       errorName: eventError instanceof Error ? eventError.name : "UnknownError",
+    });
+  }
+}
+
+function queueAuthEvent(
+  runtime: RuntimeContext,
+  request: Request,
+  eventType: string,
+  options: {
+    userId?: string | null;
+    metadata?: Record<string, string | number | boolean | null>;
+  } = {},
+): void {
+  scheduleAuthTask(
+    runtime,
+    recordAuthEvent(runtime, request, eventType, options),
+  );
+}
+
+async function recordAuthEvent(
+  runtime: RuntimeContext,
+  request: Request,
+  eventType: string,
+  options: {
+    userId?: string | null;
+    metadata?: Record<string, string | number | boolean | null>;
+  },
+): Promise<void> {
+  try {
+    await runtime.repos.events.writeAuthEvent({
+      id: randomId("evt_"),
+      userId: options.userId ?? null,
+      eventType,
+      createdAt: Date.now(),
+      ipHash: deriveEventHash({
+        keyRing: runtime.keyRing,
+        purpose: "event-ip-hash",
+        value: canonicalizeIp(clientIp(request)),
+      }),
+      userAgentHash: deriveEventHash({
+        keyRing: runtime.keyRing,
+        purpose: "event-user-agent-hash",
+        value: canonicalizeUserAgent(request.headers.get("User-Agent")),
+      }),
+      requestId: runtime.requestId,
+      metadataJson: JSON.stringify(options.metadata ?? {}),
+    });
+  } catch (error) {
+    runtime.logger.error("auth_event_write_failed", {
+      eventType,
+      errorName: error instanceof Error ? error.name : "UnknownError",
     });
   }
 }
@@ -1926,11 +2141,15 @@ async function rateLimit(
     env: runtime.env,
     key: `${action}:${ipKey}`,
   });
-  if (!prefilterAllowed)
+  if (!prefilterAllowed) {
+    queueAuthEvent(runtime, request, "rate_limit_hit", {
+      metadata: { action, limiter: "cloudflare_prefilter" },
+    });
     throw new AuthCryptoError(
       "Too many attempts. Try again later.",
       "rate_limited",
     );
+  }
   const first = await runtime.repos.rateLimits.hitFixedWindow({
     action,
     key: ipKey,
@@ -1945,11 +2164,20 @@ async function rateLimit(
     limit,
     now: Date.now(),
   });
-  if (!first.allowed || !second.allowed)
+  if (!first.allowed || !second.allowed) {
+    queueAuthEvent(runtime, request, "rate_limit_hit", {
+      metadata: {
+        action,
+        limiter: "d1",
+        ipLimited: !first.allowed,
+        subjectLimited: !second.allowed,
+      },
+    });
     throw new AuthCryptoError(
       "Too many attempts. Try again later.",
       "rate_limited",
     );
+  }
 }
 
 function passwordSemaphore(runtime: RuntimeContext): PasswordHashSemaphore {

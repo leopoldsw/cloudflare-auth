@@ -21,6 +21,7 @@
 | Raw PII in logs, rate limits, and events | HMAC-derived keys and redacted metadata                                           | [crypto tests](../tests/crypto-password-session.test.ts), [security hardening tests](../tests/security-hardening.test.ts), [email tests](../tests/email.test.ts) |
 | Bot pressure                             | Optional Turnstile checks before account-specific branching                       | [security hardening tests](../tests/security-hardening.test.ts), [Turnstile docs](turnstile.md)                                                                  |
 | Edge floods                              | Optional Cloudflare rate-limit binding before D1 counters                         | [security hardening tests](../tests/security-hardening.test.ts), [rate limiting docs](rate-limiting.md)                                                          |
+| Operational blind spots                  | Redacted `auth_events` for core outcomes and aggregate event queries              | [routes tests](../tests/routes.test.ts), [metrics docs](metrics.md)                                                                                              |
 
 Known residual risks:
 
