@@ -187,7 +187,42 @@ describe("generated auth app", () => {
       ctx,
     );
     expect(login.status).toBe(200);
-    expect(login.headers.get("Set-Cookie") ?? "").toContain("cfauth-session=");
+    const loginCookie = login.headers.get("Set-Cookie") ?? "";
+    expect(loginCookie).toContain("cfauth-session=");
+    const cookie = loginCookie.split(";")[0];
+
+    const user = await app.fetch(
+      new Request("http://localhost:8787/auth/user", {
+        headers: { Cookie: cookie },
+      }),
+      env,
+      ctx,
+    );
+    expect(user.status).toBe(200);
+    await expect(user.json()).resolves.toMatchObject({
+      user: { email: "smoke@example.com" },
+    });
+
+    const logout = await app.fetch(
+      new Request("http://localhost:8787/auth/logout", {
+        method: "POST",
+        headers: { Cookie: cookie, Origin: "http://localhost:8787" },
+      }),
+      env,
+      ctx,
+    );
+    expect(logout.status).toBe(200);
+    expect(logout.headers.get("Set-Cookie") ?? "").toContain("Max-Age=0");
+
+    const userAfterLogout = await app.fetch(
+      new Request("http://localhost:8787/auth/user", {
+        headers: { Cookie: cookie },
+      }),
+      env,
+      ctx,
+    );
+    expect(userAfterLogout.status).toBe(200);
+    await expect(userAfterLogout.json()).resolves.toEqual({ user: null });
   });
 });
 `;

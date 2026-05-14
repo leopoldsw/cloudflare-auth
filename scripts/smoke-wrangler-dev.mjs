@@ -123,9 +123,11 @@ async function waitForHttp(originUrl) {
 }
 
 async function exerciseAuth(originUrl) {
+  const email = "smoke@example.com";
+  const password = "correct horse battery staple";
   const signup = await jsonPost(`${originUrl}/auth/signup`, {
-    email: "smoke@example.com",
-    password: "correct horse battery staple",
+    email,
+    password,
   });
   if (signup.status !== 200) {
     throw new Error(`signup failed: ${signup.status} ${await signup.text()}`);
@@ -136,8 +138,8 @@ async function exerciseAuth(originUrl) {
   }
 
   const login = await jsonPost(`${originUrl}/auth/login`, {
-    identifier: "smoke@example.com",
-    password: "correct horse battery staple",
+    identifier: email,
+    password,
   });
   if (login.status !== 200) {
     throw new Error(`login failed: ${login.status} ${await login.text()}`);
@@ -145,6 +147,51 @@ async function exerciseAuth(originUrl) {
   const loginCookie = login.headers.get("Set-Cookie") ?? "";
   if (!loginCookie.includes("cfauth-session=")) {
     throw new Error("login did not set a session cookie");
+  }
+  const cookie = loginCookie.split(";")[0];
+
+  const user = await fetch(`${originUrl}/auth/user`, {
+    headers: {
+      Cookie: cookie,
+    },
+  });
+  if (user.status !== 200) {
+    throw new Error(
+      `user endpoint failed: ${user.status} ${await user.text()}`,
+    );
+  }
+  const body = await user.json();
+  if (body?.user?.email !== email) {
+    throw new Error("user endpoint did not return the smoke user");
+  }
+
+  const logout = await fetch(`${originUrl}/auth/logout`, {
+    method: "POST",
+    headers: {
+      Cookie: cookie,
+      Origin: originUrl,
+    },
+  });
+  if (logout.status !== 200) {
+    throw new Error(`logout failed: ${logout.status} ${await logout.text()}`);
+  }
+  if (!(logout.headers.get("Set-Cookie") ?? "").includes("Max-Age=0")) {
+    throw new Error("logout did not clear the session cookie");
+  }
+
+  const userAfterLogout = await fetch(`${originUrl}/auth/user`, {
+    headers: {
+      Cookie: cookie,
+    },
+  });
+  if (userAfterLogout.status !== 200) {
+    throw new Error(
+      `user endpoint after logout failed: ${userAfterLogout.status} ${await userAfterLogout.text()}`,
+    );
+  }
+  const bodyAfterLogout = await userAfterLogout.json();
+  if (bodyAfterLogout?.user !== null) {
+    throw new Error("user endpoint still returned a user after logout");
   }
 }
 
