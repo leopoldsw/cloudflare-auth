@@ -2068,6 +2068,7 @@ async function handleSignup(
     3,
     60 * 60 * 1000,
     request,
+    { ipLimit: 5 },
   );
   const passwordHash = await passwordSemaphore(runtime).run(() =>
     hashPassword(body.password, {
@@ -3285,6 +3286,7 @@ async function rateLimit(
   limit: number,
   windowMs: number,
   request: Request,
+  options: { ipLimit?: number } = {},
 ): Promise<void> {
   const ipKey = deriveRateLimitKey({
     keyRing: runtime.keyRing,
@@ -3315,7 +3317,8 @@ async function rateLimit(
     action,
     key: ipKey,
     windowMs,
-    limit: subjectType === "ip" ? limit : Math.max(limit, 10),
+    limit:
+      subjectType === "ip" ? limit : (options.ipLimit ?? Math.max(limit, 10)),
     now: Date.now(),
   });
   const subjectHit =

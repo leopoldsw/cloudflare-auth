@@ -1307,6 +1307,47 @@ describe("auth HTTP runtime", () => {
     });
   });
 
+  it("enforces the default signup IP limit across different emails", async () => {
+    const { authFetch, db } = await setup();
+    const headers = {
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": "203.0.113.55",
+    };
+    for (let i = 0; i < 5; i += 1) {
+      const response = await authFetch("/auth/signup", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          email: `signup-ip-${i}@example.com`,
+          password: "correct horse battery staple",
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const limited = await authFetch("/auth/signup", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email: "signup-ip-limited@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(limited.status).toBe(429);
+    await expect(limited.json()).resolves.toMatchObject({
+      error: { code: "rate_limited" },
+    });
+    const rows = await db
+      .prepare(
+        "SELECT key, count FROM rate_limits WHERE action = 'signup' ORDER BY count DESC",
+      )
+      .all<{ key: string; count: number }>();
+    expect(rows.results?.[0]?.count).toBe(6);
+    expect(JSON.stringify(rows.results)).not.toMatch(
+      /signup-ip|203\.0\.113\.55/,
+    );
+  });
+
   it("rejects unsafe redirects, oversized bodies, missing production origins, and disallowed preflights", async () => {
     const limited = await setup({
       request: { maxBodyBytes: 8, requireOriginOnUnsafeMethods: true },
