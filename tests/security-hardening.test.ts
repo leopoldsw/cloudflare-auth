@@ -238,7 +238,7 @@ describe("security hardening helpers", () => {
         endpoints: ["magic_link_request"],
         verify: async ({ token }) => {
           throw new Error(
-            `verifier failed token=${token} identifier=raw-identifier username=raw-user email=person@example.com remoteIp=203.0.113.9 userAgent="Mozilla/5.0 Secret Browser" AUTH_SECRET=k1.${secretMaterial}`,
+            `verifier failed token=${token} identifier=raw-identifier username=raw-user email=person@example.com remoteIp=2001:db8::1 userAgent="Mozilla/5.0 Secret Browser" AUTH_SECRET=k1.${secretMaterial}`,
           );
         },
       },
@@ -264,7 +264,7 @@ describe("security hardening helpers", () => {
     expect(body).not.toContain("raw-identifier");
     expect(body).not.toContain("raw-user");
     expect(body).not.toContain("person@example.com");
-    expect(body).not.toContain("203.0.113.9");
+    expect(body).not.toContain("2001:db8::1");
     expect(body).not.toContain("Secret Browser");
     expect(body).not.toContain(secretMaterial);
     expect(body).toContain("[REDACTED_IP]");
@@ -369,7 +369,7 @@ describe("security hardening helpers", () => {
       email: "person@example.com",
       identifier: "raw-identifier",
       normalized_username: "raw-user",
-      remoteIp: "203.0.113.9",
+      remoteIp: "2001:db8::1",
       userAgent: "Mozilla/5.0 Secret Browser",
       raw_token: rawToken,
       token_hash: tokenHash,
@@ -401,7 +401,7 @@ describe("security hardening helpers", () => {
     expect(redacted).not.toContain("raw-user");
     expect(redacted).not.toContain("correct horse battery staple");
     expect(redacted).not.toContain("person@example.com");
-    expect(redacted).not.toContain("203.0.113.9");
+    expect(redacted).not.toContain("2001:db8::1");
     expect(redacted).not.toContain("Secret Browser");
     expect(redacted).toContain("[REDACTED_IP]");
     expect(redacted).toContain("[REDACTED_TOKEN_HASH]");

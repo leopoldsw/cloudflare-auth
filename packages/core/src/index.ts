@@ -9,7 +9,7 @@ import { isIP } from "node:net";
 export const corePackageName = "@cf-auth/core";
 
 export function redactLogValue(value: string): string {
-  return value
+  const redacted = value
     .replace(
       /("[A-Za-z0-9_-]*(?:password(?:[_-]?hash)?|secret(?:[_-]?material)?|cookie|authorization|api[_-]?key|auth[_-]?token|session[_-]?token|(?:raw[_-]?)?token(?:[_-]?hash)?|(?:normalized[_-]?)?email|(?:normalized[_-]?)?identifier|(?:normalized[_-]?)?username|user[_-]?agent)"\s*:\s*)"[^"]*"/giu,
       '$1"[REDACTED]"',
@@ -43,8 +43,27 @@ export function redactLogValue(value: string): string {
       /cfauth\.(ses|magic|verify|reset)\.[A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43}/gu,
       "[REDACTED_TOKEN]",
     )
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[REDACTED_EMAIL]")
-    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, "[REDACTED_IP]");
+    .replace(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu,
+      "[REDACTED_EMAIL]",
+    );
+  return redactIpLiterals(redacted);
+}
+
+function redactIpLiterals(value: string): string {
+  return value
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, "[REDACTED_IP]")
+    .replace(
+      /\[?(?:[A-Fa-f0-9]{0,4}:){2,}[A-Fa-f0-9:.%]+\]?/gu,
+      (candidate) => {
+        const unwrapped =
+          candidate.startsWith("[") && candidate.endsWith("]")
+            ? candidate.slice(1, -1)
+            : candidate;
+        const withoutZone = unwrapped.split("%", 1)[0] ?? unwrapped;
+        return isIP(withoutZone) === 6 ? "[REDACTED_IP]" : candidate;
+      },
+    );
 }
 
 export type VerificationTokenType =
