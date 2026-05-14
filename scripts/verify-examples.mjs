@@ -2,10 +2,12 @@ import { spawnSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { isJsonObject } from "./evidence-validation.mjs";
+
+const failures = [];
 const packageVersions = await readPackageVersions();
-const versionMatrix = JSON.parse(
-  await readFile("scripts/version-matrix.json", "utf8"),
-);
+const versionMatrix = await readJsonObject("scripts/version-matrix.json");
+if (!versionMatrix) fail();
 const rootMigrations = new Map(
   await Promise.all(
     ["0001_initial.sql", "0002_indexes.sql"].map(async (file) => [
@@ -14,7 +16,8 @@ const rootMigrations = new Map(
     ]),
   ),
 );
-const failures = [];
+
+if (failures.length) fail();
 
 await verifyBuildableProjects("examples");
 await verifyBuildableProjects("templates");
@@ -25,11 +28,14 @@ for (const root of ["examples", "templates"]) {
   );
   for (const entry of entries) {
     const dir = join(root, entry.name);
-    const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+    const pkg = await readJsonObject(join(dir, "package.json"));
+    if (!pkg) continue;
     verifyProjectToolchain(dir, pkg);
-    const wrangler = parseJsonc(
+    const wrangler = parseJsoncObject(
       await readFile(join(dir, "wrangler.jsonc"), "utf8"),
+      join(dir, "wrangler.jsonc"),
     );
+    if (!wrangler) continue;
     verifyWranglerToolchain(dir, wrangler);
     verifyWranglerD1Binding(
       dir,
@@ -75,8 +81,7 @@ for (const template of ["hono-basic", "worker-basic", "react-vite-worker"]) {
 }
 
 if (failures.length) {
-  console.error(failures.join("\n"));
-  process.exit(1);
+  fail();
 }
 
 function renderPublishedManifest(pkg) {
@@ -105,9 +110,10 @@ async function readPackageVersions() {
   );
   const versions = new Map();
   for (const entry of entries) {
-    const pkg = JSON.parse(
-      await readFile(join("packages", entry.name, "package.json"), "utf8"),
+    const pkg = await readJsonObject(
+      join("packages", entry.name, "package.json"),
     );
+    if (!pkg) continue;
     if (!pkg.private) versions.set(pkg.name, pkg.version);
   }
   return versions;
@@ -168,7 +174,8 @@ async function verifyBuildableProjects(root) {
   );
   for (const entry of dirs) {
     const dir = join(root, entry.name);
-    const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+    const pkg = await readJsonObject(join(dir, "package.json"));
+    if (!pkg) continue;
     if (!pkg.scripts?.build) failures.push(`${dir}: missing build script`);
     if (!pkg.scripts?.test) failures.push(`${dir}: missing test script`);
     if (!pkg.engines || pkg.engines.node !== versionMatrix.node)
@@ -244,11 +251,42 @@ function verifyWranglerD1Binding(dir, wrangler, expectedMigrationsDir) {
   }
 }
 
-function parseJsonc(text) {
-  return JSON.parse(
-    text
-      .replace(/^\s*\/\/.*$/gm, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/,\s*([}\]])/g, "$1"),
-  );
+async function readJsonObject(path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    failures.push(`${path}: must be valid JSON`);
+    return null;
+  }
+  return requireJsonObject(parsed, path);
+}
+
+function parseJsoncObject(text, path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(
+      text
+        .replace(/^\s*\/\/.*$/gm, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/,\s*([}\]])/g, "$1"),
+    );
+  } catch {
+    failures.push(`${path}: must be valid JSONC`);
+    return null;
+  }
+  return requireJsonObject(parsed, path);
+}
+
+function requireJsonObject(value, path) {
+  if (!isJsonObject(value)) {
+    failures.push(`${path}: top-level JSON value must be an object`);
+    return null;
+  }
+  return value;
+}
+
+function fail() {
+  console.error(failures.join("\n"));
+  process.exit(1);
 }
