@@ -969,20 +969,20 @@ describe("auth HTTP runtime", () => {
 
     const corsPolicy = await setup({
       security: {
-        allowedRequestOrigins: ["https://app.example"],
+        allowedRequestOrigins: ["http://localhost:5173"],
         allowedPreviewRequestOrigins: [],
       },
     });
     const allowedCorsGet = await corsPolicy.handler.fetch(
       new Request(`${origin}/auth/user`, {
-        headers: { Origin: "https://app.example" },
+        headers: { Origin: "http://localhost:5173" },
       }),
       corsPolicy.env,
       corsPolicy.ctx,
     );
     await corsPolicy.flushDeferred();
     expect(allowedCorsGet?.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://app.example",
+      "http://localhost:5173",
     );
     expect(
       allowedCorsGet?.headers.get("Access-Control-Allow-Credentials"),
@@ -999,6 +999,97 @@ describe("auth HTTP runtime", () => {
     await corsPolicy.flushDeferred();
     expect(
       disallowedCorsGet?.headers.get("Access-Control-Allow-Origin"),
+    ).toBeNull();
+
+    const sameSitePolicy = await setup({
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["api.example.com"],
+      },
+      session: {
+        cookieName: "auto",
+        maxAgeDays: 30,
+        sameSite: "lax",
+        secure: "auto",
+        requireVerifiedEmail: false,
+        domain: ".example.com",
+      },
+      security: {
+        allowedRequestOrigins: ["https://app.example.com"],
+        allowedPreviewRequestOrigins: [],
+      },
+    });
+    const sameSiteGet = await sameSitePolicy.handler.fetch(
+      new Request("https://api.example.com/auth/user", {
+        headers: { Origin: "https://app.example.com" },
+      }),
+      {
+        ...sameSitePolicy.env,
+        AUTH_ENV: "production",
+        AUTH_PUBLIC_ORIGIN: "https://api.example.com",
+      },
+      sameSitePolicy.ctx,
+    );
+    await sameSitePolicy.flushDeferred();
+    expect(sameSiteGet?.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://app.example.com",
+    );
+
+    const crossSitePolicy = await setup({
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["api.example.com"],
+      },
+      security: {
+        allowedRequestOrigins: ["https://app.other.com"],
+        allowedPreviewRequestOrigins: [],
+      },
+    });
+    const crossSitePreflight = await crossSitePolicy.handler.fetch(
+      new Request("https://api.example.com/auth/signup", {
+        method: "OPTIONS",
+        headers: { Origin: "https://app.other.com" },
+      }),
+      {
+        ...crossSitePolicy.env,
+        AUTH_ENV: "production",
+        AUTH_PUBLIC_ORIGIN: "https://api.example.com",
+      },
+      crossSitePolicy.ctx,
+    );
+    await crossSitePolicy.flushDeferred();
+    expect(crossSitePreflight?.status).toBe(403);
+    expect(
+      crossSitePreflight?.headers.get("Access-Control-Allow-Origin"),
+    ).toBeNull();
+    const crossSitePost = await crossSitePolicy.handler.fetch(
+      new Request("https://api.example.com/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://app.other.com",
+        },
+        body: JSON.stringify({
+          email: "cross-site@example.com",
+          password: "correct horse battery staple",
+        }),
+      }),
+      {
+        ...crossSitePolicy.env,
+        AUTH_ENV: "production",
+        AUTH_PUBLIC_ORIGIN: "https://api.example.com",
+      },
+      crossSitePolicy.ctx,
+    );
+    await crossSitePolicy.flushDeferred();
+    expect(crossSitePost?.status).toBe(403);
+    await expect(crossSitePost?.json()).resolves.toMatchObject({
+      error: { code: "invalid_origin" },
+    });
+    expect(
+      crossSitePost?.headers.get("Access-Control-Allow-Origin"),
     ).toBeNull();
 
     const previewPolicy = await setup({

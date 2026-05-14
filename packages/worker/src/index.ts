@@ -3252,7 +3252,10 @@ function checkOrigin(request: Request, runtime: RuntimeContext): boolean {
     runtime.mode === "preview"
       ? runtime.config.security.allowedPreviewRequestOrigins
       : runtime.config.security.allowedRequestOrigins;
-  return allowed.includes(origin);
+  return (
+    allowed.includes(origin) &&
+    isSupportedCredentialedRequestOrigin(origin, runtime)
+  );
 }
 
 function handlePreflight(request: Request, runtime: RuntimeContext): Response {
@@ -3261,9 +3264,10 @@ function handlePreflight(request: Request, runtime: RuntimeContext): Response {
     return new Response(null, { status: 204, headers: securityHeaders() });
   const allowed =
     origin === runtime.requestOrigin ||
-    (runtime.mode === "preview"
+    ((runtime.mode === "preview"
       ? runtime.config.security.allowedPreviewRequestOrigins.includes(origin)
-      : runtime.config.security.allowedRequestOrigins.includes(origin));
+      : runtime.config.security.allowedRequestOrigins.includes(origin)) &&
+      isSupportedCredentialedRequestOrigin(origin, runtime));
   if (!allowed)
     return new Response(null, { status: 403, headers: securityHeaders() });
   const headers = securityHeaders();
@@ -3305,13 +3309,37 @@ function allowedCorsOrigin(
     runtime.mode === "preview"
       ? runtime.config.security.allowedPreviewRequestOrigins
       : runtime.config.security.allowedRequestOrigins;
-  return allowed.includes(origin) ? origin : null;
+  return allowed.includes(origin) &&
+    isSupportedCredentialedRequestOrigin(origin, runtime)
+    ? origin
+    : null;
 }
 
 function appendVary(value: string | null, token: string): string {
   if (!value) return token;
   const tokens = value.split(",").map((item) => item.trim().toLowerCase());
   return tokens.includes(token.toLowerCase()) ? value : `${value}, ${token}`;
+}
+
+function isSupportedCredentialedRequestOrigin(
+  origin: string,
+  runtime: RuntimeContext,
+): boolean {
+  let originUrl: URL;
+  let requestUrl: URL;
+  try {
+    originUrl = new URL(origin);
+    requestUrl = new URL(runtime.requestOrigin);
+  } catch {
+    return false;
+  }
+  if (originUrl.protocol !== requestUrl.protocol) return false;
+  if (originUrl.hostname === requestUrl.hostname) return true;
+  const domain = runtime.cookie.domain?.slice(1);
+  if (!domain) return false;
+  return (
+    originUrl.hostname === domain || originUrl.hostname.endsWith(`.${domain}`)
+  );
 }
 
 function publicUser(user: UserRow): PublicAuthUser {
