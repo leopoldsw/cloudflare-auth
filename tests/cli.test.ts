@@ -303,9 +303,18 @@ describe("CLI MVP", () => {
       binding: "AUTH_DB",
       migrations_dir: "migrations",
     });
+    const backup = JSON.parse(
+      await readFile(join(app, "wrangler.json.cf-auth-backup"), "utf8"),
+    ) as {
+      vars: Record<string, string>;
+      d1_databases?: unknown;
+    };
+    expect(backup.vars).toEqual({});
+    expect(backup.d1_databases).toBeUndefined();
     expect(output.join("\n")).toContain(
       "Repaired Wrangler auth bindings and vars.",
     );
+    expect(output.join("\n")).toContain("wrangler.json.cf-auth-backup");
     expect(output.join("\n")).toContain(
       "Existing src/index.ts was left unchanged",
     );
@@ -390,9 +399,18 @@ describe("CLI MVP", () => {
     expect(wrangler.env.production.send_email).toContainEqual({
       name: "AUTH_EMAIL",
     });
+    const backup = JSON.parse(
+      await readFile(join(app, "wrangler.jsonc.cf-auth-backup"), "utf8"),
+    ) as {
+      vars: Record<string, string>;
+      d1_databases?: unknown;
+    };
+    expect(backup.vars).toEqual({});
+    expect(backup.d1_databases).toBeUndefined();
     expect(output.join("\n")).toContain(
       "Repaired Wrangler auth bindings and vars.",
     );
+    expect(output.join("\n")).toContain("wrangler.jsonc.cf-auth-backup");
   });
 
   it("constructs local and remote Wrangler migration commands", async () => {

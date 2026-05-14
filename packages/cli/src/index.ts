@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  writeFile,
+} from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -202,6 +208,7 @@ async function commandInit(
   );
   const wranglerConfigPath =
     existingWranglerPath(target) ?? join(target, "wrangler.jsonc");
+  const wranglerConfigExists = existsSync(wranglerConfigPath);
   const sourceIndexPath = join(target, "src", "index.ts");
   const sourceIndexExists = existsSync(sourceIndexPath);
   await writeIfMissing(
@@ -226,8 +233,13 @@ async function commandInit(
     join(target, "migrations", "0002_indexes.sql"),
     indexesMigrationSql(),
   );
-  const repaired = await repairWranglerConfig(target, workerName);
-  if (repaired) out("Repaired Wrangler auth bindings and vars.");
+  const repaired = await repairWranglerConfig(target, workerName, {
+    backupExisting: wranglerConfigExists,
+  });
+  if (repaired.changed) {
+    out("Repaired Wrangler auth bindings and vars.");
+    if (repaired.backupPath) out(`Backup written to ${repaired.backupPath}`);
+  }
   out(`Initialized Cloudflare Auth in ${target}`);
   if (packageResult === "updated")
     out("Updated package.json with Cloudflare Auth dependencies.");
@@ -2832,7 +2844,8 @@ function stripJsonComments(text: string): string {
 async function repairWranglerConfig(
   cwd: string,
   appName: string,
-): Promise<boolean> {
+  options: { backupExisting?: boolean } = {},
+): Promise<{ changed: boolean; backupPath?: string }> {
   const path = wranglerPath(cwd);
   const text = await readFile(path, "utf8");
   const config = JSON.parse(stripJsonComments(text)) as WranglerConfig;
@@ -2883,8 +2896,20 @@ async function repairWranglerConfig(
     changed = true;
   }
 
-  if (changed) await writeFile(path, JSON.stringify(config, null, 2) + "\n");
-  return changed;
+  let backupPath: string | undefined;
+  if (changed) {
+    if (options.backupExisting) {
+      backupPath = await writeConfigBackup(path);
+    }
+    await writeFile(path, JSON.stringify(config, null, 2) + "\n");
+  }
+  return backupPath ? { changed, backupPath } : { changed };
+}
+
+async function writeConfigBackup(path: string): Promise<string> {
+  const backupPath = `${path}.cf-auth-backup`;
+  if (!existsSync(backupPath)) await copyFile(path, backupPath);
+  return backupPath;
 }
 
 function ensureWranglerSchema(config: WranglerConfig): boolean {

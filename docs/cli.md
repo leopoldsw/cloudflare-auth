@@ -18,8 +18,9 @@ mode. Generated projects keep local and production Wrangler environments
 separate. For existing apps, `init` preserves `wrangler.json` versus
 `wrangler.jsonc` and restores missing auth Wrangler vars, D1 bindings, Workers
 compatibility settings, production email binding, and migration files without
-changing existing app source. `init --repair` reruns the same safe repair path.
-Supported templates are `hono-basic` and `worker-basic`.
+changing existing app source. When an existing Wrangler config is patched,
+`init` writes a sibling `.cf-auth-backup` file first. `init --repair` reruns the
+same safe repair path. Supported templates are `hono-basic` and `worker-basic`.
 
 ## Migrations
 
