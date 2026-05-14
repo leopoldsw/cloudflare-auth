@@ -19,6 +19,16 @@ await requireFile(".github/workflows/codeql.yml");
 await requireFile(".github/workflows/cloudflare-production-smoke.yml");
 await requireFile(".github/workflows/dependency-review.yml");
 await requireFile(".github/workflows/published-quickstart-smoke.yml");
+await requireFile(".github/ISSUE_TEMPLATE/alpha-feedback.yml");
+await requireFile(".github/ISSUE_TEMPLATE/bug.yml");
+await requireFile(".github/ISSUE_TEMPLATE/feature-request.yml");
+await requireFile(".github/ISSUE_TEMPLATE/security-contact.md");
+await requireFile("docs/alpha-evidence.example.json");
+await requireFile("docs/alpha.md");
+await requireFile("docs/deploy-to-cloudflare.md");
+await requireFile("docs/known-limitations.md");
+await requireFile("docs/public-beta.md");
+await requireFile("docs/security-release-tracker.example.json");
 await requireFile("scripts/export-deploy-template.mjs");
 await requireFile("scripts/verify-alpha-evidence.mjs");
 await requireFile("scripts/verify-deploy-template.mjs");
@@ -32,6 +42,29 @@ await requireText("docs/release-checklist.md", "config schema reviewed");
 await requireText("docs/release-checklist.md", "security review decision");
 await requireText("SECURITY.md", "secret scanning");
 await requireText("SECURITY.md", "advisory evidence only");
+await requireText("README.md", "docs/known-limitations.md");
+await requireText(
+  ".github/ISSUE_TEMPLATE/alpha-feedback.yml",
+  "doctor --report",
+);
+await requireText(
+  "docs/alpha.md",
+  "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
+);
+await requireText("docs/alpha.md", "doctor --report");
+await requireText(
+  "docs/deploy-to-cloudflare.md",
+  "Deploy to Cloudflare button is a public-beta gate",
+);
+await requireText("docs/public-beta.md", "docs/known-limitations.md");
+await requireText(
+  "docs/public-beta.md",
+  ".github/workflows/published-quickstart-smoke.yml",
+);
+await requireText(
+  "docs/public-beta.md",
+  ".github/workflows/cloudflare-production-smoke.yml",
+);
 
 const stablePackages = packages.filter((pkg) =>
   isStableOneOrLater(pkg.version),
