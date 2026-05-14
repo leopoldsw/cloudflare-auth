@@ -1625,6 +1625,29 @@ export default app;
     expect(errors.join("\n")).toContain("Remote recovery requires --env");
   });
 
+  it("rejects remote recovery from top-level development configs", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as { env?: unknown };
+    delete config.env;
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const errors: string[] = [];
+
+    const code = await runCli(
+      ["sessions", "revoke", "--user", "usr_safe", "--remote"],
+      {
+        cwd,
+        stderr: (line) => errors.push(line),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Remote recovery without --env requires top-level vars.AUTH_ENV=production",
+    );
+  });
+
   it("runs clean through Wrangler and keeps dry-runs redacted", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
@@ -1692,6 +1715,26 @@ export default app;
 
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("Remote cleanup requires --env");
+  });
+
+  it("rejects remote cleanup from top-level development configs", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as { env?: unknown };
+    delete config.env;
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const errors: string[] = [];
+
+    const code = await runCli(["clean", "--remote"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Remote cleanup without --env requires top-level vars.AUTH_ENV=production",
+    );
   });
 
   it("doctor reports missing remote production secrets", async () => {

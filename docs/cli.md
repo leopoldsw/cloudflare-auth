@@ -101,4 +101,6 @@ npx --package @cf-auth/cli@latest cf-auth sessions revoke --user usr_... --remot
 
 Recovery helpers redact SQL output and never print tokens, token hashes,
 cookies, raw IPs, or raw user agents. Add `--dry-run` to mutating commands
-before executing production changes.
+before executing production changes. Remote cleanup and recovery commands should
+use `--env production`; without `--env`, the top-level Wrangler config must set
+`vars.AUTH_ENV=production`.

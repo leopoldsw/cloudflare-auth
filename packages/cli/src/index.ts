@@ -2604,6 +2604,11 @@ async function d1CommandContext(
       `${remoteErrorPrefix} requires --env when Wrangler config uses named environments.`,
     );
   }
+  if (target.remote && !envName && config.vars?.AUTH_ENV !== "production") {
+    throw new Error(
+      `${remoteErrorPrefix} without --env requires top-level vars.AUTH_ENV=production.`,
+    );
+  }
   const database = selectD1(config, envName);
   return {
     databaseName: database.database_name,
