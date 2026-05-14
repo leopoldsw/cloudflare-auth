@@ -18,12 +18,53 @@ describe("release gates", () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     const result = runReleaseGates(root);
 
+    expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("release gates passed");
   });
+
+  it("requires stable release artifacts when packages enter 1.0", async () => {
+    const root = await releaseGateFixture({
+      deployButtonEvidence: true,
+      packageVersion: "1.0.0",
+      stableEvidence: false,
+    });
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docs/beta-evidence.json");
+    expect(result.stderr).toContain("docs/api-report.md");
+    expect(result.stderr).toContain("docs/config-schema.md");
+    expect(result.stderr).toContain("docs/decisions/security-review.md");
+    expect(result.stderr).toContain("docs/security-release-tracker.json");
+    expect(result.stderr).toContain(
+      "tests/fixtures/upgrade/beta-schema-versions.json",
+    );
+  });
+
+  it("accepts stable release gates when 1.0 artifacts are present", async () => {
+    const root = await releaseGateFixture({
+      deployButtonEvidence: true,
+      packageVersion: "1.0.0",
+      stableEvidence: true,
+    });
+    const result = runReleaseGates(root);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      "stable gates checked for @cf-auth/cli@1.0.0",
+    );
+  });
 });
 
-async function releaseGateFixture(options: { deployButtonEvidence: boolean }) {
+interface ReleaseGateFixtureOptions {
+  deployButtonEvidence: boolean;
+  packageVersion?: string;
+  stableEvidence?: boolean;
+}
+
+async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-release-gates-"));
 
   const requiredFiles = [
@@ -171,7 +212,8 @@ async function releaseGateFixture(options: { deployButtonEvidence: boolean }) {
     );
   }
 
-  await writePackage(root);
+  const packageVersion = options.packageVersion ?? "0.1.0-beta.0";
+  await writePackage(root, packageVersion);
   await writeFixtureFile(
     root,
     "docs/package-ownership.json",
@@ -189,21 +231,58 @@ async function releaseGateFixture(options: { deployButtonEvidence: boolean }) {
       '{"status": "verified", "templateRepositoryUrl": "https://github.com/acme/template", "deployButtonUrl": "https://deploy.workers.cloudflare.com/?url=https://github.com/acme/template", "packageTag": "beta"}\n',
     );
   }
+  if (options.stableEvidence) {
+    await writeStableEvidence(root);
+  }
 
   return root;
 }
 
-async function writePackage(root: string) {
+async function writePackage(root: string, version: string) {
   const packageDir = join(root, "packages", "cli");
   await mkdir(packageDir, { recursive: true });
   await writeFile(
     join(packageDir, "package.json"),
     `${JSON.stringify({
       name: "@cf-auth/cli",
-      version: "0.1.0-beta.0",
+      version,
     })}\n`,
   );
-  await writeFile(join(packageDir, "CHANGELOG.md"), "0.1.0-beta.0\n");
+  await writeFile(join(packageDir, "CHANGELOG.md"), `${version}\n`);
+}
+
+async function writeStableEvidence(root: string) {
+  await writeFixtureFile(
+    root,
+    "docs/beta-evidence.json",
+    '{"publishedQuickstart": {}, "productionSmoke": {}}\n',
+  );
+  await writeFixtureFile(
+    root,
+    "docs/api-report.md",
+    "Release approval: release-approved by maintainer on 2026-05-14\n",
+  );
+  await writeFixtureFile(
+    root,
+    "docs/config-schema.md",
+    "Release approval: release-approved by maintainer on 2026-05-14\n",
+  );
+  await writeFixtureFile(
+    root,
+    "docs/decisions/security-review.md",
+    "Status: maintainer-signoff\n",
+  );
+  await writeFixtureFile(
+    root,
+    "docs/security-release-tracker.json",
+    '{"openHighCriticalAuthSecurityIssues": [], "issueSearchUrl": "https://github.com/acme/cf-auth/issues", "advisorySearchUrl": "https://github.com/acme/cf-auth/security/advisories"}\n',
+  );
+  await writeFixtureFile(
+    root,
+    "tests/fixtures/upgrade/beta-schema-versions.json",
+    '{"betaVersions": [{"version": "1.0.0-beta.0"}]}\n',
+  );
+  await writeFixtureFile(root, "tests/upgrade.test.ts", "upgrade tests\n");
 }
 
 async function writeFixtureFile(root: string, path: string, content: string) {
