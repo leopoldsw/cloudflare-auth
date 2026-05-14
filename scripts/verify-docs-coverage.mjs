@@ -117,6 +117,10 @@ for (const endpoint of [
   requireText("docs/api.md", docs.api, endpoint);
 }
 
+for (const text of ["Referrer-Policy: no-referrer", "history entry"]) {
+  requireText("docs/api.md", docs.api, text);
+}
+
 for (const entrypoint of [
   "cf-auth",
   "@cf-auth/cli",

@@ -44,8 +44,9 @@ effects.
 ## Custom Password Reset Pages
 
 The built-in `GET /auth/password/reset?token=...` page keeps the token on a
-minimal page with `Referrer-Policy: no-referrer` and no third-party assets. A
-custom reset page must provide equivalent protection:
+minimal page with `Referrer-Policy: no-referrer`, no third-party assets, and a
+same-page history scrubber that removes the token from the current browser
+history entry. A custom reset page must provide equivalent protection:
 
 - strip the token from the browser URL immediately after loading
 - set `Referrer-Policy: no-referrer`

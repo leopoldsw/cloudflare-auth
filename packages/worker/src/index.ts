@@ -2815,7 +2815,8 @@ function tokenPage(
   if (parsed.purpose !== purpose)
     throw new AuthCryptoError("wrong token purpose", "wrong_token_purpose");
   return html(
-    `<form method="post" action="${runtime.config.basePath}${action}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">${escapeHtml(label)}</button></form>`,
+    `${stripTokenFromHistoryScript()}<form method="post" action="${runtime.config.basePath}${action}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">${escapeHtml(label)}</button></form>`,
+    { allowInlineScript: true },
   );
 }
 
@@ -2825,8 +2826,13 @@ function resetPage(request: Request, runtime: RuntimeContext): Response {
   if (parsed.purpose !== "reset")
     throw new AuthCryptoError("wrong token purpose", "wrong_token_purpose");
   return html(
-    `<form method="post" action="${runtime.config.basePath}/password/reset/confirm"><input type="hidden" name="token" value="${escapeHtml(token)}"><input name="password" type="password" autocomplete="new-password"><button type="submit">Reset password</button></form>`,
+    `${stripTokenFromHistoryScript()}<form method="post" action="${runtime.config.basePath}/password/reset/confirm"><input type="hidden" name="token" value="${escapeHtml(token)}"><input name="password" type="password" autocomplete="new-password"><button type="submit">Reset password</button></form>`,
+    { allowInlineScript: true },
   );
+}
+
+function stripTokenFromHistoryScript(): string {
+  return `<script>if(location.search)history.replaceState(null,"",location.pathname)</script>`;
 }
 
 function handleDevEmails(runtime: RuntimeContext): Response {
@@ -3514,13 +3520,16 @@ function redirect(location: string, cookie?: string): Response {
   return new Response(null, { status: 303, headers });
 }
 
-function html(markup: string): Response {
+function html(
+  markup: string,
+  options: { allowInlineScript?: boolean } = {},
+): Response {
   const headers = securityHeaders();
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("Referrer-Policy", "no-referrer");
   headers.set(
     "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${options.allowInlineScript ? "; script-src 'unsafe-inline'" : ""}`,
   );
   return new Response(`<!doctype html><meta charset="utf-8">${markup}`, {
     headers,

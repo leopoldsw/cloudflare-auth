@@ -531,6 +531,10 @@ describe("auth HTTP runtime", () => {
     expect(noD1Get?.headers.get("Content-Security-Policy")).toContain(
       "default-src 'none'",
     );
+    expect(noD1Get?.headers.get("Content-Security-Policy")).toContain(
+      "script-src 'unsafe-inline'",
+    );
+    await expect(noD1Get?.text()).resolves.toContain("history.replaceState");
     const beforeConsume = await db
       .prepare(
         "SELECT used_at, attempts FROM verification_tokens WHERE token_hash = ?",
@@ -611,6 +615,13 @@ describe("auth HTTP runtime", () => {
       { waitUntil() {} } as unknown as ExecutionContext,
     );
     expect(noD1ResetGet?.status).toBe(200);
+    expect(noD1ResetGet?.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(noD1ResetGet?.headers.get("Content-Security-Policy")).toContain(
+      "script-src 'unsafe-inline'",
+    );
+    await expect(noD1ResetGet?.text()).resolves.toContain(
+      "history.replaceState",
+    );
     const confirm = await authFetch("/auth/password/reset/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

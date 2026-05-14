@@ -49,6 +49,7 @@ for (const threat of threatRows) {
 for (const text of [
   "Optional Turnstile checks before account-specific branching",
   "Optional Cloudflare rate-limit binding before D1 counters",
+  "scrub browser history",
   "Known residual risks",
 ]) {
   requireText("docs/security-model.md", docs.securityModel, text);
