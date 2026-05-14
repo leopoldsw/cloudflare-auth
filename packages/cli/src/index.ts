@@ -442,6 +442,8 @@ async function commandDoctor(
   }
   const cookieCheck = checkCookieConfig(vars);
   if (cookieCheck) addCheck(cookieCheck);
+  const packageCheck = await checkPackageVersions(cwd, remoteTarget);
+  if (packageCheck) addCheck(packageCheck);
   const authSource = await inspectAuthSource(cwd);
   for (const check of checkAuthSource(authSource, vars, remoteTarget)) {
     addCheck(check);
@@ -1147,6 +1149,73 @@ function checkCookieConfig(vars: Record<string, string>): DoctorCheck | null {
     status: "pass",
     message: "Session cookie configuration is valid",
   };
+}
+
+async function checkPackageVersions(
+  cwd: string,
+  remoteTarget: boolean,
+): Promise<DoctorCheck | null> {
+  let pkg: {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+  try {
+    pkg = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
+  } catch {
+    return null;
+  }
+  const dependencyVersions = {
+    ...(pkg.dependencies ?? {}),
+    ...(pkg.devDependencies ?? {}),
+    ...(pkg.peerDependencies ?? {}),
+  };
+  const cfAuthEntries = Object.entries(dependencyVersions).filter(([name]) =>
+    isCfAuthPackageName(name),
+  );
+  if (cfAuthEntries.length === 0) return null;
+  const workspaceEntries = cfAuthEntries.filter(([, version]) =>
+    version.startsWith("workspace:"),
+  );
+  if (remoteTarget && workspaceEntries.length > 0) {
+    return {
+      id: "package_versions",
+      status: "warn",
+      message:
+        "Cloudflare Auth dependencies use workspace protocol in a deploy target",
+      fix: "pin published @cf-auth package versions before preview or production deploy",
+    };
+  }
+  const publishedVersions = new Set(
+    cfAuthEntries
+      .map(([, version]) => version)
+      .filter((version) => !version.startsWith("workspace:")),
+  );
+  if (publishedVersions.size > 1) {
+    return {
+      id: "package_versions",
+      status: "warn",
+      message: "Cloudflare Auth package versions are inconsistent",
+      fix: "pin all @cf-auth packages to the same release version",
+    };
+  }
+  return {
+    id: "package_versions",
+    status: "pass",
+    message: "Cloudflare Auth package versions are consistent",
+  };
+}
+
+function isCfAuthPackageName(name: string): boolean {
+  return (
+    name === "cf-auth" ||
+    name === "create-cloudflare-auth" ||
+    name.startsWith("@cf-auth/")
+  );
 }
 
 function isAuthMode(

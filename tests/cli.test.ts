@@ -728,6 +728,61 @@ export default defineAuthConfig({
     expect(output.join("\n")).toContain("timeout=1ms");
   });
 
+  it("doctor reports Cloudflare Auth package version problems", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify(
+        {
+          type: "module",
+          dependencies: {
+            "@cf-auth/worker": "1.0.0",
+            "@cf-auth/hono": "1.0.1",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const output: string[] = [];
+    const code = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain(
+      "Cloudflare Auth package versions are inconsistent",
+    );
+
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify(
+        {
+          type: "module",
+          dependencies: {
+            "@cf-auth/worker": "workspace:*",
+            "@cf-auth/hono": "workspace:*",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const workspaceOutput: string[] = [];
+    const workspaceCode = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stdout: (line) => workspaceOutput.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+    expect(workspaceCode).toBe(0);
+    expect(workspaceOutput.join("\n")).toContain(
+      "Cloudflare Auth dependencies use workspace protocol",
+    );
+  });
+
   it("doctor accepts byEnvironment terminal email for development only", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
