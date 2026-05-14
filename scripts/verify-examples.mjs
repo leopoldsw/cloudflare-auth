@@ -58,6 +58,7 @@ for (const template of ["hono-basic", "worker-basic", "react-vite-worker"]) {
   const dir = join("templates", template);
   await requireFile(join(dir, "wrangler.jsonc"));
   await requireFile(join(dir, ".dev.vars.example"));
+  await verifyTemplatePasswordHashing(dir);
   for (const [file, expected] of rootMigrations) {
     const actual = await readFile(join(dir, "migrations", file), "utf8").catch(
       () => null,
@@ -130,6 +131,28 @@ async function verifyDevVarsExample(dir) {
   ]) {
     if (!text.includes(line)) {
       failures.push(`${dir}: .dev.vars.example missing ${line}`);
+    }
+  }
+}
+
+async function verifyTemplatePasswordHashing(dir) {
+  const source =
+    (await readFile(join(dir, "src", "auth.config.ts"), "utf8").catch(
+      () => null,
+    )) ??
+    (await readFile(join(dir, "src", "index.ts"), "utf8").catch(() => null));
+  if (source === null) {
+    failures.push(`${dir}: missing auth config source`);
+    return;
+  }
+  for (const expected of [
+    "passwordHashing",
+    'profile: "workers-balanced"',
+    "maxConcurrentHashesPerIsolate: 1",
+    "queueTimeoutMs: 2000",
+  ]) {
+    if (!source.includes(expected)) {
+      failures.push(`${dir}: auth config missing ${expected}`);
     }
   }
 }

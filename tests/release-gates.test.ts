@@ -90,6 +90,22 @@ describe("release gates", () => {
     expect(result.stderr).toContain("must enable observability");
   });
 
+  it("requires production password hashing in generated templates", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await writeFixtureFile(
+      root,
+      "templates/hono-basic/src/auth.config.ts",
+      "export default defineAuthConfig({ appName: 'Template', basePath: '/auth' });",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-examples.mjs");
+    expect(result.stderr).toContain(
+      'templates/hono-basic: auth config missing profile: "workers-balanced"',
+    );
+  });
+
   it("runs package-name registry checks for release packages", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFakeNpm(
@@ -723,6 +739,19 @@ async function writeExamplesFixtures(root: string) {
     "templates/react-vite-worker",
     "templates/worker-basic",
   ]) {
+    await writeFixtureFile(
+      root,
+      `${template}/src/auth.config.ts`,
+      [
+        "export default defineAuthConfig({",
+        "  passwordHashing: {",
+        '    profile: "workers-balanced",',
+        "    maxConcurrentHashesPerIsolate: 1,",
+        "    queueTimeoutMs: 2000,",
+        "  },",
+        "});",
+      ].join("\n"),
+    );
     await writeFixtureFile(
       root,
       `${template}/migrations/0001_initial.sql`,

@@ -9,6 +9,11 @@ import { cloudflareEmail } from "@cf-auth/email-cloudflare";
 const authConfig = defineAuthConfig({
   appName: "My App",
   basePath: "/auth",
+  passwordHashing: {
+    profile: "workers-balanced",
+    maxConcurrentHashesPerIsolate: 1,
+    queueTimeoutMs: 2000,
+  },
   email: byEnvironment({
     development: terminalEmail({ outbox: true }),
     preview: cloudflareEmail({
