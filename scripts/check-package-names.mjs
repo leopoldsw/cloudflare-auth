@@ -253,9 +253,13 @@ async function readJsonObject(path) {
 }
 
 function npmView(args) {
-  const result = spawnSync("npm", ["view", ...args, "--json"], {
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    "npm",
+    ["view", ...args, "--json", "--loglevel", "silent"],
+    {
+      encoding: "utf8",
+    },
+  );
   const output = `${result.stdout}\n${result.stderr}`.trim();
   if (result.status === 0) return { kind: "found", stdout: result.stdout };
   if (/\bE404\b|404 Not Found|is not in this registry/u.test(output)) {
