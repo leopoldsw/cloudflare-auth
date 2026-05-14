@@ -105,6 +105,21 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("IPs");
   });
 
+  it("rejects alpha evidence with raw user agents", async () => {
+    const evidence = validAlphaEvidence();
+    (evidence.localSetups[0] as Record<string, unknown>).userAgent =
+      "Mozilla/5.0 Evidence Browser";
+    const path = await writeEvidence("alpha-user-agent", evidence);
+    const result = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must not include raw secrets");
+    expect(result.stderr).toContain("user agents");
+  });
+
   it("accepts beta evidence for clean quickstart and opt-in production smoke", async () => {
     const path = await writeEvidence("beta", validBetaEvidence());
     const result = runScript("scripts/verify-beta-evidence.mjs", {
@@ -165,6 +180,21 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("IPs");
   });
 
+  it("rejects beta evidence with raw user agents", async () => {
+    const evidence = validBetaEvidence();
+    (evidence.productionSmoke as Record<string, unknown>).userAgent =
+      "Mozilla/5.0 Evidence Browser";
+    const path = await writeEvidence("beta-user-agent", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must not include raw secrets");
+    expect(result.stderr).toContain("user agents");
+  });
+
   it("accepts deploy button evidence for the documented template path", async () => {
     const path = await writeEvidence(
       "deploy-button",
@@ -212,7 +242,7 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("templateRepositoryUrl");
   });
 
-  it("rejects deploy button evidence with raw emails and IP addresses", async () => {
+  it("rejects deploy button evidence with raw emails, IPs, and user agents", async () => {
     const emailEvidence = validDeployButtonEvidence();
     (emailEvidence as Record<string, unknown>).notes =
       "verified by person@example.com";
@@ -230,12 +260,30 @@ describe("release evidence verifiers", () => {
       CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: ipPath,
     });
 
+    const userAgentEvidence = validDeployButtonEvidence();
+    (userAgentEvidence as Record<string, unknown>).userAgent =
+      "Mozilla/5.0 Evidence Browser";
+    const userAgentPath = await writeEvidence(
+      "deploy-button-user-agent",
+      userAgentEvidence,
+    );
+    const userAgentResult = runScript(
+      "scripts/verify-deploy-button-evidence.mjs",
+      {
+        CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+        CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: userAgentPath,
+      },
+    );
+
     expect(emailResult.status).toBe(1);
     expect(emailResult.stderr).toContain("must not include raw secrets");
     expect(emailResult.stderr).toContain("emails");
     expect(ipResult.status).toBe(1);
     expect(ipResult.stderr).toContain("must not include raw secrets");
     expect(ipResult.stderr).toContain("IPs");
+    expect(userAgentResult.status).toBe(1);
+    expect(userAgentResult.stderr).toContain("must not include raw secrets");
+    expect(userAgentResult.stderr).toContain("user agents");
   });
 
   it("requires deploy button evidence for stable package versions", async () => {
@@ -346,6 +394,21 @@ describe("release evidence verifiers", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("must not include raw secrets");
     expect(result.stderr).toContain("IPs");
+  });
+
+  it("rejects security tracker evidence with raw user agents", async () => {
+    const evidence = validSecurityTracker();
+    (evidence as Record<string, unknown>).userAgent =
+      "Mozilla/5.0 Evidence Browser";
+    const path = await writeEvidence("security-tracker-user-agent", evidence);
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must not include raw secrets");
+    expect(result.stderr).toContain("user agents");
   });
 
   it("rejects security tracker evidence with incomplete search URLs", async () => {
