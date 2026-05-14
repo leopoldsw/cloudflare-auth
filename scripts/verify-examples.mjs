@@ -32,6 +32,7 @@ for (const root of ["examples", "templates"]) {
     );
     verifyWranglerToolchain(dir, wrangler);
     await verifyDevVarsExample(dir);
+    await verifyAuthConfigPasswordHashing(dir);
     const rendered = renderPublishedManifest(pkg);
     for (const section of ["dependencies", "devDependencies"]) {
       for (const [name, version] of Object.entries(rendered[section] ?? {})) {
@@ -58,7 +59,6 @@ for (const template of ["hono-basic", "worker-basic", "react-vite-worker"]) {
   const dir = join("templates", template);
   await requireFile(join(dir, "wrangler.jsonc"));
   await requireFile(join(dir, ".dev.vars.example"));
-  await verifyTemplatePasswordHashing(dir);
   for (const [file, expected] of rootMigrations) {
     const actual = await readFile(join(dir, "migrations", file), "utf8").catch(
       () => null,
@@ -135,7 +135,7 @@ async function verifyDevVarsExample(dir) {
   }
 }
 
-async function verifyTemplatePasswordHashing(dir) {
+async function verifyAuthConfigPasswordHashing(dir) {
   const source =
     (await readFile(join(dir, "src", "auth.config.ts"), "utf8").catch(
       () => null,

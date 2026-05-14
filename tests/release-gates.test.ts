@@ -102,7 +102,7 @@ describe("release gates", () => {
     expect(result.stderr).toContain("docs/api.md: missing hashPassword");
   });
 
-  it("requires production password hashing in generated templates", async () => {
+  it("requires production password hashing in examples and generated templates", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
       root,
@@ -115,6 +115,22 @@ describe("release gates", () => {
     expect(result.stderr).toContain("scripts/verify-examples.mjs");
     expect(result.stderr).toContain(
       'templates/hono-basic: auth config missing profile: "workers-balanced"',
+    );
+  });
+
+  it("requires production password hashing in examples", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await writeFixtureFile(
+      root,
+      "examples/hono-basic/src/auth.config.ts",
+      "export default defineAuthConfig({ appName: 'Example', basePath: '/auth' });",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-examples.mjs");
+    expect(result.stderr).toContain(
+      'examples/hono-basic: auth config missing profile: "workers-balanced"',
     );
   });
 
@@ -765,14 +781,17 @@ async function writeExamplesFixtures(root: string) {
     );
     await writeFixtureFile(root, `${dir}/.dev.vars.example`, devVarsExample);
   }
-  for (const template of [
+  for (const project of [
+    "examples/hono-basic",
+    "examples/react-vite-worker",
+    "examples/worker-basic",
     "templates/hono-basic",
     "templates/react-vite-worker",
     "templates/worker-basic",
   ]) {
     await writeFixtureFile(
       root,
-      `${template}/src/auth.config.ts`,
+      `${project}/src/auth.config.ts`,
       [
         "export default defineAuthConfig({",
         "  passwordHashing: {",
@@ -783,6 +802,12 @@ async function writeExamplesFixtures(root: string) {
         "});",
       ].join("\n"),
     );
+  }
+  for (const template of [
+    "templates/hono-basic",
+    "templates/react-vite-worker",
+    "templates/worker-basic",
+  ]) {
     await writeFixtureFile(
       root,
       `${template}/migrations/0001_initial.sql`,

@@ -10,8 +10,9 @@ const authConfig = defineAuthConfig({
   appName: "Worker Basic",
   basePath: "/auth",
   passwordHashing: {
-    profile: "development-fast",
+    profile: "workers-balanced",
     maxConcurrentHashesPerIsolate: 1,
+    queueTimeoutMs: 2000,
   },
   email: byEnvironment({
     development: terminalEmail({ outbox: true }),
