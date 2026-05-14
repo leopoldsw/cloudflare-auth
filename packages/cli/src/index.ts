@@ -3257,6 +3257,7 @@ function wranglerTemplate(appName: string): string {
 
 function gitignoreTemplate(): string {
   return `.dev.vars
+*.cf-auth-backup
 .wrangler
 node_modules
 dist

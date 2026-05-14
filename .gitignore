@@ -4,6 +4,7 @@ dist/
 .turbo/
 .wrangler/
 .dev.vars
+*.cf-auth-backup
 .env
 *.log
 coverage/

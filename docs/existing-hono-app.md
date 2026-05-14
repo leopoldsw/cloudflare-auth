@@ -24,7 +24,8 @@ not inherit wildcard credentialed CORS behavior from the host app.
 When `src/index.ts` already exists, `init` leaves it unchanged and prints the
 mount snippet. It does update `package.json` with missing Cloudflare Auth
 dependencies and repairs missing auth vars and D1 bindings in the existing
-Wrangler config after writing a sibling `.cf-auth-backup` file.
+Wrangler config after writing a sibling `.cf-auth-backup` file. Do not commit
+that backup file.
 
 Do not mount a router that defines `/auth` internally. `createAuthRoutes()` defines relative routes so the result is `/auth/signup`, not `/auth/auth/signup`.
 

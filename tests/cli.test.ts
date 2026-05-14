@@ -76,6 +76,8 @@ describe("CLI MVP", () => {
     expect(tsconfig).not.toContain("../../tsconfig");
     const devVars = await readFile(join(app, ".dev.vars"), "utf8");
     expect(devVars).toMatch(/AUTH_SECRET=k_dev\.[A-Za-z0-9_-]{43}(?:\n|$)/);
+    const gitignore = await readFile(join(app, ".gitignore"), "utf8");
+    expect(gitignore).toContain("*.cf-auth-backup");
     const source = await readFile(join(app, "src", "index.ts"), "utf8");
     expect(source).toContain('import authConfig from "./auth.config.js"');
     expect(source).toContain("app.route(authConfig.basePath");
