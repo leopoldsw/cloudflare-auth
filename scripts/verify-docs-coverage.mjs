@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const docs = {
   api: await readFile("docs/api.md", "utf8"),
+  apiReport: await readFile("docs/api-report.md", "utf8"),
   cli: await readFile("docs/cli.md", "utf8"),
   configSchema: await readFile("docs/config-schema.md", "utf8"),
   config: await readFile("docs/configuration.md", "utf8"),
@@ -174,8 +175,12 @@ for (const symbol of [
   requireText("docs/api.md", docs.api, symbol);
 }
 
-for (const exportName of await rootExportNames()) {
+const rootExports = await rootExportNames();
+for (const exportName of rootExports) {
   requireText("docs/api.md", docs.api, exportName);
+}
+for (const exportName of rootExports) {
+  requireText("docs/api-report.md", docs.apiReport, exportName);
 }
 
 for (const text of ["Default retention windows", "non-negative integer"]) {

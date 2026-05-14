@@ -114,6 +114,9 @@ describe("release gates", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("scripts/verify-docs-coverage.mjs");
     expect(result.stderr).toContain("docs/api.md: missing uncoveredRootExport");
+    expect(result.stderr).toContain(
+      "docs/api-report.md: missing uncoveredRootExport",
+    );
   });
 
   it("requires password benchmark evidence in release gates", async () => {
@@ -614,6 +617,7 @@ async function writeDocsCoverageFixtures(root: string) {
       "AUTH_EMAIL",
     ].join("\n"),
   );
+  await writeFixtureFile(root, "docs/api-report.md", "Public API Report");
   await writeFixtureFile(
     root,
     "docs/api.md",
