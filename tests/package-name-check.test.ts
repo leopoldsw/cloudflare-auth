@@ -24,10 +24,22 @@ describe("package name registry checks", () => {
     expect(result.stderr).toContain("cf-auth reservedPackages registryVersion");
     expect(result.stderr).toContain("1.0.2");
   });
+
+  it("rejects placeholder publish versions", async () => {
+    const fixture = await packageNameFixture({
+      packageVersion: "0.0.0",
+    });
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "@cf-auth/cli: release workflow must not publish placeholder version 0.0.0",
+    );
+  });
 });
 
 async function packageNameFixture(
-  options: { cfAuthRegistryVersion?: string } = {},
+  options: { cfAuthRegistryVersion?: string; packageVersion?: string } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-package-names-"));
   await mkdir(join(root, "packages"), { recursive: true });
@@ -46,17 +58,17 @@ async function packageNameFixture(
   for (const [dir, name] of publishable) {
     await writePackageJson(root, dir, {
       name,
-      version: "0.1.0-beta.0",
+      version: options.packageVersion ?? "0.1.0-beta.0",
     });
   }
   await writePackageJson(root, "cf-auth-shim", {
     name: "cf-auth",
-    version: "0.1.0-beta.0",
+    version: options.packageVersion ?? "0.1.0-beta.0",
     private: true,
   });
   await writePackageJson(root, "create-cloudflare-auth", {
     name: "create-cloudflare-auth",
-    version: "0.1.0-beta.0",
+    version: options.packageVersion ?? "0.1.0-beta.0",
     private: true,
   });
 
@@ -70,7 +82,7 @@ async function packageNameFixture(
         packages: publishable.map(([, name]) => ({
           name,
           registry: "https://registry.npmjs.org/",
-          version: "0.1.0-beta.0",
+          version: options.packageVersion ?? "0.1.0-beta.0",
           ownershipConfirmed: true,
           publisherTwoFactorEnabled: true,
           provenancePublish: true,
