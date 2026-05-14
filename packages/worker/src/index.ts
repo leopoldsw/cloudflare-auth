@@ -66,6 +66,27 @@ export type AuthConfigInput = MinimalAuthConfig &
 
 export type AuthHelperConfig = AuthConfig | AuthConfigInput;
 
+export interface CleanCfAuthRetention {
+  closedSessionMs: number;
+  closedVerificationTokenMs: number;
+  expiredRateLimitMs: number;
+  authEventMs: number;
+}
+
+export interface CleanCfAuthInput {
+  env: Record<string, unknown>;
+  config: AuthHelperConfig;
+  now?: number;
+  retention?: Partial<CleanCfAuthRetention>;
+}
+
+export interface CleanCfAuthResult {
+  sessions: number;
+  verificationTokens: number;
+  rateLimits: number;
+  authEvents: number;
+}
+
 export interface PublicAuthUser {
   id: string;
   email: string;
@@ -1056,6 +1077,54 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
   };
 
   return { users, sessions, verificationTokens, events, rateLimits };
+}
+
+export async function cleanCfAuth(
+  input: CleanCfAuthInput,
+): Promise<CleanCfAuthResult> {
+  const config =
+    "runtime" in input.config
+      ? (input.config as AuthConfig)
+      : defineAuthConfig(input.config);
+  const db = input.env[config.database.binding] as D1Database | undefined;
+  if (!db) throw new AuthCryptoError("D1 binding is missing", "config_error");
+  const day = 24 * 60 * 60 * 1000;
+  const retention: CleanCfAuthRetention = {
+    closedSessionMs: 7 * day,
+    closedVerificationTokenMs: 7 * day,
+    expiredRateLimitMs: day,
+    authEventMs: 90 * day,
+    ...input.retention,
+  };
+  const now = input.now ?? Date.now();
+  const sessionCutoff = now - retention.closedSessionMs;
+  const tokenCutoff = now - retention.closedVerificationTokenMs;
+  const rateLimitCutoff = now - retention.expiredRateLimitMs;
+  const eventCutoff = now - retention.authEventMs;
+  const results = (await db.batch([
+    db
+      .prepare(
+        "DELETE FROM sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)",
+      )
+      .bind(sessionCutoff, sessionCutoff),
+    db
+      .prepare(
+        "DELETE FROM verification_tokens WHERE expires_at < ? OR (used_at IS NOT NULL AND used_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)",
+      )
+      .bind(tokenCutoff, tokenCutoff, tokenCutoff),
+    db
+      .prepare("DELETE FROM rate_limits WHERE reset_at < ?")
+      .bind(rateLimitCutoff),
+    db
+      .prepare("DELETE FROM auth_events WHERE created_at < ?")
+      .bind(eventCutoff),
+  ])) as D1RunResult[];
+  return {
+    sessions: changes(results[0]),
+    verificationTokens: changes(results[1]),
+    rateLimits: changes(results[2]),
+    authEvents: changes(results[3]),
+  };
 }
 
 export interface AuthEmailRuntime<Env = unknown> {

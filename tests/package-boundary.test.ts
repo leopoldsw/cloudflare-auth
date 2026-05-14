@@ -39,6 +39,7 @@ import {
 import {
   byEnvironment,
   cloudflareRateLimitPrefilter,
+  cleanCfAuth,
   createAuthHandler,
   createD1Repositories,
   defineAuthConfig,
@@ -84,6 +85,7 @@ describe("package boundary exports", () => {
       getWorkerUser,
       requireWorkerUser,
       requireWorkerVerifiedUser,
+      cleanCfAuth,
       createD1Repositories,
       terminalEmail,
       byEnvironment,

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { AuthRepositoryError } from "@cf-auth/core";
 import { createSqliteD1Database, applyD1Migrations } from "@cf-auth/testing";
-import { createD1Repositories } from "@cf-auth/worker";
+import { cleanCfAuth, createD1Repositories } from "@cf-auth/worker";
 import { beforeEach, describe, expect, it } from "vitest";
 
 const sessionHash =
@@ -468,6 +468,80 @@ describe("D1 migrations and repositories", () => {
         )
         .run(),
     ).rejects.toThrow();
+  });
+
+  it("cleans closed auth rows with scheduled cleanup defaults", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const now = 100 * day;
+    await createUser("usr_cleanup");
+    await repos.sessions.createSession({
+      id: "ses_cleanup_old",
+      userId: "usr_cleanup",
+      tokenHash: sessionHash,
+      createdAt: 1,
+      expiresAt: now - 8 * day,
+    });
+    await repos.sessions.createSession({
+      id: "ses_cleanup_live",
+      userId: "usr_cleanup",
+      tokenHash: sessionHash2,
+      createdAt: 1,
+      expiresAt: now + day,
+    });
+    await repos.verificationTokens.createVerificationToken({
+      id: "vtok_cleanup_old",
+      userId: "usr_cleanup",
+      type: "magic_link",
+      tokenHash: magicHash,
+      createdAt: 1,
+      expiresAt: now - 8 * day,
+    });
+    await repos.rateLimits.hitFixedWindow({
+      action: "cleanup",
+      key: "rl:v1:cleanup:ip:GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      windowMs: 1,
+      limit: 1,
+      now: now - 2 * day,
+    });
+    await repos.events.writeAuthEvent({
+      id: "evt_cleanup_old",
+      eventType: "cleanup_old",
+      createdAt: now - 91 * day,
+      metadataJson: "{}",
+    });
+    await repos.events.writeAuthEvent({
+      id: "evt_cleanup_live",
+      eventType: "cleanup_live",
+      createdAt: now - day,
+      metadataJson: "{}",
+    });
+
+    await expect(
+      cleanCfAuth({
+        env: { AUTH_DB: db },
+        config: { appName: "Cleanup Test", basePath: "/auth" },
+        now,
+      }),
+    ).resolves.toEqual({
+      sessions: 1,
+      verificationTokens: 1,
+      rateLimits: 1,
+      authEvents: 1,
+    });
+    await expect(
+      db.prepare("SELECT id FROM sessions ORDER BY id").all<{ id: string }>(),
+    ).resolves.toMatchObject({ results: [{ id: "ses_cleanup_live" }] });
+    await expect(
+      db.prepare("SELECT id FROM verification_tokens").first("id"),
+    ).resolves.toBeNull();
+    await expect(
+      db.prepare("SELECT key FROM rate_limits").first("key"),
+    ).resolves.toBeNull();
+    await expect(
+      db
+        .prepare("SELECT id FROM auth_events ORDER BY id")
+        .all<{ id: string }>(),
+    ).resolves.toMatchObject({ results: [{ id: "evt_cleanup_live" }] });
   });
 
   it("isolates D1 rate limits by action and opaque derived key", async () => {

@@ -27,6 +27,9 @@ place. A scheduled Worker can use the same default retention windows as
 closed sessions and tokens, and 90 days for operational events.
 
 ```ts
+import { cleanCfAuth } from "@cf-auth/worker";
+import authConfig from "./src/auth.config";
+
 interface Env {
   AUTH_DB: D1Database;
 }
@@ -37,26 +40,7 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ) {
-    const day = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    const sevenDaysAgo = now - 7 * day;
-
-    ctx.waitUntil(
-      env.AUTH_DB.batch([
-        env.AUTH_DB.prepare(
-          "DELETE FROM sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)",
-        ).bind(sevenDaysAgo, sevenDaysAgo),
-        env.AUTH_DB.prepare(
-          "DELETE FROM verification_tokens WHERE expires_at < ? OR (used_at IS NOT NULL AND used_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)",
-        ).bind(sevenDaysAgo, sevenDaysAgo, sevenDaysAgo),
-        env.AUTH_DB.prepare("DELETE FROM rate_limits WHERE reset_at < ?").bind(
-          now - day,
-        ),
-        env.AUTH_DB.prepare(
-          "DELETE FROM auth_events WHERE created_at < ?",
-        ).bind(now - 90 * day),
-      ]),
-    );
+    ctx.waitUntil(cleanCfAuth({ env, config: authConfig }));
   },
 };
 ```
