@@ -11,6 +11,8 @@ Status: pending.
 - security model checklist
 - migration and upgrade tests
 - dependency review result
+- advisory `npm audit --audit-level high` result
+- secret scanning and push-protection status
 - unresolved high/critical auth security issue review
 
 Stable 1.0 also requires a redaction-safe security release tracker. Copy

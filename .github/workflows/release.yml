@@ -40,6 +40,9 @@ jobs:
       - run: pnpm build
       - run: pnpm package:check
       - run: pnpm version-matrix:check
+      - name: Advisory npm audit
+        run: pnpm audit --audit-level high
+        continue-on-error: true
       - run: pnpm verify:alpha-evidence
       - run: pnpm verify:deploy-template
       - run: pnpm verify:docs-coverage

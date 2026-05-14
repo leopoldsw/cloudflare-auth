@@ -191,6 +191,8 @@ async function verifyReleaseControls() {
     "id-token: write",
     "package_names_confirmed",
     "pnpm package:check",
+    "pnpm audit --audit-level high",
+    "continue-on-error: true",
     "pnpm changeset publish --provenance",
   ]) {
     if (!releaseWorkflow.includes(needle)) {
@@ -212,7 +214,12 @@ async function verifyReleaseControls() {
     ],
     [
       "docs/release-checklist.md",
-      ["npm publisher 2FA", "package ownership verified"],
+      [
+        "npm publisher 2FA",
+        "package ownership verified",
+        "not as the sole security gate",
+        "secret scanning",
+      ],
     ],
   ]) {
     const text = await readFile(file, "utf8");

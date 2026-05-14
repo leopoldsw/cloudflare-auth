@@ -30,6 +30,8 @@ await requireText("docs/release-checklist.md", "unresolved high/critical");
 await requireText("docs/release-checklist.md", "public API report reviewed");
 await requireText("docs/release-checklist.md", "config schema reviewed");
 await requireText("docs/release-checklist.md", "security review decision");
+await requireText("SECURITY.md", "secret scanning");
+await requireText("SECURITY.md", "advisory evidence only");
 
 const stablePackages = packages.filter((pkg) =>
   isStableOneOrLater(pkg.version),

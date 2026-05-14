@@ -11,6 +11,7 @@
 - `pnpm build`
 - `pnpm package:check`
 - `pnpm version-matrix:check`
+- `pnpm audit --audit-level high` reviewed as advisory evidence, not as the sole security gate
 - `pnpm verify:alpha-evidence`
 - `pnpm verify:deploy-template`
 - `pnpm verify:docs-coverage`
@@ -31,6 +32,7 @@
 - `doctor --report` attached to the release issue
 - known limitations reviewed
 - unresolved high/critical auth security issues checked
+- secret scanning and push protection enabled or explicitly documented as unavailable
 
 ## Public Beta
 

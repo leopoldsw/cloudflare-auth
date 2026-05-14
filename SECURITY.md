@@ -16,6 +16,14 @@ Do not include raw session cookies, raw magic-link tokens, password-reset tokens
 
 Maintainers aim to acknowledge high or critical auth security reports within 3 business days and provide a remediation plan or status update within 10 business days.
 
+## Maintainer Operational Checks
+
+Release maintainers should keep GitHub secret scanning and push protection
+enabled where the repository host supports them. The release workflow runs
+`pnpm audit --audit-level high` as advisory evidence only; dependency review,
+CodeQL, security regression tests, release tracker review, and the 1.0 security
+decision remain the release gates.
+
 ## Scope
 
 In scope:
