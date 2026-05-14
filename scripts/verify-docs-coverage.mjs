@@ -136,6 +136,14 @@ for (const entrypoint of [
 }
 
 for (const symbol of [
+  "runCli",
+  "createAuthClient",
+  "AuthClientError",
+  "normalizeEmail",
+  "validateRedirectTarget",
+  "parseAuthKeyRing",
+  "hashPassword",
+  "resolveSessionCookie",
   "defineAuthConfig",
   "createAuthHandler",
   "getSession",
@@ -148,8 +156,19 @@ for (const symbol of [
   "terminalEmail",
   "byEnvironment",
   "verifyTurnstileToken",
+  "turnstileEndpointNames",
   "cloudflareRateLimitPrefilter",
   "redactLogValue",
+  "createAuthRoutes",
+  "getAuthUser",
+  "optionalUser",
+  "cloudflareEmail",
+  "defaultMagicLinkTemplate",
+  "defaultEmailVerificationTemplate",
+  "defaultPasswordResetTemplate",
+  "createSqliteD1Database",
+  "applyD1Migrations",
+  "createMockEmailAdapter",
 ]) {
   requireText("docs/api.md", docs.api, symbol);
 }

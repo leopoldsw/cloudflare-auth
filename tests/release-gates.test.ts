@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -88,6 +88,18 @@ describe("release gates", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("scripts/verify-examples.mjs");
     expect(result.stderr).toContain("must enable observability");
+  });
+
+  it("runs public API docs coverage for root-export symbols", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    const docsPath = join(root, "docs", "api.md");
+    const docs = await readFile(docsPath, "utf8");
+    await writeFile(docsPath, docs.replace("hashPassword", "hash_password"));
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-docs-coverage.mjs");
+    expect(result.stderr).toContain("docs/api.md: missing hashPassword");
   });
 
   it("requires production password hashing in generated templates", async () => {
@@ -533,6 +545,14 @@ async function writeDocsCoverageFixtures(root: string) {
       "@cf-auth/client",
       "@cf-auth/email-cloudflare",
       "@cf-auth/testing",
+      "runCli",
+      "createAuthClient",
+      "AuthClientError",
+      "normalizeEmail",
+      "validateRedirectTarget",
+      "parseAuthKeyRing",
+      "hashPassword",
+      "resolveSessionCookie",
       "defineAuthConfig",
       "createAuthHandler",
       "getSession",
@@ -545,8 +565,19 @@ async function writeDocsCoverageFixtures(root: string) {
       "terminalEmail",
       "byEnvironment",
       "verifyTurnstileToken",
+      "turnstileEndpointNames",
       "cloudflareRateLimitPrefilter",
       "redactLogValue",
+      "createAuthRoutes",
+      "getAuthUser",
+      "optionalUser",
+      "cloudflareEmail",
+      "defaultMagicLinkTemplate",
+      "defaultEmailVerificationTemplate",
+      "defaultPasswordResetTemplate",
+      "createSqliteD1Database",
+      "applyD1Migrations",
+      "createMockEmailAdapter",
       "Default retention windows",
       "non-negative integer",
     ].join("\n"),

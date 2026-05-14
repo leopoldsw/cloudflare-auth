@@ -9,8 +9,8 @@ This report is the reviewed v1 public surface. Any breaking change requires an u
 - `cf-auth`: reserved private CLI shim exposing the `cf-auth` binary; published only after unscoped npm ownership is confirmed.
 - `@cf-auth/cli`: `runCli(args, io)`.
 - `create-cloudflare-auth`: reserved private create-package entrypoint; published only after npm ownership is confirmed.
-- `@cf-auth/core`: crypto, password, token, cookie, validation, redaction, and repository contracts, including session cookie name/domain validators.
-- `@cf-auth/worker`: `defineAuthConfig`, `createAuthHandler`, `getSession`, `getUser`, `requireUser`, `requireVerifiedUser`, `getAuthSessionFromRequest`, D1 repositories, scheduled cleanup helper, email adapter types, `terminalEmail`, `byEnvironment`, Turnstile verifier, rate-limit prefilter, and log redactor.
+- `@cf-auth/core`: row/repository contracts, `normalizeEmail`, `validateRedirectTarget`, `parseAuthKeyRing`, `hashPassword`, `resolveSessionCookie`, `redactLogValue`, crypto/password/token/cookie helpers, and session cookie name/domain validators.
+- `@cf-auth/worker`: `defineAuthConfig`, `createAuthHandler`, `getSession`, `getUser`, `requireUser`, `requireVerifiedUser`, `getAuthSessionFromRequest`, `createD1Repositories`, `cleanCfAuth`, email adapter types, `terminalEmail`, `byEnvironment`, `verifyTurnstileToken`, `turnstileEndpointNames`, `cloudflareRateLimitPrefilter`, and `redactLogValue`.
 - `@cf-auth/hono`: `createAuthRoutes`, `getAuthUser`, `optionalUser`, `requireUser`, and `requireVerifiedUser`.
 - `@cf-auth/client`: browser client, token consume helpers, optional Turnstile
   inputs, and typed client errors.
