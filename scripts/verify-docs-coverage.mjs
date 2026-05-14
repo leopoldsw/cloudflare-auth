@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 const docs = {
   api: await readFile("docs/api.md", "utf8"),
   cli: await readFile("docs/cli.md", "utf8"),
+  configSchema: await readFile("docs/config-schema.md", "utf8"),
   config: await readFile("docs/configuration.md", "utf8"),
   deployment: await readFile("docs/deployment.md", "utf8"),
   migrations: await readFile("docs/migrations.md", "utf8"),
@@ -82,6 +83,19 @@ for (const key of [
   requireText("docs/configuration.md", docs.config, key);
 }
 
+for (const key of [
+  "AUTH_DB",
+  "AUTH_SECRET",
+  "AUTH_SECRET_PREVIOUS",
+  "AUTH_ENV",
+  "AUTH_PUBLIC_ORIGIN",
+  "TURNSTILE_SECRET_KEY",
+  "AUTH_RATE_LIMITER",
+  "AUTH_EMAIL",
+]) {
+  requireText("docs/config-schema.md", docs.configSchema, key);
+}
+
 for (const endpoint of [
   "POST /auth/signup",
   "POST /auth/login",
@@ -132,6 +146,7 @@ for (const text of [
   "AUTH_SECRET",
   "AUTH_DB.database_id",
   "AUTH_EMAIL",
+  "/auth/logout",
 ]) {
   requireText("docs/deployment.md", docs.deployment, text);
 }
