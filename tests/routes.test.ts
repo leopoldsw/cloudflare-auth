@@ -609,6 +609,31 @@ describe("auth HTTP runtime", () => {
     expect(
       disallowedPreflight?.headers.get("Access-Control-Allow-Origin"),
     ).toBeNull();
+
+    const previewPolicy = await setup({
+      security: {
+        allowedRequestOrigins: ["https://prod.example"],
+        allowedPreviewRequestOrigins: [],
+      },
+      runtime: {
+        mode: "from-env",
+        publicOrigin: "from-env",
+        trustedHosts: ["preview.example"],
+      },
+    });
+    const previewPreflight = await previewPolicy.handler.fetch(
+      new Request("https://preview.example/auth/signup", {
+        method: "OPTIONS",
+        headers: { Origin: "https://prod.example" },
+      }),
+      {
+        ...previewPolicy.env,
+        AUTH_ENV: "preview",
+        AUTH_PUBLIC_ORIGIN: "https://preview.example",
+      },
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+    expect(previewPreflight?.status).toBe(403);
   });
 
   it("keeps rate-limit keys opaque and feature-disabled endpoints side-effect free", async () => {

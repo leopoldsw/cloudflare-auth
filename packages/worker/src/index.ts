@@ -2999,9 +2999,9 @@ function handlePreflight(request: Request, runtime: RuntimeContext): Response {
     return new Response(null, { status: 204, headers: securityHeaders() });
   const allowed =
     origin === runtime.requestOrigin ||
-    runtime.config.security.allowedRequestOrigins.includes(origin) ||
-    (runtime.mode === "preview" &&
-      runtime.config.security.allowedPreviewRequestOrigins.includes(origin));
+    (runtime.mode === "preview"
+      ? runtime.config.security.allowedPreviewRequestOrigins.includes(origin)
+      : runtime.config.security.allowedRequestOrigins.includes(origin));
   if (!allowed)
     return new Response(null, { status: 403, headers: securityHeaders() });
   const headers = securityHeaders();
