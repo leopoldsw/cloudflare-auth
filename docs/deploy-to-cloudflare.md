@@ -32,7 +32,8 @@ Do not link the button from the README until the generated template has been
 published to its own public repository and the button flow has been verified.
 Copy `docs/deploy-button-evidence.example.json` to
 `docs/deploy-button-evidence.json` and record redaction-safe button-flow
-evidence before public beta:
+evidence before public beta. Do not include raw secrets, tokens, cookies,
+emails, IPs, user agents, or Cloudflare API tokens:
 
 ```bash
 CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence

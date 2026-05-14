@@ -17,7 +17,8 @@ Status: pending.
 
 Stable 1.0 also requires a redaction-safe security release tracker. Copy
 `docs/security-release-tracker.example.json` to
-`docs/security-release-tracker.json` and run:
+`docs/security-release-tracker.json` without raw secrets, tokens, cookies,
+emails, IPs, user agents, or Cloudflare API tokens and run:
 
 ```bash
 CF_AUTH_REQUIRE_SECURITY_TRACKER=1 pnpm verify:security-tracker

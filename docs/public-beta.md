@@ -61,7 +61,9 @@ through the `AUTH_DB` binding.
 ## Before 1.0
 
 Copy `docs/beta-evidence.example.json` to `docs/beta-evidence.json` and
-record redaction-safe public-beta evidence before stable 1.0:
+record redaction-safe public-beta evidence before stable 1.0. Do not include
+raw secrets, tokens, cookies, emails, IPs, user agents, or Cloudflare API
+tokens:
 
 ```bash
 CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence
