@@ -1,13 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { performance } from "node:perf_hooks";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import {
   base64urlEncode,
-  hashPassword,
   normalizeEmail,
+  passwordHashProfiles,
   type PasswordHashProfileName,
   parseAuthKeyRing,
   assertValidSessionCookieDomain,
@@ -15,13 +14,17 @@ import {
   resolveSessionCookie,
 } from "@cf-auth/core";
 import cliPackageJson from "../package.json" with { type: "json" };
+import {
+  runWorkersPasswordBenchmark,
+  type PasswordBenchmarkResult,
+} from "./password-benchmark.js";
 
 export const cliPackageName = "@cf-auth/cli";
 const generatedPackageVersion = cliPackageJson.version;
 const supportedWranglerVersion = cliPackageJson.dependencies.wrangler;
 const passwordBenchmarkCache = new Map<
   PasswordHashProfileName,
-  Promise<PasswordBenchmarkResult>
+  Promise<PasswordBenchmarkResult<PasswordHashProfileName>>
 >();
 
 export interface CliIO {
@@ -29,6 +32,7 @@ export interface CliIO {
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
   runCommand?: CommandRunner;
+  benchmarkPasswordProfile?: PasswordBenchmarkRunner;
 }
 
 interface ParsedArgs {
@@ -87,11 +91,9 @@ interface DoctorReport {
   };
 }
 
-interface PasswordBenchmarkResult {
-  profile: PasswordHashProfileName;
-  p50Ms: number;
-  p95Ms: number;
-}
+type PasswordBenchmarkRunner = (
+  profile: PasswordHashProfileName,
+) => Promise<PasswordBenchmarkResult<PasswordHashProfileName>>;
 
 export async function runCli(
   args = process.argv.slice(2),
@@ -101,6 +103,8 @@ export async function runCli(
   const out = io.stdout ?? console.log;
   const err = io.stderr ?? console.error;
   const cwd = io.cwd ?? process.cwd();
+  const passwordBenchmark =
+    io.benchmarkPasswordProfile ?? benchmarkPasswordProfile;
   try {
     switch (parsed.command) {
       case "help":
@@ -121,6 +125,7 @@ export async function runCli(
           parsed,
           cwd,
           io.runCommand ?? runCommand,
+          passwordBenchmark,
         );
         if (parsed.flags.report) {
           const reportJson = JSON.stringify(result.report, null, 2) + "\n";
@@ -137,7 +142,14 @@ export async function runCli(
         return result.ok ? 0 : 1;
       }
       case "deploy":
-        out(await commandDeploy(parsed, cwd, io.runCommand ?? runCommand));
+        out(
+          await commandDeploy(
+            parsed,
+            cwd,
+            io.runCommand ?? runCommand,
+            passwordBenchmark,
+          ),
+        );
         return 0;
       case "generate":
         out(commandGenerate(parsed));
@@ -272,6 +284,7 @@ async function commandDoctor(
   parsed: ParsedArgs,
   cwd: string,
   runner: CommandRunner,
+  passwordBenchmark: PasswordBenchmarkRunner,
 ): Promise<{ ok: boolean; lines: string[]; report: DoctorReport }> {
   const checks: DoctorCheck[] = [];
   let ok = true;
@@ -402,7 +415,9 @@ async function commandDoctor(
   for (const check of checkAuthSource(authSource, vars, remoteTarget)) {
     addCheck(check);
   }
-  addCheck(await checkPasswordBenchmark(authSource, remoteTarget));
+  addCheck(
+    await checkPasswordBenchmark(authSource, remoteTarget, passwordBenchmark),
+  );
   if (remoteTarget) {
     addCheck(checkCloudflareAccount(cwd, runner, config));
   }
@@ -770,6 +785,7 @@ async function commandDeploy(
   parsed: ParsedArgs,
   cwd: string,
   runner: CommandRunner,
+  passwordBenchmark: PasswordBenchmarkRunner,
 ): Promise<string> {
   const envName = parsed.flags.env as string | undefined;
   const config = await readWrangler(cwd);
@@ -784,7 +800,7 @@ async function commandDeploy(
       "Deploy without --env requires top-level vars.AUTH_ENV=production.",
     );
   }
-  const doctor = await commandDoctor(parsed, cwd, runner);
+  const doctor = await commandDoctor(parsed, cwd, runner, passwordBenchmark);
   if (!doctor.ok) {
     throw new Error(`doctor failed before deploy:\n${doctor.lines.join("\n")}`);
   }
@@ -1502,10 +1518,11 @@ function checkRequestConfigSource(
 async function checkPasswordBenchmark(
   source: AuthSourceInspection,
   remoteTarget: boolean,
+  passwordBenchmark: PasswordBenchmarkRunner,
 ): Promise<DoctorCheck> {
-  let result: PasswordBenchmarkResult;
+  let result: PasswordBenchmarkResult<PasswordHashProfileName>;
   try {
-    result = await benchmarkPasswordProfile(source.passwordHashProfile);
+    result = await passwordBenchmark(source.passwordHashProfile);
   } catch {
     return {
       id: "password_benchmark",
@@ -1519,11 +1536,12 @@ async function checkPasswordBenchmark(
   );
   const queueEstimateMs = queueBatches * result.p95Ms;
   const estimate = remoteTarget ? " local-estimate" : "";
+  const measured = `${result.profile} p95=${result.p95Ms}ms throughput=${result.throughputHashesPerSecond}/s`;
   if (remoteTarget && source.passwordHashProfile === "development-fast") {
     return {
       id: "password_benchmark",
       status: "warn",
-      message: `Password hashing benchmark${estimate} ${result.profile} p95=${result.p95Ms}ms, but development-fast is configured for a remote target`,
+      message: `Password hashing benchmark${estimate} ${measured}, but development-fast is configured for a remote target`,
       fix: "use workers-balanced for preview/production unless a documented target Worker benchmark justifies different params",
     };
   }
@@ -1531,7 +1549,7 @@ async function checkPasswordBenchmark(
     return {
       id: "password_benchmark",
       status: "warn",
-      message: `Password hashing benchmark${estimate} ${result.profile} p95=${result.p95Ms}ms exceeds 750ms`,
+      message: `Password hashing benchmark${estimate} ${measured} exceeds 750ms`,
       fix: "reduce passwordHashing profile or document a target Worker benchmark before production deploy",
     };
   }
@@ -1546,41 +1564,22 @@ async function checkPasswordBenchmark(
   return {
     id: "password_benchmark",
     status: "pass",
-    message: `Password hashing benchmark${estimate} ${result.profile} p95=${result.p95Ms}ms`,
+    message: `Password hashing benchmark${estimate} ${measured}`,
   };
 }
 
 async function benchmarkPasswordProfile(
   profile: PasswordHashProfileName,
-): Promise<PasswordBenchmarkResult> {
+): Promise<PasswordBenchmarkResult<PasswordHashProfileName>> {
   let cached = passwordBenchmarkCache.get(profile);
   if (!cached) {
-    cached = runPasswordBenchmark(profile);
+    cached = runWorkersPasswordBenchmark({
+      profile,
+      params: passwordHashProfiles[profile],
+    });
     passwordBenchmarkCache.set(profile, cached);
   }
   return cached;
-}
-
-async function runPasswordBenchmark(
-  profile: PasswordHashProfileName,
-): Promise<PasswordBenchmarkResult> {
-  const samples: number[] = [];
-  for (let index = 0; index < 3; index += 1) {
-    await hashPassword("correct horse battery staple benchmark", { profile });
-  }
-  for (let index = 0; index < 10; index += 1) {
-    const started = performance.now();
-    await hashPassword("correct horse battery staple benchmark", { profile });
-    samples.push(performance.now() - started);
-  }
-  samples.sort((a, b) => a - b);
-  const p50 = samples[Math.floor(samples.length * 0.5)] ?? 0;
-  const p95 = samples[Math.floor(samples.length * 0.95)] ?? samples.at(-1) ?? 0;
-  return {
-    profile,
-    p50Ms: Math.round(p50),
-    p95Ms: Math.round(p95),
-  };
 }
 
 function checkRedirectOrigins(

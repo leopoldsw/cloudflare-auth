@@ -1,33 +1,16 @@
-import { performance } from "node:perf_hooks";
-
-import type { PasswordHashProfileName } from "../packages/core/src/index.js";
-import { hashPassword } from "../packages/core/src/index.js";
+import {
+  passwordHashProfiles,
+  type PasswordHashProfileName,
+} from "../packages/core/src/index.js";
+import { runWorkersPasswordBenchmark } from "../packages/cli/src/password-benchmark.js";
 
 const profile = parseProfile(process.argv);
-const samples: number[] = [];
-for (let i = 0; i < 3; i += 1) {
-  await hashPassword("benchmark password", { profile });
-}
-for (let i = 0; i < 10; i += 1) {
-  const started = performance.now();
-  await hashPassword("benchmark password", { profile });
-  samples.push(performance.now() - started);
-}
+const result = await runWorkersPasswordBenchmark({
+  profile,
+  params: passwordHashProfiles[profile],
+});
 
-samples.sort((a, b) => a - b);
-const p50 = samples[Math.floor(samples.length * 0.5)] ?? 0;
-const p95 = samples[Math.floor(samples.length * 0.95)] ?? samples.at(-1) ?? 0;
-console.log(
-  JSON.stringify(
-    {
-      profile,
-      p50Ms: Math.round(p50),
-      p95Ms: Math.round(p95),
-    },
-    null,
-    2,
-  ),
-);
+console.log(JSON.stringify(result, null, 2));
 
 function parseProfile(args: string[]): PasswordHashProfileName {
   const index = args.indexOf("--profile");

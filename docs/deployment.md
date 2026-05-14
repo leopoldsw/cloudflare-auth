@@ -46,8 +46,9 @@ checks when preview/production email config selects terminal email/dev outbox,
 when literal request or redirect origin allowlists are invalid, when auth
 routes are mounted more than once, or when an obvious `/auth/auth` double prefix
 exists.
-It also runs the configured password hashing profile benchmark locally and
-labels production results as local estimates.
+It also runs the configured password hashing profile benchmark in Wrangler's
+local Workers runtime, reports p50/p95 and throughput, and labels production
+results as local estimates.
 
 `npx --package @cf-auth/cli@latest cf-auth rotate-secret --apply --env production` generates a new `AUTH_SECRET`
 and sends it to Wrangler over stdin. It prints the Wrangler operation result,

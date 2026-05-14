@@ -3,8 +3,22 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { runCli } from "@cf-auth/cli";
+import { runCli as runCliRaw } from "@cf-auth/cli";
 import { describe, expect, it } from "vitest";
+
+const runCli: typeof runCliRaw = (args, io = {}) =>
+  runCliRaw(args, {
+    benchmarkPasswordProfile: async (profile) => ({
+      profile,
+      runtime: "workers-local",
+      warmupHashes: 3,
+      measuredHashes: 10,
+      p50Ms: 50,
+      p95Ms: 58,
+      throughputHashesPerSecond: 17.24,
+    }),
+    ...io,
+  });
 
 describe("CLI MVP", () => {
   it("scaffolds a new Hono app without manual source mutation", async () => {
