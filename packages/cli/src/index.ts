@@ -48,6 +48,8 @@ interface CommandRunResult {
   stderr: string;
 }
 
+type InitTemplate = "hono-basic" | "worker-basic";
+
 type CommandRunner = (
   command: string,
   args: string[],
@@ -167,14 +169,13 @@ async function commandInit(
   cwd: string,
   out: (line: string) => void,
 ): Promise<void> {
+  const template = resolveInitTemplate(parsed.flags.template);
   const target = resolve(cwd, parsed.positionals[0] ?? ".");
   if (parsed.flags["dry-run"]) {
     out(
-      "Would write package.json, pnpm-workspace.yaml, tsconfig.json, auth.config.ts, wrangler.jsonc, migrations, .gitignore, .dev.vars, .dev.vars.example, and route mount snippets.",
+      `Would write ${template} package.json, pnpm-workspace.yaml, tsconfig.json, auth.config.ts, wrangler.jsonc, migrations, .gitignore, .dev.vars, .dev.vars.example, and route mount snippets.`,
     );
-    out(
-      "Hono mount: app.route(authConfig.basePath, createAuthRoutes(authConfig));",
-    );
+    out(templateMountSnippet(template));
     return;
   }
   await mkdir(join(target, "src"), { recursive: true });
@@ -183,6 +184,7 @@ async function commandInit(
   const packageResult = await writeOrPatchPackageJson(
     join(target, "package.json"),
     packageNameFromTarget(target),
+    template,
   );
   const sourceIndexPath = join(target, "src", "index.ts");
   const sourceIndexExists = existsSync(sourceIndexPath);
@@ -195,7 +197,7 @@ async function commandInit(
     join(target, "src", "auth.config.ts"),
     authConfigTemplate(),
   );
-  await writeIfMissing(sourceIndexPath, honoIndexTemplate());
+  await writeIfMissing(sourceIndexPath, indexTemplate(template));
   await writeIfMissing(join(target, "wrangler.jsonc"), wranglerTemplate());
   await writeIfMissing(join(target, ".gitignore"), gitignoreTemplate());
   await writeIfMissing(join(target, ".dev.vars"), devVarsTemplate(localSecret));
@@ -213,9 +215,9 @@ async function commandInit(
     out("Updated package.json with Cloudflare Auth dependencies.");
   if (sourceIndexExists) {
     out(
-      "Existing src/index.ts was left unchanged. Add this Hono mount once if it is not already present:",
+      "Existing src/index.ts was left unchanged. Add this auth mount once if it is not already present:",
     );
-    out("app.route(authConfig.basePath, createAuthRoutes(authConfig));");
+    out(templateMountSnippet(template));
   }
   out(
     "Next: pnpm install && npx --package @cf-auth/cli@latest cf-auth migrate --local && npm run dev",
@@ -2396,7 +2398,33 @@ function packageNameFromTarget(target: string): string {
   );
 }
 
-function templatePackageJson(name: string) {
+function resolveInitTemplate(
+  value: string | boolean | undefined,
+): InitTemplate {
+  if (value === undefined) return "hono-basic";
+  if (value === true)
+    throw new Error(
+      "Missing value for --template. Use hono-basic or worker-basic.",
+    );
+  if (value === "hono-basic" || value === "worker-basic") return value;
+  throw new Error(
+    `Unsupported template: ${value}. Supported templates: hono-basic, worker-basic.`,
+  );
+}
+
+function templatePackageJson(name: string, template: InitTemplate) {
+  const dependencies =
+    template === "hono-basic"
+      ? {
+          "@cf-auth/email-cloudflare": generatedPackageVersion,
+          "@cf-auth/hono": generatedPackageVersion,
+          "@cf-auth/worker": generatedPackageVersion,
+          hono: "4.12.18",
+        }
+      : {
+          "@cf-auth/email-cloudflare": generatedPackageVersion,
+          "@cf-auth/worker": generatedPackageVersion,
+        };
   return {
     name,
     type: "module",
@@ -2405,12 +2433,7 @@ function templatePackageJson(name: string) {
       build: "tsc -p tsconfig.json --noEmit",
       test: "vitest run --passWithNoTests",
     },
-    dependencies: {
-      "@cf-auth/email-cloudflare": generatedPackageVersion,
-      "@cf-auth/hono": generatedPackageVersion,
-      "@cf-auth/worker": generatedPackageVersion,
-      hono: "4.12.18",
-    },
+    dependencies,
     devDependencies: {
       typescript: "6.0.3",
       wrangler: "4.90.1",
@@ -2428,11 +2451,12 @@ type PackageJsonPatchResult = "created" | "updated" | "unchanged";
 async function writeOrPatchPackageJson(
   path: string,
   name: string,
+  template: InitTemplate,
 ): Promise<PackageJsonPatchResult> {
   if (!existsSync(path)) {
     await writeFile(
       path,
-      JSON.stringify(templatePackageJson(name), null, 2) + "\n",
+      JSON.stringify(templatePackageJson(name, template), null, 2) + "\n",
     );
     return "created";
   }
@@ -2444,7 +2468,7 @@ async function writeOrPatchPackageJson(
   const dependencies = { ...(pkg.dependencies ?? {}) };
   const devDependencies = { ...(pkg.devDependencies ?? {}) };
   for (const [dependency, version] of Object.entries(
-    templatePackageJson(name).dependencies,
+    templatePackageJson(name, template).dependencies,
   )) {
     if (!dependencies[dependency]) {
       dependencies[dependency] = version;
@@ -2452,8 +2476,10 @@ async function writeOrPatchPackageJson(
     }
   }
   if (!devDependencies.wrangler) {
-    devDependencies.wrangler =
-      templatePackageJson(name).devDependencies.wrangler;
+    devDependencies.wrangler = templatePackageJson(
+      name,
+      template,
+    ).devDependencies.wrangler;
     changed = true;
   }
   if (!changed) return "unchanged";
@@ -2506,6 +2532,37 @@ const app = new Hono();
 app.route(authConfig.basePath, createAuthRoutes(authConfig));
 export default app;
 `;
+}
+
+function workerIndexTemplate(): string {
+  return `import { createAuthHandler } from "@cf-auth/worker";
+import authConfig from "./auth.config.js";
+
+const authHandler = createAuthHandler(authConfig);
+
+export default {
+  async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
+    const authResponse = await authHandler.fetch(request, env, ctx);
+    if (authResponse) return authResponse;
+    return new Response("Cloudflare Auth");
+  }
+};
+`;
+}
+
+function indexTemplate(template: InitTemplate): string {
+  return template === "hono-basic"
+    ? honoIndexTemplate()
+    : workerIndexTemplate();
+}
+
+function templateMountSnippet(template: InitTemplate): string {
+  return template === "hono-basic"
+    ? "Hono mount: app.route(authConfig.basePath, createAuthRoutes(authConfig));"
+    : `Worker mount:
+const authHandler = createAuthHandler(authConfig);
+const authResponse = await authHandler.fetch(request, env, ctx);
+if (authResponse) return authResponse;`;
 }
 
 function tsconfigTemplate(): string {

@@ -82,6 +82,30 @@ describe("CLI MVP", () => {
     ).resolves.toBe(await readFile("migrations/0002_indexes.sql", "utf8"));
   });
 
+  it("honors the plain Worker init template", async () => {
+    const cwd = await tempDir();
+    const code = await runCli(
+      ["init", "worker-app", "--template", "worker-basic", "--yes"],
+      {
+        cwd,
+      },
+    );
+    const app = join(cwd, "worker-app");
+    expect(code).toBe(0);
+    const generatedPackage = JSON.parse(
+      await readFile(join(app, "package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    expect(generatedPackage.dependencies["@cf-auth/worker"]).toBe("0.0.0");
+    expect(generatedPackage.dependencies["@cf-auth/email-cloudflare"]).toBe(
+      "0.0.0",
+    );
+    expect(generatedPackage.dependencies["@cf-auth/hono"]).toBeUndefined();
+    expect(generatedPackage.dependencies.hono).toBeUndefined();
+    const source = await readFile(join(app, "src", "index.ts"), "utf8");
+    expect(source).toContain("createAuthHandler(authConfig)");
+    expect(source).not.toContain("createAuthRoutes");
+  });
+
   it("prints snippets and writes nothing in dry-run init", async () => {
     const cwd = await tempDir();
     const output: string[] = [];
@@ -92,6 +116,18 @@ describe("CLI MVP", () => {
     expect(code).toBe(0);
     expect(output.join("\n")).toContain("Hono mount");
     expect(existsSync(join(cwd, "auth.config.ts"))).toBe(false);
+  });
+
+  it("rejects unknown init templates", async () => {
+    const cwd = await tempDir();
+    const errors: string[] = [];
+    const code = await runCli(["init", "bad-app", "--template", "unknown"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+    });
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("Unsupported template: unknown");
+    expect(existsSync(join(cwd, "bad-app"))).toBe(false);
   });
 
   it("patches existing app package metadata without changing source", async () => {

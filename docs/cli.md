@@ -8,12 +8,13 @@ fallback.
 
 ```bash
 npx --package @cf-auth/cli@latest cf-auth init my-app --template hono-basic
+npx --package @cf-auth/cli@latest cf-auth init worker-app --template worker-basic
 npx --package @cf-auth/cli@latest cf-auth init --dry-run
 ```
 
 `init` writes a runnable Worker auth app or prints route snippets in dry-run
 mode. Generated projects keep local and production Wrangler environments
-separate.
+separate. Supported templates are `hono-basic` and `worker-basic`.
 
 ## Migrations
 

@@ -3,7 +3,7 @@
 Run:
 
 ```bash
-npx --package @cf-auth/cli@latest cf-auth init
+npx --package @cf-auth/cli@latest cf-auth init --template worker-basic
 pnpm install
 npx --package @cf-auth/cli@latest cf-auth migrate --local
 ```
