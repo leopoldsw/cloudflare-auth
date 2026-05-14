@@ -20,6 +20,7 @@ await requireFile(".github/workflows/cloudflare-production-smoke.yml");
 await requireFile(".github/workflows/dependency-review.yml");
 await requireFile(".github/workflows/published-quickstart-smoke.yml");
 await requireFile("scripts/export-deploy-template.mjs");
+await requireFile("scripts/verify-alpha-evidence.mjs");
 await requireFile("scripts/verify-deploy-template.mjs");
 await requireText("README.md", "SECURITY.md");
 await requireText("SECURITY.md", "Expected Response Window");
@@ -31,6 +32,12 @@ await requireText("docs/release-checklist.md", "security review decision");
 const stablePackages = packages.filter((pkg) =>
   isStableOneOrLater(pkg.version),
 );
+const betaPackages = packages.filter((pkg) => isPublicBeta(pkg.version));
+if (betaPackages.length > 0) {
+  await requireFile("docs/alpha-evidence.json");
+  await requireText("docs/alpha-evidence.json", '"localSetups"');
+  await requireText("docs/alpha-evidence.json", '"productionDeploys"');
+}
 if (stablePackages.length > 0) {
   await requireReleaseApproval("docs/api-report.md", "Public API report");
   await requireReleaseApproval("docs/config-schema.md", "Config schema");
@@ -127,4 +134,9 @@ function isStableOneOrLater(version) {
   if (!match) return false;
   if (version.includes("-")) return false;
   return Number(match[1]) >= 1;
+}
+
+function isPublicBeta(version) {
+  if (typeof version !== "string") return false;
+  return /^\d+\.\d+\.\d+-beta(?:[.-].*)?$/u.test(version);
 }

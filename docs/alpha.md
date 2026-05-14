@@ -24,6 +24,17 @@ Success means:
 
 Record setup time from the first scaffold command until the first successful signup/login.
 
+## Evidence File
+
+Before public beta, copy `docs/alpha-evidence.example.json` to
+`docs/alpha-evidence.json` and record only redaction-safe evidence. Do not paste
+raw secrets, cookies, auth tokens, emails from doctor reports, IPs, or user
+agents into the evidence file. The verifier enforces the public-beta thresholds:
+
+```bash
+CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence
+```
+
 ## Production Deploy Script
 
 Run from the generated app:

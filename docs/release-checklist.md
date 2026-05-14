@@ -11,6 +11,7 @@
 - `pnpm build`
 - `pnpm package:check`
 - `pnpm version-matrix:check`
+- `pnpm verify:alpha-evidence`
 - `pnpm verify:deploy-template`
 - `pnpm verify:migrations`
 - `pnpm verify:examples`
@@ -23,6 +24,7 @@
 - package names confirmed or fallback docs updated
 - release workflow `package_names_confirmed` gate set only after package names are verified
 - local clean-directory quickstart passes
+- private-alpha evidence verifier passes before public beta
 - `doctor --report` attached to the release issue
 - known limitations reviewed
 - unresolved high/critical auth security issues checked

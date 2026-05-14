@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "localSetups": [
+    {
+      "user": "alpha-user-1",
+      "completedAt": "2026-05-14T00:00:00.000Z",
+      "setupMinutes": 8,
+      "cleanDirectory": true,
+      "documentedCommandsOnly": true,
+      "signupLoginVerified": true
+    }
+  ],
+  "productionDeploys": [
+    {
+      "user": "alpha-user-1",
+      "completedAt": "2026-05-14T00:00:00.000Z",
+      "doctorReportAttached": true,
+      "doctorPassed": true,
+      "migratePassed": true,
+      "deployPassed": true,
+      "signupLoginVerified": true
+    }
+  ],
+  "failures": [
+    {
+      "id": "alpha-001",
+      "flow": "Local setup",
+      "classification": "fixed by an existing troubleshooting entry",
+      "doctorDiagnostic": false,
+      "exactFixDocumented": true,
+      "troubleshootingEntry": "Missing D1 binding"
+    }
+  ]
+}
