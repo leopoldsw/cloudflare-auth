@@ -289,6 +289,30 @@ describe("CLI MVP", () => {
     );
     expect(local.join("\n")).toContain("local migrations");
 
+    const localApply: string[] = [];
+    const localApplyCalls: string[] = [];
+    await runCli(["migrate", "--local"], {
+      cwd,
+      stdout: (line) => localApply.push(line),
+      runCommand: (command, args) => {
+        localApplyCalls.push([command, ...args].join(" "));
+        if (args[0] === "d1" && args[1] === "execute") {
+          return { status: 0, stdout: migrationStateJson(), stderr: "" };
+        }
+        return { status: 0, stdout: "local migrated\n", stderr: "" };
+      },
+    });
+    expect(localApplyCalls).toEqual([
+      "wrangler d1 migrations apply app-auth-dev --local",
+      `wrangler d1 execute app-auth-dev --local --json --command ${migrationStateSql()}`,
+    ]);
+    expect(localApply.join("\n")).toContain(
+      "wrangler d1 migrations apply app-auth-dev --local",
+    );
+    expect(localApply.join("\n")).toContain(
+      "D1 migrations are applied locally",
+    );
+
     const remote: string[] = [];
     const remoteCalls: string[] = [];
     await runCli(["migrate", "--remote", "--env", "production"], {
@@ -310,6 +334,24 @@ describe("CLI MVP", () => {
       "wrangler d1 migrations apply app-auth --remote --env production",
     );
     expect(remote.join("\n")).toContain("D1 migrations are applied remotely");
+
+    const remoteStatus: string[] = [];
+    const remoteStatusCalls: string[] = [];
+    await runCli(["migrate", "--status", "--remote", "--env", "production"], {
+      cwd,
+      stdout: (line) => remoteStatus.push(line),
+      runCommand: (command, args) => {
+        remoteStatusCalls.push([command, ...args].join(" "));
+        return { status: 0, stdout: "remote migrations\n", stderr: "" };
+      },
+    });
+    expect(remoteStatusCalls).toEqual([
+      "wrangler d1 migrations list app-auth --remote --env production",
+    ]);
+    expect(remoteStatus.join("\n")).toContain(
+      "wrangler d1 migrations list app-auth --remote --env production",
+    );
+    expect(remoteStatus.join("\n")).toContain("remote migrations");
 
     const dryRun: string[] = [];
     await runCli(["migrate", "--dry-run", "--remote", "--env", "production"], {
