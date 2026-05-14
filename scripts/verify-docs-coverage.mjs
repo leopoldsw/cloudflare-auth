@@ -44,16 +44,8 @@ for (const key of configKeys) {
   requireText("docs/config-schema.md", docs.configSchema, key);
 }
 
-for (const key of [
-  "AUTH_DB",
-  "AUTH_SECRET",
-  "AUTH_SECRET_PREVIOUS",
-  "AUTH_ENV",
-  "AUTH_PUBLIC_ORIGIN",
-  "TURNSTILE_SECRET_KEY",
-  "AUTH_RATE_LIMITER",
-  "AUTH_EMAIL",
-]) {
+const environmentKeys = await generatedEnvKeys();
+for (const key of environmentKeys) {
   requireText("docs/config-schema.md", docs.configSchema, key);
 }
 
@@ -392,6 +384,93 @@ async function cliCommandNames() {
     failures.push(`${path}: no CLI commands found in runCli dispatcher`);
 
   return [...commands].sort();
+}
+
+async function generatedEnvKeys() {
+  const path = "packages/cli/src/index.ts";
+  let sourceText;
+  try {
+    sourceText = await readFile(path, "utf8");
+  } catch {
+    failures.push(`${path}: could not be read for generated Env docs coverage`);
+    return [];
+  }
+
+  const sourceFile = ts.createSourceFile(
+    path,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const keys = new Set();
+  let foundTypesGenerator = false;
+
+  function visit(node) {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "commandGenerate"
+    ) {
+      ts.forEachChild(node, collectTypesGenerator);
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  function collectTypesGenerator(node) {
+    if (
+      ts.isIfStatement(node) &&
+      stringEquality(node.expression)?.name === "what" &&
+      stringEquality(node.expression)?.value === "types"
+    ) {
+      foundTypesGenerator = true;
+      collectEnvKeysFromStatement(node.thenStatement);
+      return;
+    }
+    ts.forEachChild(node, collectTypesGenerator);
+  }
+
+  function collectEnvKeysFromStatement(statement) {
+    if (ts.isBlock(statement)) {
+      for (const child of statement.statements)
+        collectEnvKeysFromStatement(child);
+      return;
+    }
+    if (!ts.isReturnStatement(statement) || !statement.expression) return;
+    const array = arrayLiteralJoinedByNewline(statement.expression);
+    if (!array) return;
+    for (const element of array.elements) {
+      const text = stringLiteralValue(element);
+      if (!text) continue;
+      const match = text.match(/^\s+([A-Z][A-Z0-9_]+)\??:/u);
+      if (match?.[1]) keys.add(match[1]);
+    }
+  }
+
+  visit(sourceFile);
+
+  if (!foundTypesGenerator)
+    failures.push(
+      `${path}: missing generate types output for Env docs coverage`,
+    );
+  if (keys.size === 0)
+    failures.push(`${path}: no generated Env keys found for docs coverage`);
+
+  return [...keys].sort();
+}
+
+function arrayLiteralJoinedByNewline(expression) {
+  if (
+    ts.isCallExpression(expression) &&
+    ts.isPropertyAccessExpression(expression.expression) &&
+    expression.expression.name.text === "join" &&
+    expression.arguments.length === 1 &&
+    stringLiteralValue(expression.arguments[0]) === "\n" &&
+    ts.isArrayLiteralExpression(expression.expression.expression)
+  ) {
+    return expression.expression.expression;
+  }
+  return null;
 }
 
 function routeEndpointFromExpression(expression) {

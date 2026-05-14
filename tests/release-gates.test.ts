@@ -156,6 +156,26 @@ describe("release gates", () => {
     expect(result.stderr).toContain("docs/cli.md: missing cf-auth tokens");
   });
 
+  it("derives environment docs coverage from generated Env types", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "packages/cli/src/index.ts",
+      '    "  AUTH_SECRET: string;",',
+      [
+        '    "  AUTH_SECRET: string;",',
+        '    "  AUTH_AUDIT_LOG?: unknown;",',
+      ].join("\n"),
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/verify-docs-coverage.mjs");
+    expect(result.stderr).toContain(
+      "docs/config-schema.md: missing AUTH_AUDIT_LOG",
+    );
+  });
+
   it("derives API endpoint docs coverage from worker routes", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await replaceFixtureText(
@@ -791,6 +811,23 @@ async function writeDocsCoverageFixtures(root: string) {
       "    default:",
       "      return 1;",
       "  }",
+      "}",
+      "function commandGenerate(parsed: { positionals: string[] }) {",
+      '  const what = parsed.positionals[0] ?? "hono";',
+      '  if (what === "types")',
+      "    return [",
+      '      "export interface Env {",',
+      '      "  AUTH_DB: D1Database;",',
+      '      "  AUTH_EMAIL?: unknown;",',
+      '      "  AUTH_RATE_LIMITER?: unknown;",',
+      '      "  AUTH_SECRET: string;",',
+      '      "  AUTH_SECRET_PREVIOUS?: string;",',
+      '      "  AUTH_ENV: \\"development\\" | \\"preview\\" | \\"production\\";",',
+      '      "  AUTH_PUBLIC_ORIGIN?: string;",',
+      '      "  TURNSTILE_SECRET_KEY?: string;",',
+      '      "}",',
+      '    ].join("\\n");',
+      '  return "";',
       "}",
     ].join("\n"),
   );
