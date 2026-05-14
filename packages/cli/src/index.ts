@@ -126,6 +126,7 @@ export async function runCli(
           cwd,
           io.runCommand ?? runCommand,
           passwordBenchmark,
+          {},
         );
         if (parsed.flags.report) {
           const reportJson = JSON.stringify(result.report, null, 2) + "\n";
@@ -314,6 +315,7 @@ async function commandDoctor(
   cwd: string,
   runner: CommandRunner,
   passwordBenchmark: PasswordBenchmarkRunner,
+  options: { allowPendingMigrations?: boolean },
 ): Promise<{ ok: boolean; lines: string[]; report: DoctorReport }> {
   const checks: DoctorCheck[] = [];
   let ok = true;
@@ -451,15 +453,22 @@ async function commandDoctor(
     addCheck(checkCloudflareAccount(cwd, runner, config));
   }
   if (d1 && localMigrationVersions.length > 0) {
+    const migrationCheck = checkD1MigrationState({
+      cwd,
+      runner,
+      databaseName: d1.database_name,
+      envName,
+      remote: remoteTarget,
+      localMigrationVersions,
+    });
     addCheck(
-      checkD1MigrationState({
-        cwd,
-        runner,
-        databaseName: d1.database_name,
-        envName,
-        remote: remoteTarget,
-        localMigrationVersions,
-      }),
+      options.allowPendingMigrations && isPendingMigrationCheck(migrationCheck)
+        ? {
+            ...migrationCheck,
+            status: "warn",
+            fix: "pending migrations will be applied before deploy",
+          }
+        : migrationCheck,
     );
   }
   if (remoteTarget) {
@@ -757,6 +766,14 @@ function checkD1MigrationState(options: {
   };
 }
 
+function isPendingMigrationCheck(check: DoctorCheck): boolean {
+  return (
+    check.id === "d1_migrations" &&
+    check.status === "fail" &&
+    /\bhas not been applied\b/u.test(check.message)
+  );
+}
+
 function migrationStateSql(): string {
   return "SELECT version FROM auth_schema_migrations ORDER BY version; SELECT value FROM auth_meta WHERE key = 'schema_version';";
 }
@@ -829,7 +846,9 @@ async function commandDeploy(
       "Deploy without --env requires top-level vars.AUTH_ENV=production.",
     );
   }
-  const doctor = await commandDoctor(parsed, cwd, runner, passwordBenchmark);
+  const doctor = await commandDoctor(parsed, cwd, runner, passwordBenchmark, {
+    allowPendingMigrations: Boolean(parsed.flags.migrate),
+  });
   if (!doctor.ok) {
     throw new Error(`doctor failed before deploy:\n${doctor.lines.join("\n")}`);
   }
@@ -872,6 +891,27 @@ async function commandDeploy(
       cwd,
     );
     lines.push(runCheckedCommand(migrateApply, cwd, runner));
+    const database = selectD1(config, envName);
+    const localMigrationVersions = await readLocalMigrationVersions(cwd);
+    const migrationCheck = checkD1MigrationState({
+      cwd,
+      runner,
+      databaseName: database.database_name,
+      envName,
+      remote: true,
+      localMigrationVersions,
+    });
+    if (migrationCheck.status !== "pass") {
+      throw new Error(
+        [
+          migrationCheck.message,
+          migrationCheck.fix ? `Fix: ${migrationCheck.fix}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+    lines.push(migrationCheck.message);
   }
   lines.push(runCheckedCommand(deployCommand, cwd, runner));
   lines.push(`deployed with wrangler${envFlag}`);

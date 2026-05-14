@@ -1323,8 +1323,53 @@ export default app;
       "wrangler secret list --format json --env production",
       "wrangler d1 migrations list app-auth --remote --env production",
       "wrangler d1 migrations apply app-auth --remote --env production",
+      `wrangler d1 execute app-auth --remote --env production --json --command ${migrationStateSql()}`,
       "wrangler deploy --env production",
     ]);
+  });
+
+  it("allows deploy --migrate to apply pending migrations before deploy", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const calls: string[] = [];
+    let migrationReads = 0;
+    const code = await runCli(["deploy", "--migrate", "--env", "production"], {
+      cwd,
+      runCommand: (command, args) => {
+        calls.push([command, ...args].join(" "));
+        if (args[0] === "--version") {
+          return { status: 0, stdout: "4.90.1\n", stderr: "" };
+        }
+        if (args[0] === "whoami") {
+          return { status: 0, stdout: healthyWhoamiJson(), stderr: "" };
+        }
+        if (args[0] === "d1" && args[1] === "execute") {
+          migrationReads += 1;
+          return {
+            status: 0,
+            stdout:
+              migrationReads === 1
+                ? JSON.stringify([{ results: [{ version: "0001" }] }])
+                : migrationStateJson(),
+            stderr: "",
+          };
+        }
+        return {
+          status: 0,
+          stdout:
+            args[0] === "secret"
+              ? JSON.stringify([{ name: "AUTH_SECRET" }])
+              : "",
+          stderr: "",
+        };
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toContain(
+      "wrangler d1 migrations apply app-auth --remote --env production",
+    );
+    expect(calls.at(-1)).toBe("wrangler deploy --env production");
   });
 
   it("rejects top-level development deploys without an explicit environment", async () => {
