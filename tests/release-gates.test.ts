@@ -787,6 +787,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         ...authSmokeEndpoints,
         '"starterTemplateCreated"',
         '"documentedPathFollowed"',
+        '"emailBindingConfigured"',
         '"packageTag"',
       ],
     ],

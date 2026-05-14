@@ -181,6 +181,10 @@ await requireText(
   "docs/deploy-button-evidence.example.json",
   '"documentedPathFollowed"',
 );
+await requireText(
+  "docs/deploy-button-evidence.example.json",
+  '"emailBindingConfigured"',
+);
 await requireText("docs/deploy-button-evidence.example.json", '"packageTag"');
 await requireText(
   ".github/workflows/wrangler-dev-smoke.yml",
