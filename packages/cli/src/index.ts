@@ -839,8 +839,8 @@ function deploymentSummary(): string {
     "- /auth/logout",
     "- /auth/user",
     "- /auth/magic-link/request",
-    "- /auth/password-reset/request",
-    "- /auth/email-verification/request",
+    "- /auth/password/reset/request",
+    "- /auth/email/verify/request",
     "Cloudflare Email/DNS: verify sender and domain readiness in docs/cloudflare-email.md.",
   ].join("\n");
 }
