@@ -60,6 +60,7 @@ for (const text of [
   "tests/security-hardening.test.ts",
   "magic_link_consume",
   "password_reset_confirm",
+  "transport errors and malformed responses are treated as failed challenges",
 ]) {
   requireText("docs/turnstile.md", docs.turnstile, text);
 }

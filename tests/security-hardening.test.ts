@@ -207,6 +207,28 @@ describe("security hardening helpers", () => {
     expect(params.get("remoteip")).toBe("203.0.113.9");
   });
 
+  it("treats Turnstile verifier transport and payload errors as failed challenges", async () => {
+    await expect(
+      verifyTurnstileToken({
+        token: "client-token",
+        secret: "server-secret",
+        fetcher: async () => {
+          throw new Error("siteverify unavailable");
+        },
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      verifyTurnstileToken({
+        token: "client-token",
+        secret: "server-secret",
+        fetcher: async () =>
+          new Response("not json", {
+            headers: { "Content-Type": "application/json" },
+          }),
+      }),
+    ).resolves.toBe(false);
+  });
+
   it("short-circuits D1 rate-limit writes when a Cloudflare binding denies", async () => {
     const { authFetch, db } = await setup(
       {},

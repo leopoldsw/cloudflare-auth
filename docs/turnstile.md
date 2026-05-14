@@ -31,6 +31,6 @@ Available endpoint names:
 - `password_reset_request`
 - `password_reset_confirm`
 
-`mode: "required"` rejects missing tokens before schema validation, account lookup, token lookup, token consume, or password hashing. `mode: "optional"` verifies tokens when present and skips verification when absent.
+`mode: "required"` rejects missing tokens before schema validation, account lookup, token lookup, token consume, or password hashing. `mode: "optional"` verifies tokens when present and skips verification when absent. Siteverify transport errors and malformed responses are treated as failed challenges, not successful verification.
 
 Tests in `tests/security-hardening.test.ts` cover required-mode ordering and verifier failures.

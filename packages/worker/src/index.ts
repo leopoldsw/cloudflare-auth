@@ -3152,13 +3152,17 @@ export async function verifyTurnstileToken(input: {
   });
   if (input.remoteIp && input.remoteIp !== "unknown")
     body.set("remoteip", input.remoteIp);
-  const response = await (input.fetcher ?? fetch)(
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-    { method: "POST", body },
-  );
-  if (!response.ok) return false;
-  const payload = (await response.json()) as { success?: boolean };
-  return payload.success === true;
+  try {
+    const response = await (input.fetcher ?? fetch)(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      { method: "POST", body },
+    );
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { success?: boolean };
+    return payload.success === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function cloudflareRateLimitPrefilter(input: {
