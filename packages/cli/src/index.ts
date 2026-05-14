@@ -23,6 +23,10 @@ import {
 export const cliPackageName = "@cf-auth/cli";
 const generatedPackageVersion = cliPackageJson.version;
 const supportedWranglerVersion = cliPackageJson.dependencies.wrangler;
+const wranglerSchemaPath = "./node_modules/wrangler/config-schema.json";
+const workersCompatibilityDate = "2026-05-14";
+const workersCompatibilityDateFloor = "2024-09-23";
+const workersNodeCompatibilityFlag = "nodejs_compat";
 const passwordBenchmarkCache = new Map<
   PasswordHashProfileName,
   Promise<PasswordBenchmarkResult<PasswordHashProfileName>>
@@ -372,6 +376,9 @@ async function commandDoctor(
       report: buildDoctorReport(checks, envName),
     };
   }
+  for (const check of checkWorkersCompatibility(config, selected ?? config)) {
+    addCheck(check);
+  }
   d1 =
     selected?.d1_databases?.find((item) => item.binding === "AUTH_DB") ?? null;
   if (!d1) {
@@ -632,6 +639,74 @@ function checkWranglerVersion(cwd: string, runner: CommandRunner): DoctorCheck {
     status: "pass",
     message: `Wrangler ${version} available`,
   };
+}
+
+function checkWorkersCompatibility(
+  root: WranglerConfig,
+  selected: WranglerConfig,
+): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  const rawCompatibilityDate =
+    selected.compatibility_date ?? root.compatibility_date;
+  const compatibilityDate =
+    typeof rawCompatibilityDate === "string" ? rawCompatibilityDate : undefined;
+  const rawCompatibilityFlags =
+    selected.compatibility_flags ?? root.compatibility_flags;
+  const compatibilityFlags = Array.isArray(rawCompatibilityFlags)
+    ? rawCompatibilityFlags.filter(
+        (flag): flag is string => typeof flag === "string",
+      )
+    : [];
+
+  if (!compatibilityDate) {
+    checks.push({
+      id: "workers_compatibility_date",
+      status: "fail",
+      message: "Workers compatibility_date is missing",
+      fix: `set compatibility_date to ${workersCompatibilityDate} or later`,
+    });
+  } else if (!isCompatibilityDate(compatibilityDate)) {
+    checks.push({
+      id: "workers_compatibility_date",
+      status: "fail",
+      message: "Workers compatibility_date must use YYYY-MM-DD format",
+      fix: `set compatibility_date to ${workersCompatibilityDate} or later`,
+    });
+  } else if (compatibilityDate < workersCompatibilityDateFloor) {
+    checks.push({
+      id: "workers_compatibility_date",
+      status: "fail",
+      message: `Workers compatibility_date ${compatibilityDate} is below required floor ${workersCompatibilityDateFloor}`,
+      fix: `set compatibility_date to ${workersCompatibilityDate} or later`,
+    });
+  } else {
+    checks.push({
+      id: "workers_compatibility_date",
+      status: "pass",
+      message: `Workers compatibility_date ${compatibilityDate} configured`,
+    });
+  }
+
+  if (!compatibilityFlags.includes(workersNodeCompatibilityFlag)) {
+    checks.push({
+      id: "workers_node_compat",
+      status: "fail",
+      message: "Workers nodejs_compat compatibility flag is missing",
+      fix: `add ${workersNodeCompatibilityFlag} to compatibility_flags in wrangler.jsonc`,
+    });
+  } else {
+    checks.push({
+      id: "workers_node_compat",
+      status: "pass",
+      message: "Workers nodejs_compat compatibility flag configured",
+    });
+  }
+
+  return checks;
+}
+
+function isCompatibilityDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value);
 }
 
 function checkCloudflareAccount(
@@ -2588,6 +2663,8 @@ interface WranglerConfig {
   $schema?: string;
   name?: string;
   account_id?: string;
+  compatibility_date?: string;
+  compatibility_flags?: string[];
   observability?: {
     enabled?: boolean;
     head_sampling_rate?: number;
@@ -2659,6 +2736,7 @@ async function repairWranglerConfig(
   let changed = false;
 
   changed = ensureWranglerSchema(config) || changed;
+  changed = ensureWorkersCompatibility(config) || changed;
   changed =
     ensureVars(config, {
       AUTH_ENV: "development",
@@ -2677,6 +2755,9 @@ async function repairWranglerConfig(
     changed = true;
   }
   const production = config.env.production;
+  if (production.compatibility_date || production.compatibility_flags) {
+    changed = ensureWorkersCompatibility(production) || changed;
+  }
   changed =
     ensureVars(production, {
       AUTH_ENV: "production",
@@ -2705,8 +2786,26 @@ async function repairWranglerConfig(
 
 function ensureWranglerSchema(config: WranglerConfig): boolean {
   if (config.$schema) return false;
-  config.$schema = "./node_modules/wrangler/config-schema.json";
+  config.$schema = wranglerSchemaPath;
   return true;
+}
+
+function ensureWorkersCompatibility(config: WranglerConfig): boolean {
+  let changed = false;
+  if (
+    !config.compatibility_date ||
+    !isCompatibilityDate(config.compatibility_date) ||
+    config.compatibility_date < workersCompatibilityDateFloor
+  ) {
+    config.compatibility_date = workersCompatibilityDate;
+    changed = true;
+  }
+  config.compatibility_flags ??= [];
+  if (!config.compatibility_flags.includes(workersNodeCompatibilityFlag)) {
+    config.compatibility_flags.push(workersNodeCompatibilityFlag);
+    changed = true;
+  }
+  return changed;
 }
 
 function ensureObservability(config: WranglerConfig): boolean {

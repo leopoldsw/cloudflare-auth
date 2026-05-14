@@ -66,7 +66,19 @@ await requireText(
 );
 await requireText(
   "packages/cli/src/index.ts",
+  `const workersCompatibilityDate = "${matrix.workersCompatibilityDate}"`,
+);
+await requireText(
+  "packages/cli/src/index.ts",
+  `const workersCompatibilityDateFloor = "${matrix.workersCompatibilityDateFloor}"`,
+);
+await requireText(
+  "packages/cli/src/index.ts",
   `"$schema": "./node_modules/wrangler/config-schema.json"`,
+);
+await requireText(
+  "packages/cli/src/index.ts",
+  `const workersNodeCompatibilityFlag = "nodejs_compat"`,
 );
 await requireText("packages/cli/src/index.ts", `"observability": {`);
 await requireText(

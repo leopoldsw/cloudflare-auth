@@ -81,6 +81,8 @@ describe("CLI MVP", () => {
     expect(source).toContain("app.route(authConfig.basePath");
     const wrangler = await readFile(join(app, "wrangler.jsonc"), "utf8");
     expect(wrangler).toContain('"$schema"');
+    expect(wrangler).toContain('"compatibility_date": "2026-05-14"');
+    expect(wrangler).toContain('"compatibility_flags": ["nodejs_compat"]');
     expect(wrangler).toContain('"database_id": "local-development"');
     expect(wrangler).toContain('"observability"');
     expect(wrangler).toContain('"head_sampling_rate": 1');
@@ -246,6 +248,8 @@ describe("CLI MVP", () => {
       await readFile(join(app, "wrangler.jsonc"), "utf8"),
     ) as {
       $schema?: string;
+      compatibility_date?: string;
+      compatibility_flags?: string[];
       vars: Record<string, string>;
       observability?: { enabled?: boolean; head_sampling_rate?: number };
       d1_databases: Array<{ binding: string; database_id: string }>;
@@ -258,6 +262,8 @@ describe("CLI MVP", () => {
       };
     };
     expect(wrangler.$schema).toBe("./node_modules/wrangler/config-schema.json");
+    expect(wrangler.compatibility_date).toBe("2026-05-14");
+    expect(wrangler.compatibility_flags).toContain("nodejs_compat");
     expect(wrangler.vars.AUTH_ENV).toBe("development");
     expect(wrangler.observability).toEqual({
       enabled: true,
@@ -504,6 +510,49 @@ describe("CLI MVP", () => {
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("Wrangler is unavailable");
     expect(errors.join("\n")).toContain("install wrangler 4.90.1");
+  });
+
+  it("doctor reports missing Workers compatibility settings", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const text = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const config = JSON.parse(text) as {
+      compatibility_date?: string;
+      compatibility_flags?: string[];
+    };
+    delete config.compatibility_date;
+    delete config.compatibility_flags;
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const missingErrors: string[] = [];
+
+    const missingCode = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => missingErrors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(missingCode).toBe(1);
+    expect(missingErrors.join("\n")).toContain(
+      "Workers compatibility_date is missing",
+    );
+    expect(missingErrors.join("\n")).toContain(
+      "Workers nodejs_compat compatibility flag is missing",
+    );
+
+    config.compatibility_date = "2024-09-22";
+    config.compatibility_flags = ["nodejs_compat"];
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+    const floorErrors: string[] = [];
+    const floorCode = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => floorErrors.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+
+    expect(floorCode).toBe(1);
+    expect(floorErrors.join("\n")).toContain(
+      "Workers compatibility_date 2024-09-22 is below required floor 2024-09-23",
+    );
   });
 
   it("doctor reports failed Cloudflare login without leaking Wrangler output", async () => {
@@ -1769,6 +1818,8 @@ async function writeWrangler(cwd: string) {
     join(cwd, "wrangler.jsonc"),
     JSON.stringify(
       {
+        compatibility_date: "2026-05-14",
+        compatibility_flags: ["nodejs_compat"],
         vars: {
           AUTH_ENV: "development",
           AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
