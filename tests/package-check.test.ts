@@ -1,4 +1,11 @@
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -91,6 +98,17 @@ describe("package checks", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
       ".github/workflows/release.yml: missing NODE_AUTH_TOKEN",
+    );
+  });
+
+  it("rejects workspace dependency ranges in packed manifests", async () => {
+    const root = await packageCheckFixture();
+    await writeFakePackTools(root);
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packed package.json must not contain workspace: dependency ranges",
     );
   });
 
@@ -226,6 +244,55 @@ async function writeOwnershipEvidence(root: string, packageNames: string[]) {
   );
 }
 
+async function writeFakePackTools(root: string) {
+  const binDir = join(root, "bin");
+  await mkdir(binDir, { recursive: true });
+  const pnpmPath = join(binDir, "pnpm");
+  await writeFile(
+    pnpmPath,
+    `#!/usr/bin/env node
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+const args = process.argv.slice(2);
+const dir = args[args.indexOf("--dir") + 1];
+const destination = args[args.indexOf("--pack-destination") + 1];
+const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+mkdirSync(destination, { recursive: true });
+const filename = join(destination, basename(dir) + ".tgz");
+writeFileSync(filename, "");
+writeFileSync(filename + ".package.json", JSON.stringify(pkg));
+const paths = new Set(["package.json", "README.md", "LICENSE"]);
+for (const value of [pkg.types, pkg.main, pkg.module]) {
+  if (value) paths.add(String(value).replace(/^\\.\\//, ""));
+}
+for (const entry of Object.values(pkg.exports?.["."] ?? {})) {
+  if (entry) paths.add(String(entry).replace(/^\\.\\//, ""));
+}
+for (const entry of Object.values(pkg.bin ?? {})) {
+  if (entry) paths.add(String(entry).replace(/^\\.\\//, ""));
+}
+console.log(JSON.stringify({
+  name: pkg.name,
+  version: pkg.version,
+  filename,
+  files: [...paths].map((path) => ({ path }))
+}));
+`,
+  );
+  await chmod(pnpmPath, 0o755);
+
+  const tarPath = join(binDir, "tar");
+  await writeFile(
+    tarPath,
+    `#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+const filename = process.argv[3];
+process.stdout.write(readFileSync(filename + ".package.json", "utf8"));
+`,
+  );
+  await chmod(tarPath, 0o755);
+}
+
 function runPackageCheck(cwd: string) {
   const root = process.cwd();
   return spawnSync(
@@ -234,6 +301,10 @@ function runPackageCheck(cwd: string) {
     {
       cwd,
       encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(cwd, "bin")}:${process.env.PATH ?? ""}`,
+      },
     },
   );
 }

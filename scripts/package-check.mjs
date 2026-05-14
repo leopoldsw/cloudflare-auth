@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { access, readdir, readFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 const rootPackage = JSON.parse(await readFile("package.json", "utf8"));
@@ -33,6 +34,7 @@ const packageDirs = (await readdir("packages", { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => join("packages", entry.name))
   .sort();
+const packDir = await mkdtemp(join(tmpdir(), "cf-auth-package-check-"));
 
 const failures = [];
 const publishablePackageNames = [];
@@ -109,7 +111,7 @@ for (const dir of packageDirs) {
       }
     }
   }
-  const pack = packDryRun(dir, pkg.name);
+  const pack = packArtifact(dir, pkg.name);
   if (pack) {
     const packedPaths = new Set(pack.files.map((file) => file.path));
     for (const required of [
@@ -128,6 +130,10 @@ for (const dir of packageDirs) {
         failures.push(`${pkg.name}: packed artifact missing ${required}`);
       }
     }
+    const packedManifest = readPackedPackageJson(pack.filename, pkg.name);
+    if (packedManifest) {
+      verifyPackedManifest(pkg, packedManifest);
+    }
   }
 }
 
@@ -145,14 +151,14 @@ if (failures.length) {
   process.exit(1);
 }
 
-function packDryRun(dir, name) {
+function packArtifact(dir, name) {
   const result = spawnSync(
     "pnpm",
-    ["--dir", dir, "pack", "--dry-run", "--json"],
+    ["--dir", dir, "pack", "--pack-destination", packDir, "--json"],
     { encoding: "utf8" },
   );
   if (result.status !== 0) {
-    failures.push(`${name}: pnpm pack --dry-run failed`);
+    failures.push(`${name}: pnpm pack failed`);
     if (result.stderr.trim()) failures.push(result.stderr.trim());
     return null;
   }
@@ -161,10 +167,54 @@ function packDryRun(dir, name) {
     if (pack.name !== name) {
       failures.push(`${name}: packed artifact name was ${pack.name}`);
     }
+    if (typeof pack.filename !== "string" || pack.filename.length === 0) {
+      failures.push(`${name}: pnpm pack did not report a tarball filename`);
+    }
     return pack;
   } catch {
-    failures.push(`${name}: pnpm pack --dry-run did not emit JSON`);
+    failures.push(`${name}: pnpm pack did not emit JSON`);
     return null;
+  }
+}
+
+function readPackedPackageJson(filename, name) {
+  if (!filename) return null;
+  const result = spawnSync("tar", ["-xOf", filename, "package/package.json"], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    failures.push(`${name}: packed package.json could not be read`);
+    if (result.stderr.trim()) failures.push(result.stderr.trim());
+    return null;
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    failures.push(`${name}: packed package.json must be valid JSON`);
+    return null;
+  }
+}
+
+function verifyPackedManifest(sourcePackage, packedPackage) {
+  if (packedPackage.name !== sourcePackage.name) {
+    failures.push(
+      `${sourcePackage.name}: packed package.json name was ${String(
+        packedPackage.name,
+      )}`,
+    );
+  }
+  if (packedPackage.version !== sourcePackage.version) {
+    failures.push(
+      `${sourcePackage.name}: packed package.json version was ${String(
+        packedPackage.version,
+      )}`,
+    );
+  }
+  const packedText = JSON.stringify(packedPackage);
+  if (packedText.includes("workspace:")) {
+    failures.push(
+      `${sourcePackage.name}: packed package.json must not contain workspace: dependency ranges`,
+    );
   }
 }
 
