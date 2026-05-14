@@ -10,6 +10,9 @@ const packageDirs = (await readdir("packages", { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => join("packages", entry.name))
   .sort();
+const rootPackage = await readJsonFile("package.json");
+const rootScripts =
+  rootPackage && isRecord(rootPackage.scripts) ? rootPackage.scripts : {};
 
 const packages = [];
 for (const dir of packageDirs) {
@@ -61,6 +64,14 @@ await requireText("docs/release-checklist.md", "unresolved high/critical");
 await requireText("docs/release-checklist.md", "public API report reviewed");
 await requireText("docs/release-checklist.md", "config schema reviewed");
 await requireText("docs/release-checklist.md", "security review decision");
+await requireText(
+  "docs/release-checklist.md",
+  "pnpm install --frozen-lockfile",
+);
+await requireText("docs/release-checklist.md", "pnpm audit --audit-level high");
+for (const script of releaseChecklistScripts(rootScripts)) {
+  await requireText("docs/release-checklist.md", `pnpm ${script}`);
+}
 await requireText("docs/decisions/password-benchmark.md", "workers-local");
 await requireText("docs/decisions/password-benchmark.md", "p95Ms");
 await requireText(
@@ -183,7 +194,7 @@ await requireText(
 );
 await requireText(
   "docs/release-checklist.md",
-  "opt-in Wrangler dev smoke workflow passes",
+  "opt-in Wrangler dev smoke workflow",
 );
 
 requireVerifier("scripts/verify-deploy-template.mjs");
@@ -293,6 +304,15 @@ async function requireFile(path) {
   }
 }
 
+async function readJsonFile(path) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    failures.push(`${path}: could not be read as JSON`);
+    return null;
+  }
+}
+
 async function requireText(path, needle) {
   let text = "";
   try {
@@ -325,6 +345,38 @@ function requireVerifier(script, env) {
       `${script}: verifier failed\n${(result.stderr || result.stdout).trim()}`,
     );
   }
+}
+
+function releaseChecklistScripts(scripts) {
+  const required = new Set([
+    "format:check",
+    "lint",
+    "typecheck",
+    "test",
+    "test:workers",
+    "build",
+    "check:package-names",
+    "package:check",
+    "version-matrix:check",
+    "release:gates",
+    "benchmark:password",
+    "publish:dry-run",
+  ]);
+  const scriptsToCheck = Object.keys(scripts).filter(
+    (script) =>
+      required.has(script) ||
+      script.startsWith("verify:") ||
+      script.startsWith("smoke:"),
+  );
+  for (const script of required) {
+    if (!(script in scripts))
+      failures.push(`package.json: missing release checklist script ${script}`);
+  }
+  return scriptsToCheck.sort();
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function requireSecurityReviewDecision() {

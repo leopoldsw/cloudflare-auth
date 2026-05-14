@@ -14,6 +14,21 @@ describe("release gates", () => {
     expect(result.stderr).toContain("docs/deploy-button-evidence.json");
   });
 
+  it("derives release checklist coverage from root package scripts", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    const packagePath = join(root, "package.json");
+    const pkg = JSON.parse(await readFile(packagePath, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    pkg.scripts["verify:new-gate"] = "node scripts/verify-new-gate.mjs";
+    await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docs/release-checklist.md");
+    expect(result.stderr).toContain("pnpm verify:new-gate");
+  });
+
   it("accepts beta package gates when deploy button evidence is present", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     const result = runReleaseGates(root);
@@ -534,6 +549,7 @@ interface ReleaseGateFixtureOptions {
 async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
   const root = await mkdtemp(join(tmpdir(), "cf-auth-release-gates-"));
   await writeFakeNpm(root);
+  await writeRootPackage(root);
 
   const requiredFiles = [
     ".github/dependabot.yml",
@@ -596,17 +612,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "pnpm benchmark:password",
       ],
     ],
-    [
-      "docs/release-checklist.md",
-      [
-        "unresolved high/critical",
-        "public API report reviewed",
-        "config schema reviewed",
-        "security review decision",
-        "pnpm verify:security-docs",
-        "opt-in Wrangler dev smoke workflow passes",
-      ],
-    ],
+    ["docs/release-checklist.md", releaseChecklistFixtureText()],
     [
       ".github/workflows/dependency-review.yml",
       ["actions/dependency-review-action"],
@@ -745,6 +751,86 @@ async function writePackage(root: string, version: string) {
     })}\n`,
   );
   await writeFile(join(packageDir, "CHANGELOG.md"), `${version}\n`);
+}
+
+async function writeRootPackage(root: string) {
+  await writeFixtureFile(
+    root,
+    "package.json",
+    JSON.stringify({
+      scripts: rootPackageScripts(),
+    }),
+  );
+}
+
+function rootPackageScripts() {
+  return {
+    "format:check": "prettier --check .",
+    lint: "node scripts/lint.mjs",
+    typecheck: "tsc -p tsconfig.base.json --noEmit",
+    test: "vitest run",
+    "test:workers": "vitest run -c vitest.workers.config.ts",
+    build:
+      "pnpm -r --filter './packages/**' --sort --workspace-concurrency=1 build",
+    "check:package-names": "node scripts/check-package-names.mjs",
+    "package:check": "node scripts/package-check.mjs",
+    "version-matrix:check": "node scripts/version-matrix-check.mjs",
+    "export:deploy-template": "node scripts/export-deploy-template.mjs",
+    "verify:alpha-evidence": "node scripts/verify-alpha-evidence.mjs",
+    "verify:beta-evidence": "node scripts/verify-beta-evidence.mjs",
+    "verify:deploy-button-evidence":
+      "node scripts/verify-deploy-button-evidence.mjs",
+    "verify:deploy-template": "node scripts/verify-deploy-template.mjs",
+    "verify:docs-coverage": "node scripts/verify-docs-coverage.mjs",
+    "verify:examples": "node scripts/verify-examples.mjs",
+    "verify:migrations": "node scripts/verify-migrations.mjs",
+    "verify:package-ownership": "node scripts/verify-package-ownership.mjs",
+    "verify:security-docs": "node scripts/verify-security-docs.mjs",
+    "verify:security-tracker":
+      "node scripts/verify-security-release-tracker.mjs",
+    "release:gates": "node scripts/release-gates.mjs",
+    "publish:dry-run":
+      "pnpm -r --filter './packages/**' publish --dry-run --access public --no-git-checks --report-summary",
+    "smoke:wrangler-dev": "node scripts/smoke-wrangler-dev.mjs",
+    "smoke:cloudflare-production":
+      "node scripts/smoke-production-cloudflare.mjs",
+    "smoke:published-quickstart": "node scripts/smoke-published-quickstart.mjs",
+    "smoke:tarballs": "node scripts/smoke-local-tarballs.mjs",
+    "benchmark:password": "tsx scripts/benchmark-password-worker.ts",
+  };
+}
+
+function releaseChecklistFixtureText() {
+  return [
+    "unresolved high/critical",
+    "public API report reviewed",
+    "config schema reviewed",
+    "security review decision",
+    "pnpm install --frozen-lockfile",
+    "pnpm audit --audit-level high",
+    ...Object.keys(rootPackageScripts())
+      .filter(
+        (script) =>
+          [
+            "format:check",
+            "lint",
+            "typecheck",
+            "test",
+            "test:workers",
+            "build",
+            "check:package-names",
+            "package:check",
+            "version-matrix:check",
+            "release:gates",
+            "benchmark:password",
+            "publish:dry-run",
+          ].includes(script) ||
+          script.startsWith("verify:") ||
+          script.startsWith("smoke:"),
+      )
+      .map((script) => `pnpm ${script}`),
+    "opt-in Wrangler dev smoke workflow passes",
+  ];
 }
 
 async function writeLocalVerifierFixtures(root: string) {

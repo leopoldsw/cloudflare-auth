@@ -48,12 +48,12 @@
 ## Public Beta
 
 - beta packages published from a dry-run artifact
-- published quickstart smoke workflow passes using the beta package tag
+- `pnpm smoke:published-quickstart` passes in the published quickstart smoke workflow using the beta package tag
 - generated Deploy to Cloudflare template passes `pnpm verify:deploy-template`
 - maintainer manually verifies the quickstart
-- opt-in Wrangler dev smoke workflow passes for at least one Worker example
-- opt-in Cloudflare production smoke workflow passes against the dedicated fixture
-- production smoke test passes against an opt-in Cloudflare account fixture
+- `pnpm smoke:wrangler-dev` passes in the opt-in Wrangler dev smoke workflow for at least one Worker example
+- `pnpm smoke:cloudflare-production` passes in the opt-in Cloudflare production smoke workflow against the dedicated fixture
+- `pnpm smoke:cloudflare-production` passes against an opt-in Cloudflare account fixture
 - Deploy to Cloudflare button path verified with `pnpm verify:deploy-button-evidence`
 
 ## 1.0
@@ -65,6 +65,6 @@
 - security review decision record signed
 - security release tracker verifier passes
 - Dependabot, dependency review, and CodeQL automation are enabled
-- opt-in Wrangler dev smoke workflow passes for the release candidate
-- opt-in Cloudflare production smoke workflow passes for the release candidate
+- `pnpm smoke:wrangler-dev` passes in the opt-in Wrangler dev smoke workflow for the release candidate
+- `pnpm smoke:cloudflare-production` passes in the opt-in Cloudflare production smoke workflow for the release candidate
 - README, LICENSE, export maps, package contents, and provenance settings pass `pnpm package:check`
