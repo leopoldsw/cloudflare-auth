@@ -354,12 +354,11 @@ async function commandDoctor(
       status: "pass",
       message: "Wrangler config found",
     });
-  } catch {
+  } catch (error) {
     addCheck({
       id: "wrangler_config",
       status: "fail",
-      message: "Wrangler config missing",
-      fix: "npx --package @cf-auth/cli@latest cf-auth init --repair",
+      ...wranglerConfigReadFailure(error),
     });
     return {
       ok: false,
@@ -2862,7 +2861,7 @@ async function readLocalMigrationVersions(cwd: string): Promise<string[]> {
 async function readWrangler(cwd: string): Promise<WranglerConfig> {
   const path = wranglerPath(cwd);
   const text = await readFile(path, "utf8");
-  return JSON.parse(stripJsonComments(text)) as WranglerConfig;
+  return parseWranglerConfig(text, path);
 }
 
 function selectD1(config: WranglerConfig, envName?: string) {
@@ -2888,6 +2887,36 @@ function existingWranglerPath(cwd: string): string | null {
   const jsonPath = join(cwd, "wrangler.json");
   if (existsSync(jsonPath)) return jsonPath;
   return null;
+}
+
+function parseWranglerConfig(text: string, path: string): WranglerConfig {
+  const label = basename(path);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripJsonComments(text));
+  } catch {
+    throw new Error(`${label}: must be valid JSONC`);
+  }
+  if (!isRecord(parsed)) {
+    throw new Error(`${label}: top-level JSON value must be an object`);
+  }
+  return parsed as WranglerConfig;
+}
+
+function wranglerConfigReadFailure(error: unknown): {
+  message: string;
+  fix: string;
+} {
+  if (error instanceof Error && /^wrangler\.jsonc?: /u.test(error.message)) {
+    return {
+      message: error.message,
+      fix: "fix the Wrangler config JSONC or rerun cf-auth init --repair",
+    };
+  }
+  return {
+    message: "Wrangler config missing",
+    fix: "npx --package @cf-auth/cli@latest cf-auth init --repair",
+  };
 }
 
 function stripJsonComments(text: string): string {
@@ -2956,7 +2985,7 @@ async function repairWranglerConfig(
 ): Promise<{ changed: boolean; backupPath?: string }> {
   const path = wranglerPath(cwd);
   const text = await readFile(path, "utf8");
-  const config = JSON.parse(stripJsonComments(text)) as WranglerConfig;
+  const config = parseWranglerConfig(text, path);
   let changed = false;
 
   changed = ensureWranglerSchema(config) || changed;
@@ -3192,13 +3221,14 @@ async function writeOrPatchPackageJson(
     );
     return "created";
   }
-  const pkg = JSON.parse(await readFile(path, "utf8")) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  } & Record<string, unknown>;
+  const pkg = parsePackageJsonObject(await readFile(path, "utf8"), path);
   let changed = false;
-  const dependencies = { ...(pkg.dependencies ?? {}) };
-  const devDependencies = { ...(pkg.devDependencies ?? {}) };
+  const dependencies = readPackageDependencySection(pkg, "dependencies", path);
+  const devDependencies = readPackageDependencySection(
+    pkg,
+    "devDependencies",
+    path,
+  );
   for (const [dependency, version] of Object.entries(
     templatePackageJson(name, template).dependencies,
   )) {
@@ -3219,6 +3249,44 @@ async function writeOrPatchPackageJson(
   pkg.devDependencies = devDependencies;
   await writeFile(path, JSON.stringify(pkg, null, 2) + "\n");
   return "updated";
+}
+
+function parsePackageJsonObject(
+  text: string,
+  path: string,
+): Record<string, unknown> {
+  const label = basename(path);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(`${label}: must be valid JSON`);
+  }
+  if (!isRecord(parsed)) {
+    throw new Error(`${label}: top-level JSON value must be an object`);
+  }
+  return parsed;
+}
+
+function readPackageDependencySection(
+  pkg: Record<string, unknown>,
+  section: "dependencies" | "devDependencies",
+  path: string,
+): Record<string, string> {
+  const label = basename(path);
+  const dependencies = pkg[section];
+  if (dependencies === undefined) return {};
+  if (!isRecord(dependencies)) {
+    throw new Error(`${label}: ${section} must be an object`);
+  }
+  const output: Record<string, string> = {};
+  for (const [name, version] of Object.entries(dependencies)) {
+    if (typeof version !== "string") {
+      throw new Error(`${label}: ${section}.${name} must be a string version`);
+    }
+    output[name] = version;
+  }
+  return output;
 }
 
 function pnpmWorkspaceTemplate(): string {

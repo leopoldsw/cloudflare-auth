@@ -323,6 +323,48 @@ describe("CLI MVP", () => {
     expect(output.join("\n")).toContain("app.route(authConfig.basePath");
   });
 
+  it("reports malformed existing package metadata during init", async () => {
+    const cwd = await tempDir();
+    const app = join(cwd, "bad-package-app");
+    await mkdir(app, { recursive: true });
+    await writeFile(join(app, "package.json"), "null\n");
+    const scalarErrors: string[] = [];
+
+    const scalarCode = await runCli(["init", "bad-package-app"], {
+      cwd,
+      stderr: (line) => scalarErrors.push(line),
+    });
+
+    expect(scalarCode).toBe(1);
+    expect(scalarErrors.join("\n")).toContain(
+      "package.json: top-level JSON value must be an object",
+    );
+
+    await writeFile(
+      join(app, "package.json"),
+      JSON.stringify(
+        {
+          dependencies: {
+            hono: true,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const dependencyErrors: string[] = [];
+
+    const dependencyCode = await runCli(["init", "bad-package-app"], {
+      cwd,
+      stderr: (line) => dependencyErrors.push(line),
+    });
+
+    expect(dependencyCode).toBe(1);
+    expect(dependencyErrors.join("\n")).toContain(
+      "package.json: dependencies.hono must be a string version",
+    );
+  });
+
   it("repairs missing auth Wrangler bindings without changing source", async () => {
     const cwd = await tempDir();
     const app = join(cwd, "repair-app");
@@ -652,6 +694,36 @@ describe("CLI MVP", () => {
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("D1 binding AUTH_DB is missing");
     expect(errors.join("\n")).not.toMatch(/cfauth\.|AUTH_SECRET=/);
+  });
+
+  it("doctor reports invalid Wrangler config files cleanly", async () => {
+    const cwd = await tempDir();
+    await writeFile(join(cwd, "wrangler.jsonc"), "not json\n");
+    const invalidErrors: string[] = [];
+    const invalidCode = await runCli(["doctor"], {
+      cwd,
+      stderr: (line) => invalidErrors.push(line),
+      runCommand: localDoctorRunner(),
+    });
+
+    expect(invalidCode).toBe(1);
+    expect(invalidErrors.join("\n")).toContain(
+      "wrangler.jsonc: must be valid JSONC",
+    );
+    expect(invalidErrors.join("\n")).toContain("fix the Wrangler config JSONC");
+
+    await writeFile(join(cwd, "wrangler.jsonc"), "null\n");
+    const scalarErrors: string[] = [];
+    const scalarCode = await runCli(["doctor"], {
+      cwd,
+      stderr: (line) => scalarErrors.push(line),
+      runCommand: localDoctorRunner(),
+    });
+
+    expect(scalarCode).toBe(1);
+    expect(scalarErrors.join("\n")).toContain(
+      "wrangler.jsonc: top-level JSON value must be an object",
+    );
   });
 
   it("doctor validates readable local auth secrets", async () => {
