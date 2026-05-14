@@ -1,6 +1,8 @@
 import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
+import { isJsonObject } from "./evidence-validation.mjs";
+
 const outputDir = process.argv[2];
 if (!outputDir) {
   throw new Error(
@@ -56,9 +58,7 @@ async function assertEmptyOrMissing(path) {
 }
 
 async function writePackageJson(dir) {
-  const pkg = JSON.parse(
-    await readFile("templates/hono-basic/package.json", "utf8"),
-  );
+  const pkg = await readJsonObject("templates/hono-basic/package.json");
   pkg.name = templateName;
   pkg.private = true;
   pkg.scripts = {
@@ -100,6 +100,19 @@ async function writePackageJson(dir) {
     },
   };
   await writeFile(`${dir}/package.json`, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+async function readJsonObject(path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    throw new Error(`${path}: must be valid JSON`);
+  }
+  if (!isJsonObject(parsed)) {
+    throw new Error(`${path}: top-level JSON value must be an object`);
+  }
+  return parsed;
 }
 
 async function writeWranglerJson(dir) {
