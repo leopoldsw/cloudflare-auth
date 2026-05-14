@@ -3,6 +3,8 @@ import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { isJsonObject } from "./evidence-validation.mjs";
+
 const root = process.cwd();
 const temp = await mkdtemp(join(tmpdir(), "cf-auth-deploy-template-"));
 const output = join(temp, "template");
@@ -10,25 +12,28 @@ const failures = [];
 
 run("node", ["scripts/export-deploy-template.mjs", output]);
 
-const packageJson = JSON.parse(
-  await readFile(join(output, "package.json"), "utf8"),
+const packageJson = await readJsonObject(
+  join(output, "package.json"),
+  "package.json",
 );
-const versionMatrix = JSON.parse(
-  await readFile("scripts/version-matrix.json", "utf8"),
+const versionMatrix = await readJsonObject(
+  "scripts/version-matrix.json",
+  "scripts/version-matrix.json",
 );
 const expectedPackageTag =
   process.env.CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG?.trim() || "beta";
-const wrangler = JSON.parse(
-  await readFile(join(output, "wrangler.jsonc"), "utf8"),
+const wrangler = await readJsonObject(
+  join(output, "wrangler.jsonc"),
+  "wrangler.jsonc",
 );
-const readme = await readFile(join(output, "README.md"), "utf8");
-const devVarsExample = await readFile(
+const readme = await readRequiredText(join(output, "README.md"), "README.md");
+const devVarsExample = await readRequiredText(
   join(output, ".dev.vars.example"),
-  "utf8",
+  ".dev.vars.example",
 );
 
-checkPackageJson(packageJson);
-checkWrangler(wrangler);
+if (packageJson && versionMatrix) checkPackageJson(packageJson);
+if (wrangler && versionMatrix) checkWrangler(wrangler);
 await checkIsolatedTree(output);
 checkReadme(readme);
 checkDevVarsExample(devVarsExample);
@@ -44,6 +49,30 @@ if (failures.length > 0) {
 }
 
 console.log(`deploy template verified: ${output}`);
+
+async function readJsonObject(path, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    failures.push(`${label}: must be valid JSON`);
+    return null;
+  }
+  if (!isJsonObject(parsed)) {
+    failures.push(`${label}: top-level JSON value must be an object`);
+    return null;
+  }
+  return parsed;
+}
+
+async function readRequiredText(path, label) {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    failures.push(`${label}: required deploy template file is missing`);
+    return "";
+  }
+}
 
 function checkPackageJson(pkg) {
   if (pkg.private !== true)
