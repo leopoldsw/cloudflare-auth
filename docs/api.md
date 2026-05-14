@@ -99,8 +99,12 @@ if (verifiedUser instanceof Response) return verifiedUser;
 `getUser()` returns the public user object or `null`. `requireUser()` returns a
 public user object or a `401` JSON `Response`; `requireVerifiedUser()` also
 returns a `403 email_verification_required` response for unverified users.
-`getSession()` and `getAuthSessionFromRequest()` are server-only helpers that
-return the full session and database user row, including internal fields.
+`getSession()` is a server-only helper that returns the full session and
+database user row, including internal fields. `getUser()`, `getSession()`, and
+`requireUser()` honor `session.requireVerifiedEmail`; `requireVerifiedUser()`
+can still distinguish an unverified session from a missing session.
+`getAuthSessionFromRequest()` is the lower-level raw session helper used by
+adapters.
 
 Hono routes use the adapter middleware:
 

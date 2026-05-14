@@ -13,8 +13,14 @@ import {
   getUser as getWorkerUser,
   requireUser as requireWorkerUser,
   requireVerifiedUser as requireWorkerVerifiedUser,
+  type AuthConfig,
 } from "@cf-auth/worker";
-import { createAuthRoutes, getAuthUser, requireUser } from "@cf-auth/hono";
+import {
+  createAuthRoutes,
+  getAuthUser,
+  requireUser,
+  requireVerifiedUser,
+} from "@cf-auth/hono";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 
@@ -134,6 +140,70 @@ describe("Hono adapter and browser client", () => {
     });
   });
 
+  it("honors global verified-email requirements in current-user helpers", async () => {
+    const { config, env } = await fixture({
+      session: {
+        cookieName: "auto",
+        maxAgeDays: 30,
+        sameSite: "lax",
+        secure: "auto",
+        requireVerifiedEmail: true,
+      },
+    });
+    const ctx = { waitUntil() {} } as unknown as ExecutionContext;
+    const app = new Hono();
+    app.route(config.basePath, createAuthRoutes(config));
+    app.get("/api/me", requireUser(), (c) => c.json({ user: getAuthUser(c) }));
+    app.get("/api/verified", requireVerifiedUser(), (c) =>
+      c.json({ user: getAuthUser(c) }),
+    );
+    const signup = await app.request(
+      `${origin}/auth/signup`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          email: "global-verify@example.com",
+          password: "correct horse battery staple",
+        }),
+      },
+      env,
+    );
+    const cookie = signup.headers.get("Set-Cookie") ?? "";
+    const request = new Request(`${origin}/api/me`, {
+      headers: { Cookie: cookie },
+    });
+
+    await expect(getWorkerSession(request, env, ctx, config)).resolves.toBe(
+      null,
+    );
+    await expect(getWorkerUser(request, env, ctx, config)).resolves.toBe(null);
+    const workerRequired = await requireWorkerUser(request, env, ctx, config);
+    expect(workerRequired).toBeInstanceOf(Response);
+    expect((workerRequired as Response).status).toBe(401);
+    const workerVerified = await requireWorkerVerifiedUser(
+      request,
+      env,
+      ctx,
+      config,
+    );
+    expect(workerVerified).toBeInstanceOf(Response);
+    expect((workerVerified as Response).status).toBe(403);
+
+    const honoRequired = await app.request(
+      `${origin}/api/me`,
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(honoRequired.status).toBe(401);
+    const honoVerified = await app.request(
+      `${origin}/api/verified`,
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(honoVerified.status).toBe(403);
+  });
+
   it("client sends same-origin credentialed requests and throws typed errors", async () => {
     const calls: RequestInit[] = [];
     const client = createAuthClient({
@@ -166,7 +236,7 @@ describe("Hono adapter and browser client", () => {
   });
 });
 
-async function fixture() {
+async function fixture(overrides: Partial<AuthConfig> = {}) {
   const db = createSqliteD1Database();
   await applyD1Migrations(db, [
     await readFile("migrations/0001_initial.sql", "utf8"),
@@ -180,6 +250,7 @@ async function fixture() {
       profile: "development-fast",
       maxConcurrentHashesPerIsolate: 1,
     },
+    ...overrides,
   });
   const env = {
     AUTH_DB: db,

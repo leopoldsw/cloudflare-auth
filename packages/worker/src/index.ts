@@ -1697,7 +1697,7 @@ export async function getSession(
     envInput,
     ctxInput,
   );
-  return lookupSession(request, runtime);
+  return lookupSessionForConfig(request, runtime);
 }
 
 export async function getUser(
@@ -1712,14 +1712,8 @@ export async function getUser(
     envInput,
     ctxInput,
   );
-  const session = await lookupSession(request, runtime);
+  const session = await lookupSessionForConfig(request, runtime);
   if (!session) return null;
-  if (
-    runtime.config.session.requireVerifiedEmail &&
-    session.user.email_verified_at === null
-  ) {
-    return null;
-  }
   return publicUser(session.user);
 }
 
@@ -1735,7 +1729,7 @@ export async function requireUser(
     envInput,
     ctxInput,
   );
-  const session = await lookupSession(request, runtime);
+  const session = await lookupSessionForConfig(request, runtime);
   if (!session)
     return errorResponse("Authentication required", 401, "unauthorized");
   return publicUser(session.user);
@@ -2809,6 +2803,21 @@ async function lookupSession(
   } catch {
     return null;
   }
+}
+
+async function lookupSessionForConfig(
+  request: Request,
+  runtime: RuntimeContext,
+): Promise<SessionWithUserRow | null> {
+  const session = await lookupSession(request, runtime);
+  if (!session) return null;
+  if (
+    runtime.config.session.requireVerifiedEmail &&
+    session.user.email_verified_at === null
+  ) {
+    return null;
+  }
+  return session;
 }
 
 async function parseBody(

@@ -2,6 +2,7 @@ import type { UserRow } from "@cf-auth/core";
 import {
   createAuthHandler,
   getAuthSessionFromRequest,
+  getUser as getWorkerUser,
   type AuthConfig,
   type MinimalAuthConfig,
   type PublicAuthUser,
@@ -39,13 +40,13 @@ export function optionalUser(
 ): MiddlewareHandler {
   return async (c, next) => {
     const resolvedConfig = resolveHelperConfig(config);
-    const session = await getAuthSessionFromRequest(
-      resolvedConfig,
+    const user = await getWorkerUser(
       c.req.raw,
       c.env,
       executionContext(c),
+      resolvedConfig,
     );
-    c.set(authUserKey, session ? publicAuthUser(session.user) : null);
+    c.set(authUserKey, user);
     await next();
   };
 }
@@ -55,18 +56,18 @@ export function requireUser(
 ): MiddlewareHandler {
   return async (c, next) => {
     const resolvedConfig = resolveHelperConfig(config);
-    const session = await getAuthSessionFromRequest(
-      resolvedConfig,
+    const user = await getWorkerUser(
       c.req.raw,
       c.env,
       executionContext(c),
+      resolvedConfig,
     );
-    if (!session)
+    if (!user)
       return c.json(
         { error: { code: "unauthorized", message: "Authentication required" } },
         401,
       );
-    c.set(authUserKey, publicAuthUser(session.user));
+    c.set(authUserKey, user);
     await next();
   };
 }

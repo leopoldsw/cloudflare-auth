@@ -34,16 +34,16 @@ Runtime and storage:
 
 Sessions and requests:
 
-| Key                                    | Default | Notes                                                                      |
-| -------------------------------------- | ------- | -------------------------------------------------------------------------- |
-| `session.cookieName`                   | `auto`  | Uses safe dev/production names automatically unless explicitly set.        |
-| `session.maxAgeDays`                   | `30`    | Session cookie and row lifetime.                                           |
-| `session.sameSite`                     | `lax`   | `lax` or `strict`; v1 does not support `none`.                             |
-| `session.secure`                       | `auto`  | Static value is reserved; runtime derives secure mode from origin.         |
-| `session.domain`                       | unset   | Optional leading-dot parent domain for cross-subdomain cookies.            |
-| `session.requireVerifiedEmail`         | `false` | Hides sessions from `/auth/user` until the user is verified.               |
-| `request.maxBodyBytes`                 | `16384` | Positive integer byte limit.                                               |
-| `request.requireOriginOnUnsafeMethods` | `true`  | Requires trusted `Origin` for browser mutations outside local development. |
+| Key                                    | Default | Notes                                                                                              |
+| -------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `session.cookieName`                   | `auto`  | Uses safe dev/production names automatically unless explicitly set.                                |
+| `session.maxAgeDays`                   | `30`    | Session cookie and row lifetime.                                                                   |
+| `session.sameSite`                     | `lax`   | `lax` or `strict`; v1 does not support `none`.                                                     |
+| `session.secure`                       | `auto`  | Static value is reserved; runtime derives secure mode from origin.                                 |
+| `session.domain`                       | unset   | Optional leading-dot parent domain for cross-subdomain cookies.                                    |
+| `session.requireVerifiedEmail`         | `false` | Hides sessions from `/auth/user`, `getUser()`, `getSession()`, and `requireUser()` until verified. |
+| `request.maxBodyBytes`                 | `16384` | Positive integer byte limit.                                                                       |
+| `request.requireOriginOnUnsafeMethods` | `true`  | Requires trusted `Origin` for browser mutations outside local development.                         |
 
 Security, hashing, and bot checks:
 
