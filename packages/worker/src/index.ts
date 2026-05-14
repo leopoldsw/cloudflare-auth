@@ -2365,74 +2365,80 @@ async function handleMagicLinkConsume(
   if (!runtime.config.login.magicLink)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime, "json-or-form");
-  await enforceTurnstile(runtime, "magic_link_consume", rawBody, request);
-  const body = tokenSchema.parse(rawBody);
-  await rateLimit(
-    runtime,
-    "magic_link_consume",
-    "ip",
-    clientIp(request),
-    30,
-    15 * 60 * 1000,
-    request,
-  );
-  let tokenHash: string;
   try {
-    tokenHash = hashRawAuthToken(body.token, runtime.keyRing, "magic_link");
-  } catch (error) {
-    queueAuthEvent(runtime, request, "magic_link_consume_failed", {
-      metadata: {
-        reason:
-          error instanceof AuthCryptoError ? error.code : "token_hash_failed",
+    const rawBody = await parseBody(request, runtime, "json-or-form");
+    await enforceTurnstile(runtime, "magic_link_consume", rawBody, request);
+    const body = tokenSchema.parse(rawBody);
+    await rateLimit(
+      runtime,
+      "magic_link_consume",
+      "ip",
+      clientIp(request),
+      30,
+      15 * 60 * 1000,
+      request,
+    );
+    let tokenHash: string;
+    try {
+      tokenHash = hashRawAuthToken(body.token, runtime.keyRing, "magic_link");
+    } catch (error) {
+      queueAuthEvent(runtime, request, "magic_link_consume_failed", {
+        metadata: {
+          reason:
+            error instanceof AuthCryptoError ? error.code : "token_hash_failed",
+        },
+      });
+      throw error;
+    }
+    const active = runtime.config.magicLink.allowSignups
+      ? await runtime.repos.verificationTokens.findActiveVerificationTokenByHash(
+          tokenHash,
+          "magic_link",
+          Date.now(),
+        )
+      : null;
+    const now = Date.now();
+    const prepared = prepareSessionForRequest(runtime, request, now);
+    const jitUser =
+      active?.normalized_email && !active.user_id
+        ? { id: randomId("usr_"), createdAt: now }
+        : undefined;
+    const consumed =
+      await runtime.repos.verificationTokens.consumeMagicLinkAndCreateSession({
+        tokenHash,
+        consumeId: randomId("con_"),
+        consumedAt: now,
+        now,
+        session: prepared.session,
+        ...(jitUser ? { jitUser } : {}),
+        event: tokenConsumeEventInput(
+          runtime,
+          request,
+          "magic_link_consume_success",
+          { jitSignup: Boolean(jitUser) },
+        ),
+      });
+    if (!consumed) {
+      queueAuthEvent(runtime, request, "magic_link_consume_failed", {
+        metadata: { reason: "invalid_or_replayed" },
+      });
+      return responseForMode(mode, "Invalid token", 400, "invalid_token");
+    }
+    return sessionConsumeResponseWithToken(
+      {
+        user: publicUser(consumed.user),
+        redirectTo:
+          consumed.redirectTo ?? runtime.config.redirects.defaultAfterLogin,
       },
-    });
+      runtime,
+      prepared.rawToken,
+      mode,
+    );
+  } catch (error) {
+    const response = formErrorResponseForCaughtError(error, mode);
+    if (response) return response;
     throw error;
   }
-  const active = runtime.config.magicLink.allowSignups
-    ? await runtime.repos.verificationTokens.findActiveVerificationTokenByHash(
-        tokenHash,
-        "magic_link",
-        Date.now(),
-      )
-    : null;
-  const now = Date.now();
-  const prepared = prepareSessionForRequest(runtime, request, now);
-  const jitUser =
-    active?.normalized_email && !active.user_id
-      ? { id: randomId("usr_"), createdAt: now }
-      : undefined;
-  const consumed =
-    await runtime.repos.verificationTokens.consumeMagicLinkAndCreateSession({
-      tokenHash,
-      consumeId: randomId("con_"),
-      consumedAt: now,
-      now,
-      session: prepared.session,
-      ...(jitUser ? { jitUser } : {}),
-      event: tokenConsumeEventInput(
-        runtime,
-        request,
-        "magic_link_consume_success",
-        { jitSignup: Boolean(jitUser) },
-      ),
-    });
-  if (!consumed) {
-    queueAuthEvent(runtime, request, "magic_link_consume_failed", {
-      metadata: { reason: "invalid_or_replayed" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  return sessionConsumeResponseWithToken(
-    {
-      user: publicUser(consumed.user),
-      redirectTo:
-        consumed.redirectTo ?? runtime.config.redirects.defaultAfterLogin,
-    },
-    runtime,
-    prepared.rawToken,
-    mode,
-  );
 }
 
 async function handleEmailVerifyRequest(
@@ -2498,78 +2504,89 @@ async function handleEmailVerifyConsume(
   if (!runtime.config.emailVerification.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime, "json-or-form");
-  await enforceTurnstile(
-    runtime,
-    "email_verification_consume",
-    rawBody,
-    request,
-  );
-  const body = tokenSchema.parse(rawBody);
-  await rateLimit(
-    runtime,
-    "email_verification_consume",
-    "ip",
-    clientIp(request),
-    30,
-    60 * 60 * 1000,
-    request,
-  );
-  let tokenHash: string;
   try {
-    tokenHash = hashRawAuthToken(
-      body.token,
-      runtime.keyRing,
-      "email_verification",
+    const rawBody = await parseBody(request, runtime, "json-or-form");
+    await enforceTurnstile(
+      runtime,
+      "email_verification_consume",
+      rawBody,
+      request,
     );
+    const body = tokenSchema.parse(rawBody);
+    await rateLimit(
+      runtime,
+      "email_verification_consume",
+      "ip",
+      clientIp(request),
+      30,
+      60 * 60 * 1000,
+      request,
+    );
+    let tokenHash: string;
+    try {
+      tokenHash = hashRawAuthToken(
+        body.token,
+        runtime.keyRing,
+        "email_verification",
+      );
+    } catch (error) {
+      queueAuthEvent(runtime, request, "email_verification_consume_failed", {
+        metadata: {
+          reason:
+            error instanceof AuthCryptoError ? error.code : "token_hash_failed",
+        },
+      });
+      throw error;
+    }
+    const now = Date.now();
+    const prepared = runtime.config.emailVerification
+      .createSessionAfterVerification
+      ? prepareSessionForRequest(runtime, request, now)
+      : null;
+    const consumed =
+      await runtime.repos.verificationTokens.consumeEmailVerification({
+        tokenHash,
+        consumeId: randomId("con_"),
+        consumedAt: now,
+        now,
+        verifiedAt: now,
+        updatedAt: now,
+        ...(prepared ? { session: prepared.session } : {}),
+        event: tokenConsumeEventInput(
+          runtime,
+          request,
+          "email_verification_consume_success",
+          {
+            sessionCreated:
+              runtime.config.emailVerification.createSessionAfterVerification,
+          },
+        ),
+      });
+    if (!consumed) {
+      queueAuthEvent(runtime, request, "email_verification_consume_failed", {
+        metadata: { reason: "invalid_or_replayed" },
+      });
+      return responseForMode(mode, "Invalid token", 400, "invalid_token");
+    }
+    const payload = {
+      user: publicUser(consumed.user),
+      redirectTo:
+        consumed.redirectTo ??
+        runtime.config.redirects.defaultAfterEmailVerification,
+    };
+    return prepared
+      ? sessionConsumeResponseWithToken(
+          payload,
+          runtime,
+          prepared.rawToken,
+          mode,
+        )
+      : consumeResponse(payload, mode);
   } catch (error) {
-    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
-      metadata: {
-        reason:
-          error instanceof AuthCryptoError ? error.code : "token_hash_failed",
-      },
-    });
+    const response = formErrorResponseForCaughtError(error, mode);
+    if (response) return response;
     throw error;
   }
-  const now = Date.now();
-  const prepared = runtime.config.emailVerification
-    .createSessionAfterVerification
-    ? prepareSessionForRequest(runtime, request, now)
-    : null;
-  const consumed =
-    await runtime.repos.verificationTokens.consumeEmailVerification({
-      tokenHash,
-      consumeId: randomId("con_"),
-      consumedAt: now,
-      now,
-      verifiedAt: now,
-      updatedAt: now,
-      ...(prepared ? { session: prepared.session } : {}),
-      event: tokenConsumeEventInput(
-        runtime,
-        request,
-        "email_verification_consume_success",
-        {
-          sessionCreated:
-            runtime.config.emailVerification.createSessionAfterVerification,
-        },
-      ),
-    });
-  if (!consumed) {
-    queueAuthEvent(runtime, request, "email_verification_consume_failed", {
-      metadata: { reason: "invalid_or_replayed" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  const payload = {
-    user: publicUser(consumed.user),
-    redirectTo:
-      consumed.redirectTo ??
-      runtime.config.redirects.defaultAfterEmailVerification,
-  };
-  return prepared
-    ? sessionConsumeResponseWithToken(payload, runtime, prepared.rawToken, mode)
-    : consumeResponse(payload, mode);
 }
 
 async function handlePasswordResetRequest(
@@ -2637,115 +2654,135 @@ async function handlePasswordResetConfirm(
   if (!runtime.config.passwordReset.enabled)
     return errorResponse("Not found", 404, "not_found");
   const mode = contentMode(request);
-  const rawBody = await parseBody(request, runtime, "json-or-form");
-  await enforceTurnstile(runtime, "password_reset_confirm", rawBody, request);
-  const body = resetConfirmSchema.parse(rawBody);
-  await rateLimit(
-    runtime,
-    "password_reset_confirm",
-    "ip",
-    clientIp(request),
-    10,
-    60 * 60 * 1000,
-    request,
-  );
-  const validation = validatePassword(body.password);
-  if (!validation.ok)
-    return errorResponse(
-      validation.message ?? "Invalid password",
-      400,
-      validation.code ?? "invalid_password",
-    );
-  let tokenHash: string;
   try {
-    tokenHash = hashRawAuthToken(body.token, runtime.keyRing, "password_reset");
+    const rawBody = await parseBody(request, runtime, "json-or-form");
+    await enforceTurnstile(runtime, "password_reset_confirm", rawBody, request);
+    const body = resetConfirmSchema.parse(rawBody);
+    await rateLimit(
+      runtime,
+      "password_reset_confirm",
+      "ip",
+      clientIp(request),
+      10,
+      60 * 60 * 1000,
+      request,
+    );
+    const validation = validatePassword(body.password);
+    if (!validation.ok)
+      return responseForMode(
+        mode,
+        validation.message ?? "Invalid password",
+        400,
+        validation.code ?? "invalid_password",
+      );
+    let tokenHash: string;
+    try {
+      tokenHash = hashRawAuthToken(
+        body.token,
+        runtime.keyRing,
+        "password_reset",
+      );
+    } catch (error) {
+      queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+        metadata: {
+          reason:
+            error instanceof AuthCryptoError ? error.code : "token_hash_failed",
+        },
+      });
+      throw error;
+    }
+    const active =
+      await runtime.repos.verificationTokens.findActiveVerificationTokenByHash(
+        tokenHash,
+        "password_reset",
+        Date.now(),
+      );
+    if (!active?.user_id) {
+      queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+        metadata: { reason: "invalid_or_expired" },
+      });
+      return responseForMode(mode, "Invalid token", 400, "invalid_token");
+    }
+    const activeUser = await runtime.repos.users.findUserById(active.user_id);
+    if (!activeUser || activeUser.disabled_at !== null) {
+      queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+        userId: activeUser?.id ?? null,
+        metadata: {
+          reason: activeUser ? "disabled_user" : "user_missing",
+        },
+      });
+      return responseForMode(mode, "Invalid token", 400, "invalid_token");
+    }
+    const passwordHash = await passwordSemaphore(runtime).run(() =>
+      hashPassword(body.password, {
+        profile: runtime.config.passwordHashing.profile,
+      }),
+    );
+    const now = Date.now();
+    const prepared = runtime.config.passwordReset.createSessionAfterReset
+      ? prepareSessionForRequest(runtime, request, now)
+      : null;
+    const consumed =
+      await runtime.repos.verificationTokens.consumePasswordReset({
+        tokenHash,
+        consumeId: randomId("con_"),
+        consumedAt: now,
+        now,
+        passwordHash,
+        updatedAt: now,
+        markEmailVerifiedAt: runtime.config.passwordReset
+          .markEmailVerifiedOnReset
+          ? now
+          : null,
+        revokeExistingSessionsAt: runtime.config.passwordReset
+          .revokeExistingSessions
+          ? now
+          : null,
+        ...(prepared ? { session: prepared.session } : {}),
+        event: tokenConsumeEventInput(
+          runtime,
+          request,
+          "password_reset_confirm_success",
+          {
+            sessionCreated:
+              runtime.config.passwordReset.createSessionAfterReset,
+          },
+        ),
+      });
+    if (!consumed) {
+      queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
+        metadata: { reason: "invalid_or_replayed" },
+      });
+      return responseForMode(mode, "Invalid token", 400, "invalid_token");
+    }
+    if (runtime.config.passwordReset.revokeExistingSessions) {
+      queueAuthEvent(runtime, request, "session_revoked", {
+        userId: consumed.user.id,
+        metadata: {
+          reason: "password_reset",
+          count: consumed.revokedSessions ?? 0,
+        },
+      });
+    }
+    const payload = {
+      user: publicUser(consumed.user),
+      redirectTo:
+        consumed.redirectTo ??
+        runtime.config.redirects.defaultAfterPasswordReset,
+    };
+    return prepared
+      ? sessionConsumeResponseWithToken(
+          payload,
+          runtime,
+          prepared.rawToken,
+          mode,
+        )
+      : consumeResponse(payload, mode);
   } catch (error) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      metadata: {
-        reason:
-          error instanceof AuthCryptoError ? error.code : "token_hash_failed",
-      },
-    });
+    const response = formErrorResponseForCaughtError(error, mode);
+    if (response) return response;
     throw error;
   }
-  const active =
-    await runtime.repos.verificationTokens.findActiveVerificationTokenByHash(
-      tokenHash,
-      "password_reset",
-      Date.now(),
-    );
-  if (!active?.user_id) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      metadata: { reason: "invalid_or_expired" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  const activeUser = await runtime.repos.users.findUserById(active.user_id);
-  if (!activeUser || activeUser.disabled_at !== null) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      userId: activeUser?.id ?? null,
-      metadata: {
-        reason: activeUser ? "disabled_user" : "user_missing",
-      },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  const passwordHash = await passwordSemaphore(runtime).run(() =>
-    hashPassword(body.password, {
-      profile: runtime.config.passwordHashing.profile,
-    }),
-  );
-  const now = Date.now();
-  const prepared = runtime.config.passwordReset.createSessionAfterReset
-    ? prepareSessionForRequest(runtime, request, now)
-    : null;
-  const consumed = await runtime.repos.verificationTokens.consumePasswordReset({
-    tokenHash,
-    consumeId: randomId("con_"),
-    consumedAt: now,
-    now,
-    passwordHash,
-    updatedAt: now,
-    markEmailVerifiedAt: runtime.config.passwordReset.markEmailVerifiedOnReset
-      ? now
-      : null,
-    revokeExistingSessionsAt: runtime.config.passwordReset
-      .revokeExistingSessions
-      ? now
-      : null,
-    ...(prepared ? { session: prepared.session } : {}),
-    event: tokenConsumeEventInput(
-      runtime,
-      request,
-      "password_reset_confirm_success",
-      {
-        sessionCreated: runtime.config.passwordReset.createSessionAfterReset,
-      },
-    ),
-  });
-  if (!consumed) {
-    queueAuthEvent(runtime, request, "password_reset_confirm_failed", {
-      metadata: { reason: "invalid_or_replayed" },
-    });
-    return errorResponse("Invalid token", 400, "invalid_token");
-  }
-  if (runtime.config.passwordReset.revokeExistingSessions) {
-    queueAuthEvent(runtime, request, "session_revoked", {
-      userId: consumed.user.id,
-      metadata: {
-        reason: "password_reset",
-        count: consumed.revokedSessions ?? 0,
-      },
-    });
-  }
-  const payload = {
-    user: publicUser(consumed.user),
-    redirectTo:
-      consumed.redirectTo ?? runtime.config.redirects.defaultAfterPasswordReset,
-  };
-  return prepared
-    ? sessionConsumeResponseWithToken(payload, runtime, prepared.rawToken, mode)
-    : consumeResponse(payload, mode);
 }
 
 async function sendVerificationEmail(
@@ -3114,6 +3151,38 @@ function consumeResponse(
   mode: "json" | "form",
 ): Response {
   return mode === "json" ? json(payload) : redirect(payload.redirectTo);
+}
+
+function responseForMode(
+  mode: "json" | "form",
+  message: string,
+  status: number,
+  code: string,
+): Response {
+  return mode === "form"
+    ? formErrorResponse(message, status, code)
+    : errorResponse(message, status, code);
+}
+
+function formErrorResponseForCaughtError(
+  error: unknown,
+  mode: "json" | "form",
+): Response | null {
+  if (mode !== "form") return null;
+  if (error instanceof z.ZodError)
+    return formErrorResponse("Invalid request", 400, "validation_failed");
+  if (error instanceof AuthRepositoryError)
+    return formErrorResponse("Request failed", 500, "server_error");
+  if (error instanceof AuthCryptoError) {
+    const code =
+      error.code === "hash_queue_timeout" ? "rate_limited" : error.code;
+    return formErrorResponse(
+      formErrorMessage(code),
+      code === "config_error" ? 500 : 400,
+      code,
+    );
+  }
+  return formErrorResponse("Request failed", 500, "server_error");
 }
 
 async function lookupSession(
@@ -3765,14 +3834,46 @@ function errorResponse(
   );
   return json(
     { error: { code, message }, ...(requestId ? { requestId } : {}) },
-    code === "body_too_large"
-      ? 413
-      : code === "unsupported_content_type"
-        ? 415
-        : code === "rate_limited"
-          ? 429
-          : status,
+    statusForErrorCode(status, code),
   );
+}
+
+function formErrorResponse(
+  message: string,
+  status: number,
+  code: string,
+): Response {
+  return html(
+    `<main><h1>Could not complete request</h1><p>${escapeHtml(redactLogValue(message))}</p></main>`,
+    { status: statusForErrorCode(status, code) },
+  );
+}
+
+function statusForErrorCode(status: number, code: string): number {
+  return code === "body_too_large"
+    ? 413
+    : code === "unsupported_content_type"
+      ? 415
+      : code === "rate_limited"
+        ? 429
+        : status;
+}
+
+function formErrorMessage(code: string): string {
+  if (
+    code === "invalid_token" ||
+    code === "malformed_token" ||
+    code === "wrong_token_purpose"
+  )
+    return "Invalid token";
+  if (code === "body_too_large") return "Request body too large";
+  if (code === "unsupported_content_type") return "Unsupported content type";
+  if (code === "rate_limited") return "Rate limited";
+  if (code === "turnstile_required") return "Verification required";
+  if (code === "turnstile_failed") return "Verification failed";
+  if (code === "config_error" || code === "server_error")
+    return "Request failed";
+  return "Invalid request";
 }
 
 function redirect(location: string, cookie?: string): Response {
@@ -3784,7 +3885,7 @@ function redirect(location: string, cookie?: string): Response {
 
 function html(
   markup: string,
-  options: { allowInlineScript?: boolean } = {},
+  options: { allowInlineScript?: boolean; status?: number } = {},
 ): Response {
   const headers = securityHeaders();
   headers.set("Content-Type", "text/html; charset=utf-8");
@@ -3794,6 +3895,7 @@ function html(
     `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; form-action 'self'${options.allowInlineScript ? "; script-src 'unsafe-inline'" : ""}`,
   );
   return new Response(`<!doctype html><meta charset="utf-8">${markup}`, {
+    status: options.status ?? 200,
     headers,
   });
 }

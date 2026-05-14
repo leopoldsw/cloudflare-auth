@@ -32,6 +32,21 @@ function setCookieHeaders(response: Response): string[] {
   return header ? header.split(/,\s*/u) : [];
 }
 
+async function expectSafeFormError(response: Response, secret: string) {
+  expect(response.status).toBe(400);
+  expect(response.headers.get("Content-Type")).toContain("text/html");
+  expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+  expect(response.headers.get("Content-Security-Policy")).toContain(
+    "default-src 'none'",
+  );
+  expect(response.headers.get("Content-Security-Policy")).toContain(
+    "form-action 'self'",
+  );
+  const text = await response.text();
+  expect(text).toContain("Could not complete request");
+  expect(text).not.toContain(secret);
+}
+
 async function setup(overrides: Partial<AuthConfigInput> = {}) {
   const db = createSqliteD1Database();
   await applyD1Migrations(db, [
@@ -1031,6 +1046,37 @@ describe("auth HTTP runtime", () => {
       headers: { Cookie: oldCookie },
     });
     await expect(oldSession.json()).resolves.toEqual({ user: null });
+  });
+
+  it("renders safe HTML errors for invalid built-in token forms", async () => {
+    const { authFetch } = await setup();
+    const magicToken = `cfauth.magic.k1.${"A".repeat(43)}`;
+    const verifyToken = `cfauth.verify.k1.${"B".repeat(43)}`;
+    const resetToken = `cfauth.reset.k1.${"C".repeat(43)}`;
+
+    const magic = await authFetch("/auth/magic-link/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: magicToken }),
+    });
+    await expectSafeFormError(magic, magicToken);
+
+    const verify = await authFetch("/auth/email/verify/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: verifyToken }),
+    });
+    await expectSafeFormError(verify, verifyToken);
+
+    const reset = await authFetch("/auth/password/reset/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        token: resetToken,
+        password: "new correct horse battery staple",
+      }),
+    });
+    await expectSafeFormError(reset, resetToken);
   });
 
   it("invalidates prior active email tokens by default", async () => {
