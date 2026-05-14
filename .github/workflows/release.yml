@@ -51,6 +51,8 @@ jobs:
       - run: pnpm verify:migrations
       - run: pnpm verify:examples
       - run: pnpm verify:package-ownership
+        env:
+          CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1"
       - run: pnpm verify:security-docs
       - run: pnpm verify:security-tracker
       - run: pnpm release:gates

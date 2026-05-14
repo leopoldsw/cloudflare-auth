@@ -208,6 +208,7 @@ async function verifyReleaseControls() {
     "pnpm verify:migrations",
     "pnpm verify:examples",
     "pnpm verify:package-ownership",
+    "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP",
     "pnpm verify:security-docs",
     "pnpm verify:security-tracker",
     "pnpm release:gates",
