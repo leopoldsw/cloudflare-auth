@@ -10,11 +10,14 @@ fallback.
 npx --package @cf-auth/cli@latest cf-auth init my-app --template hono-basic
 npx --package @cf-auth/cli@latest cf-auth init worker-app --template worker-basic
 npx --package @cf-auth/cli@latest cf-auth init --dry-run
+npx --package @cf-auth/cli@latest cf-auth init --repair
 ```
 
 `init` writes a runnable Worker auth app or prints route snippets in dry-run
 mode. Generated projects keep local and production Wrangler environments
-separate. Supported templates are `hono-basic` and `worker-basic`.
+separate. `init --repair` restores missing auth Wrangler vars, D1 bindings,
+production email binding, and migration files without changing existing app
+source. Supported templates are `hono-basic` and `worker-basic`.
 
 ## Migrations
 

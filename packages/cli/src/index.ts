@@ -210,6 +210,13 @@ async function commandInit(
     join(target, "migrations", "0002_indexes.sql"),
     indexesMigrationSql(),
   );
+  if (parsed.flags.repair) {
+    const repaired = await repairWranglerConfig(
+      target,
+      packageNameFromTarget(target),
+    );
+    if (repaired) out("Repaired wrangler.jsonc auth bindings and vars.");
+  }
   out(`Initialized Cloudflare Auth in ${target}`);
   if (packageResult === "updated")
     out("Updated package.json with Cloudflare Auth dependencies.");
@@ -2330,6 +2337,7 @@ function targetMode(parsed: ParsedArgs): { local: boolean; remote: boolean } {
 }
 
 interface WranglerConfig {
+  name?: string;
   account_id?: string;
   vars?: Record<string, string>;
   send_email?: Array<{ name: string }>;
@@ -2360,9 +2368,7 @@ async function readLocalMigrationVersions(cwd: string): Promise<string[]> {
 }
 
 async function readWrangler(cwd: string): Promise<WranglerConfig> {
-  const path = existsSync(join(cwd, "wrangler.jsonc"))
-    ? join(cwd, "wrangler.jsonc")
-    : join(cwd, "wrangler.json");
+  const path = wranglerPath(cwd);
   const text = await readFile(path, "utf8");
   return JSON.parse(stripJsonComments(text)) as WranglerConfig;
 }
@@ -2380,8 +2386,113 @@ function hasNamedEnvironments(config: WranglerConfig): boolean {
   return Boolean(config.env && Object.keys(config.env).length > 0);
 }
 
+function wranglerPath(cwd: string): string {
+  return existsSync(join(cwd, "wrangler.jsonc"))
+    ? join(cwd, "wrangler.jsonc")
+    : join(cwd, "wrangler.json");
+}
+
 function stripJsonComments(text: string): string {
   return text.replace(/^\s*\/\/.*$/gmu, "");
+}
+
+async function repairWranglerConfig(
+  cwd: string,
+  appName: string,
+): Promise<boolean> {
+  const path = wranglerPath(cwd);
+  const text = await readFile(path, "utf8");
+  const config = JSON.parse(stripJsonComments(text)) as WranglerConfig;
+  let changed = false;
+
+  changed =
+    ensureVars(config, {
+      AUTH_ENV: "development",
+      AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+    }) || changed;
+  changed =
+    ensureD1Binding(config, `${appName}-auth-dev`, "local-development", true) ||
+    changed;
+
+  config.env ??= {};
+  if (!config.env.production) {
+    config.env.production = {
+      name: appName,
+    };
+    changed = true;
+  }
+  const production = config.env.production;
+  changed =
+    ensureVars(production, {
+      AUTH_ENV: "production",
+      AUTH_PUBLIC_ORIGIN: "https://example.com",
+    }) || changed;
+  changed =
+    ensureD1Binding(
+      production,
+      `${appName}-auth`,
+      "REPLACE_WITH_DATABASE_ID",
+      false,
+    ) || changed;
+  if (
+    !production.send_email?.some((binding) => binding.name === "AUTH_EMAIL")
+  ) {
+    production.send_email = [
+      ...(production.send_email ?? []),
+      { name: "AUTH_EMAIL" },
+    ];
+    changed = true;
+  }
+
+  if (changed) await writeFile(path, JSON.stringify(config, null, 2) + "\n");
+  return changed;
+}
+
+function ensureVars(
+  config: WranglerConfig,
+  values: Record<string, string>,
+): boolean {
+  let changed = false;
+  config.vars ??= {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!config.vars[key]) {
+      config.vars[key] = value;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function ensureD1Binding(
+  config: WranglerConfig,
+  databaseName: string,
+  databaseId: string,
+  replacePlaceholder: boolean,
+): boolean {
+  let changed = false;
+  config.d1_databases ??= [];
+  let binding = config.d1_databases.find((item) => item.binding === "AUTH_DB");
+  if (!binding) {
+    binding = {
+      binding: "AUTH_DB",
+      database_name: databaseName,
+      database_id: databaseId,
+    };
+    config.d1_databases.push(binding);
+    return true;
+  }
+  if (!binding.database_name) {
+    binding.database_name = databaseName;
+    changed = true;
+  }
+  if (
+    !binding.database_id ||
+    (replacePlaceholder && binding.database_id.startsWith("REPLACE_"))
+  ) {
+    binding.database_id = databaseId;
+    changed = true;
+  }
+  return changed;
 }
 
 async function writeIfMissing(path: string, contents: string): Promise<void> {

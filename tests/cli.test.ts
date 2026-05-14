@@ -177,6 +177,68 @@ describe("CLI MVP", () => {
     expect(output.join("\n")).toContain("app.route(authConfig.basePath");
   });
 
+  it("repairs missing auth Wrangler bindings without changing source", async () => {
+    const cwd = await tempDir();
+    const app = join(cwd, "repair-app");
+    await mkdir(join(app, "src"), { recursive: true });
+    const existingSource =
+      "export default { fetch: () => new Response('ok') };\n";
+    await writeFile(join(app, "src", "index.ts"), existingSource);
+    await writeFile(
+      join(app, "wrangler.jsonc"),
+      JSON.stringify(
+        {
+          name: "repair-app-dev",
+          main: "src/index.ts",
+          vars: {},
+          env: { production: { name: "repair-app" } },
+        },
+        null,
+        2,
+      ),
+    );
+    const output: string[] = [];
+
+    const code = await runCli(["init", "repair-app", "--repair"], {
+      cwd,
+      stdout: (line) => output.push(line),
+    });
+
+    expect(code).toBe(0);
+    await expect(readFile(join(app, "src", "index.ts"), "utf8")).resolves.toBe(
+      existingSource,
+    );
+    const wrangler = JSON.parse(
+      await readFile(join(app, "wrangler.jsonc"), "utf8"),
+    ) as {
+      vars: Record<string, string>;
+      d1_databases: Array<{ binding: string; database_id: string }>;
+      env: {
+        production: {
+          vars: Record<string, string>;
+          d1_databases: Array<{ binding: string; database_id: string }>;
+          send_email: Array<{ name: string }>;
+        };
+      };
+    };
+    expect(wrangler.vars.AUTH_ENV).toBe("development");
+    expect(wrangler.d1_databases[0]).toMatchObject({
+      binding: "AUTH_DB",
+      database_id: "local-development",
+    });
+    expect(wrangler.env.production.vars.AUTH_ENV).toBe("production");
+    expect(wrangler.env.production.d1_databases[0]).toMatchObject({
+      binding: "AUTH_DB",
+      database_id: "REPLACE_WITH_DATABASE_ID",
+    });
+    expect(wrangler.env.production.send_email).toContainEqual({
+      name: "AUTH_EMAIL",
+    });
+    expect(output.join("\n")).toContain(
+      "Repaired wrangler.jsonc auth bindings and vars.",
+    );
+  });
+
   it("constructs local and remote Wrangler migration commands", async () => {
     const cwd = await tempDir();
     await writeWrangler(cwd);
