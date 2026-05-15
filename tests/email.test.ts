@@ -57,6 +57,13 @@ describe("email adapters and templates", () => {
       "preview:verify:preview",
       "prod:reset:production",
     ]);
+    expect(Object.keys(adapter).sort()).toEqual([
+      "kind",
+      "sendEmailVerification",
+      "sendMagicLink",
+      "sendPasswordReset",
+    ]);
+    expect("adapters" in adapter).toBe(false);
   });
 
   it("serves the dev outbox only in development", async () => {

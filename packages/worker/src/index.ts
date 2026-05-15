@@ -1741,6 +1741,11 @@ export function terminalEmail(
   };
 }
 
+const byEnvironmentAdapters = new WeakMap<
+  AuthEmailAdapter,
+  Record<AuthRuntimeMode, AuthEmailAdapter>
+>();
+
 export function byEnvironment<Env = unknown>(adapters: {
   development: AuthEmailAdapter<Env>;
   preview: AuthEmailAdapter<Env>;
@@ -1762,9 +1767,8 @@ export function byEnvironment<Env = unknown>(adapters: {
   function select(runtime: AuthEmailRuntime<Env>) {
     return adapters[runtime.mode];
   }
-  return {
+  const adapter = {
     kind: "by-environment",
-    adapters,
     sendMagicLink(input, runtime) {
       return select(runtime).sendMagicLink(input, runtime);
     },
@@ -1774,7 +1778,9 @@ export function byEnvironment<Env = unknown>(adapters: {
     sendPasswordReset(input, runtime) {
       return select(runtime).sendPasswordReset(input, runtime);
     },
-  } as AuthEmailAdapter<Env> & { adapters: typeof adapters };
+  } satisfies AuthEmailAdapter<Env>;
+  byEnvironmentAdapters.set(adapter as AuthEmailAdapter, adapters);
+  return adapter;
 }
 
 function assertTurnstileEndpoints(endpoints: readonly string[]): void {
@@ -3573,11 +3579,7 @@ function selectedEmailAdapter(
   mode: AuthRuntimeMode,
 ): AuthEmailAdapter {
   if (adapter.kind !== "by-environment") return adapter;
-  const adapters = (
-    adapter as AuthEmailAdapter & {
-      adapters?: Partial<Record<AuthRuntimeMode, AuthEmailAdapter>>;
-    }
-  ).adapters;
+  const adapters = byEnvironmentAdapters.get(adapter);
   return adapters?.[mode] ?? adapter;
 }
 
