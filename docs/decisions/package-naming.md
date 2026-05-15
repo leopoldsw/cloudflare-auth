@@ -20,9 +20,9 @@ Cloudflare Auth uses the public package scope `@cf-auth/*` and the CLI binary na
 
 Public docs may use `npx cf-auth@latest ...` only if the unscoped `cf-auth` package is controlled by the maintainers and delegates to `@cf-auth/cli`.
 
-As of May 14, 2026, `npm view cf-auth name version --json` returns `cf-auth@1.0.2`. Until maintainers explicitly prove control of that package, public docs must not use `npx cf-auth@latest`.
+As of May 15, 2026, `npm view cf-auth name version --json` returns `cf-auth@1.0.2`. Until maintainers explicitly prove control of that package, public docs must not use `npx cf-auth@latest`.
 
-As of May 14, 2026, `npm view <name> name version --json` returns `E404` for
+As of May 15, 2026, `npm view <name> name version --json` returns `E404` for
 every publishable `@cf-auth/*` package in this repo: `@cf-auth/cli`,
 `@cf-auth/client`, `@cf-auth/core`, `@cf-auth/email-cloudflare`,
 `@cf-auth/hono`, `@cf-auth/testing`, and `@cf-auth/worker`. Until maintainers
@@ -30,7 +30,7 @@ create and control the `@cf-auth/*` scope, public release docs must remain
 behind the package-name gate or switch every package name, import, template,
 test, and doc to the approved fallback scope.
 
-As of May 14, 2026, `npm view create-cloudflare-auth name version --json` returns `E404`. Until maintainers create and control that package, public docs must not use `npm create cloudflare-auth`.
+As of May 15, 2026, `npm view create-cloudflare-auth name version --json` returns `E404`. Until maintainers create and control that package, public docs must not use `npm create cloudflare-auth`.
 
 If `cf-auth` is unavailable, public docs must use:
 
