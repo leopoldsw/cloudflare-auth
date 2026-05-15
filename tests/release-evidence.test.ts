@@ -1313,6 +1313,24 @@ describe("release evidence verifiers", () => {
     );
   });
 
+  it("rejects placeholder-based prerelease package versions in evidence gates", async () => {
+    const cwd = await packageVersionFixture("0.0.0-alpha.0");
+
+    for (const script of [
+      "scripts/verify-alpha-evidence.mjs",
+      "scripts/verify-beta-evidence.mjs",
+      "scripts/verify-deploy-button-evidence.mjs",
+      "scripts/verify-security-release-tracker.mjs",
+    ]) {
+      const result = runScript(script, {}, cwd);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "release version must not use placeholder 0.0.0 base",
+      );
+    }
+  });
+
   it("accepts beta evidence for clean quickstart and opt-in production smoke", async () => {
     const path = await writeEvidence("beta", validBetaEvidence());
     const result = runScript("scripts/verify-beta-evidence.mjs", {
@@ -2201,17 +2219,21 @@ describe("release evidence verifiers", () => {
   });
 
   it("rejects package ownership evidence for placeholder package versions", async () => {
-    const path = await writeEvidence(
-      "package-ownership-placeholder",
-      validPackageEvidence(),
-    );
-    const result = runScript("scripts/verify-package-ownership.mjs", {
-      CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
-      CF_AUTH_PACKAGE_OWNERSHIP_PATH: path,
-    });
+    for (const version of ["0.0.0", "0.0.0-alpha.0"]) {
+      const evidence = validPackageEvidence();
+      for (const pkg of evidence.packages) pkg.version = version;
+      const path = await writeEvidence(
+        `package-ownership-placeholder-${version}`,
+        evidence,
+      );
+      const result = runScript("scripts/verify-package-ownership.mjs", {
+        CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+        CF_AUTH_PACKAGE_OWNERSHIP_PATH: path,
+      });
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("placeholder version 0.0.0");
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("placeholder version 0.0.0");
+    }
   });
 
   it("rejects package ownership evidence without explicit package arrays", async () => {

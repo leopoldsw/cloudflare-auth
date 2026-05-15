@@ -373,6 +373,9 @@ const unsupportedReleasePackages = packages.filter(
     !isPublicBeta(pkg.version) &&
     !isStableOneOrLater(pkg.version),
 );
+const placeholderPrereleasePackages = packages.filter((pkg) =>
+  isPlaceholderPrerelease(pkg.version),
+);
 const betaOrStablePackages = packages.filter(
   (pkg) => isPublicBeta(pkg.version) || isStableOneOrLater(pkg.version),
 );
@@ -382,6 +385,11 @@ const publishedReleasePackages = packages.filter((pkg) =>
 for (const pkg of unsupportedReleasePackages) {
   failures.push(
     `${pkg.name}@${pkg.version}: release versions must use alpha, beta, or stable 1.0+ channels from the implementation plan`,
+  );
+}
+for (const pkg of placeholderPrereleasePackages) {
+  failures.push(
+    `${pkg.name}@${pkg.version}: release version must not use placeholder 0.0.0 base`,
   );
 }
 if (publishedReleasePackages.length > 0) {
@@ -862,11 +870,14 @@ function isPrivateAlpha(version) {
   return /^\d+\.\d+\.\d+-alpha(?:[.-].*)?$/u.test(version);
 }
 
+function isPlaceholderPrerelease(version) {
+  if (typeof version !== "string") return false;
+  return /^0\.0\.0-.+/u.test(version);
+}
+
 function isPublishedReleaseVersion(version) {
   if (typeof version !== "string") return false;
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?$/u);
   if (!match) return false;
-  return (
-    Number(match[1]) !== 0 || Number(match[2]) !== 0 || Number(match[3]) !== 0
-  );
+  return version !== "0.0.0";
 }

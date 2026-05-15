@@ -70,15 +70,17 @@ describe("package name registry checks", () => {
   });
 
   it("rejects placeholder publish versions", async () => {
-    const fixture = await packageNameFixture({
-      packageVersion: "0.0.0",
-    });
-    const result = runPackageNameCheck(fixture.root);
+    for (const packageVersion of ["0.0.0", "0.0.0-alpha.0"]) {
+      const fixture = await packageNameFixture({
+        packageVersion,
+      });
+      const result = runPackageNameCheck(fixture.root);
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      "@cf-auth/cli: release workflow must not publish placeholder version 0.0.0",
-    );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "@cf-auth/cli: release workflow must not publish placeholder version 0.0.0",
+      );
+    }
   });
 
   it("rejects stale reserved evidence after a shim becomes publishable", async () => {

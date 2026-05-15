@@ -61,7 +61,7 @@ for (const pkg of packages) {
       failures.push(`${evidencePath}: ${pkg.name} ${field} must be true`);
     }
   }
-  if (pkg.version === "0.0.0") {
+  if (isPlaceholderReleaseVersion(pkg.version)) {
     failures.push(
       `${pkg.name}: release workflow must not publish placeholder version 0.0.0`,
     );
@@ -388,6 +388,10 @@ function parseRegistryPackageResult(value, label) {
     return null;
   }
   return { registryName, registryVersion };
+}
+
+function isPlaceholderReleaseVersion(version) {
+  return typeof version === "string" && /^0\.0\.0(?:-.+)?$/u.test(version);
 }
 
 function fail() {

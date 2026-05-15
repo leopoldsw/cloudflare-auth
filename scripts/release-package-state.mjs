@@ -29,6 +29,11 @@ export async function readReleasePackageState() {
         failures.push(`${path}: version must be a non-empty string`);
         continue;
       }
+      if (isPlaceholderPrerelease(pkg.version)) {
+        failures.push(
+          `${path}: release version must not use placeholder 0.0.0 base`,
+        );
+      }
       versions.push(pkg.version);
     }
   }
@@ -43,6 +48,10 @@ export async function readReleasePackageState() {
 
 function isPublicBeta(version) {
   return /^\d+\.\d+\.\d+-beta(?:[.-].*)?$/u.test(version);
+}
+
+function isPlaceholderPrerelease(version) {
+  return /^0\.0\.0-.+/u.test(version);
 }
 
 function isStableOneOrLater(version) {

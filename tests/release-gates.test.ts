@@ -803,6 +803,18 @@ process.exit(1);
     }
   }, 20_000);
 
+  it("rejects placeholder-based prerelease package versions", async () => {
+    const root = await releaseGateFixture({
+      deployButtonEvidence: false,
+      packageVersion: "0.0.0-alpha.0",
+    });
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("@cf-auth/cli@0.0.0-alpha.0");
+    expect(result.stderr).toContain("placeholder 0.0.0 base");
+  }, 20_000);
+
   it("rejects publishable packages without string names and versions", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFile(

@@ -113,7 +113,7 @@ function validateEvidence(value, rawText) {
       byName.set(item.name, item);
     }
     requireString(item.version, `${path}.version`);
-    if (item.version === "0.0.0") {
+    if (isPlaceholderReleaseVersion(item.version)) {
       failures.push(
         `${evidencePath}: ${path}.version must not be placeholder version 0.0.0 before publishing`,
       );
@@ -134,7 +134,7 @@ function validateEvidence(value, rawText) {
   }
 
   for (const pkg of packages) {
-    if (pkg.version === "0.0.0") {
+    if (isPlaceholderReleaseVersion(pkg.version)) {
       failures.push(
         `${pkg.name}: package ownership evidence cannot target placeholder version 0.0.0`,
       );
@@ -307,9 +307,11 @@ function isPublishedReleaseVersion(version) {
   if (typeof version !== "string") return false;
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?$/u);
   if (!match) return false;
-  return (
-    Number(match[1]) !== 0 || Number(match[2]) !== 0 || Number(match[3]) !== 0
-  );
+  return version !== "0.0.0";
+}
+
+function isPlaceholderReleaseVersion(version) {
+  return typeof version === "string" && /^0\.0\.0(?:-.+)?$/u.test(version);
 }
 
 async function exists(path) {
