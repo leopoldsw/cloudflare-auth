@@ -862,7 +862,7 @@ async function verifyReleaseControls() {
     releaseChecklist,
     "Every Release",
   );
-  for (const needle of [
+  const everyReleaseCommands = [
     "pnpm install --frozen-lockfile",
     "pnpm format:check",
     "pnpm lint",
@@ -889,13 +889,19 @@ async function verifyReleaseControls() {
     "CF_AUTH_TARBALL_INSTALL=1 pnpm smoke:tarballs",
     "pnpm benchmark:password",
     "pnpm publish:dry-run",
-  ]) {
+  ];
+  for (const needle of everyReleaseCommands) {
     if (!everyReleaseChecklist.includes(needle)) {
       failures.push(
         `docs/release-checklist.md: Every Release missing ${needle}`,
       );
     }
   }
+  requireOrderedText(
+    "docs/release-checklist.md Every Release",
+    everyReleaseChecklist,
+    everyReleaseCommands,
+  );
 
   const productionSmokeWorkflow = await readFile(
     ".github/workflows/cloudflare-production-smoke.yml",

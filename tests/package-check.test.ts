@@ -493,6 +493,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires every-release checklist commands to stay in release order", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/release-checklist.md",
+      "- `pnpm verify:deploy-button-evidence`\n- `pnpm verify:beta-evidence`",
+      "- `pnpm verify:beta-evidence`\n- `pnpm verify:deploy-button-evidence`",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/release-checklist.md Every Release: pnpm verify:beta-evidence must appear after pnpm verify:deploy-button-evidence",
+    );
+  });
+
   it("derives release workflow coverage from verifier scripts", async () => {
     const root = await packageCheckFixture();
     const packagePath = join(root, "package.json");
