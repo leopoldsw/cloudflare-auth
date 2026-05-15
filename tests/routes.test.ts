@@ -1022,6 +1022,118 @@ describe("auth HTTP runtime", () => {
     expect(replay.status).toBe(400);
   });
 
+  it("stores token redirects without putting redirect parameters in email links", async () => {
+    const { authFetch, email, db } = await setup();
+    const keyRing = parseAuthKeyRing(authSecret);
+    const latestMessage = (type: "magic" | "verify" | "reset") => {
+      const message = [...email.messages]
+        .reverse()
+        .find((item) => item.type === type);
+      if (!message) throw new Error(`missing ${type} email`);
+      expect([...new URL(message.url).searchParams.keys()]).toEqual(["token"]);
+      return message;
+    };
+    const expectStoredRedirect = async (
+      token: string,
+      type: "magic_link" | "email_verification" | "password_reset",
+      redirectTo: string,
+    ) => {
+      const tokenHash = hashRawAuthToken(token, keyRing, type);
+      await expect(
+        db
+          .prepare(
+            "SELECT redirect_to FROM verification_tokens WHERE token_hash = ?",
+          )
+          .bind(tokenHash)
+          .first("redirect_to"),
+      ).resolves.toBe(redirectTo);
+    };
+
+    await signup(authFetch, "magic-redirect@example.com");
+    await authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "magic-redirect@example.com",
+        redirectTo: "/magic-done?from=email#frag",
+      }),
+    });
+    const magic = latestMessage("magic");
+    await expectStoredRedirect(
+      magic.token,
+      "magic_link",
+      "/magic-done?from=email#frag",
+    );
+    const magicConsume = await authFetch(
+      "/auth/magic-link/consume?redirectTo=/ignored",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: magic.token }),
+      },
+    );
+    await expect(magicConsume.json()).resolves.toMatchObject({
+      redirectTo: "/magic-done?from=email#frag",
+    });
+
+    await signup(authFetch, "verify-redirect@example.com");
+    await authFetch("/auth/email/verify/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "verify-redirect@example.com",
+        redirectTo: "/verify-done?from=email#frag",
+      }),
+    });
+    const verify = latestMessage("verify");
+    await expectStoredRedirect(
+      verify.token,
+      "email_verification",
+      "/verify-done?from=email#frag",
+    );
+    const verifyConsume = await authFetch(
+      "/auth/email/verify/consume?redirectTo=/ignored",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: verify.token }),
+      },
+    );
+    await expect(verifyConsume.json()).resolves.toMatchObject({
+      redirectTo: "/verify-done?from=email#frag",
+    });
+
+    await signup(authFetch, "reset-redirect@example.com");
+    await authFetch("/auth/password/reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "reset-redirect@example.com",
+        afterResetRedirectTo: "/reset-done?from=email#frag",
+      }),
+    });
+    const reset = latestMessage("reset");
+    await expectStoredRedirect(
+      reset.token,
+      "password_reset",
+      "/reset-done?from=email#frag",
+    );
+    const resetConfirm = await authFetch(
+      "/auth/password/reset/confirm?afterResetRedirectTo=/ignored",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: reset.token,
+          password: "new correct horse battery staple",
+        }),
+      },
+    );
+    await expect(resetConfirm.json()).resolves.toMatchObject({
+      redirectTo: "/reset-done?from=email#frag",
+    });
+  });
+
   it("treats repository consistency errors as server faults", async () => {
     const { authFetch, email, db, handler, env, ctx, flushDeferred } =
       await setup();
