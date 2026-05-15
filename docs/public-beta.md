@@ -1,6 +1,7 @@
 # Public Beta
 
-Public beta starts only after private-alpha evidence is recorded and the package names are confirmed.
+Public beta starts only after private-alpha evidence is recorded, the Deploy to
+Cloudflare button evidence is verified, and the package names are confirmed.
 
 ## Required Evidence
 
