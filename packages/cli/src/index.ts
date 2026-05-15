@@ -1427,7 +1427,16 @@ async function checkPackageVersions(
   let pkg: unknown;
   try {
     pkg = JSON.parse(await readFile(join(cwd, "package.json"), "utf8"));
-  } catch {
+  } catch (error) {
+    if (
+      remoteTarget &&
+      !(error && typeof error === "object" && "code" in error)
+    ) {
+      return malformedPackageVersionCheck(
+        "package.json could not be parsed; Cloudflare Auth package versions could not be verified",
+        remoteTarget,
+      );
+    }
     return null;
   }
   if (!isRecord(pkg)) {

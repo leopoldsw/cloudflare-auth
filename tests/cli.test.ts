@@ -1421,6 +1421,18 @@ export default defineAuthConfig({
       "package.json is not a JSON object",
     );
 
+    await writeFile(join(cwd, "package.json"), "not json\n");
+    const invalidJsonOutput: string[] = [];
+    const invalidJsonCode = await runCli(["doctor", "--env", "production"], {
+      cwd,
+      stderr: (line) => invalidJsonOutput.push(line),
+      runCommand: remoteSecretRunner(),
+    });
+    expect(invalidJsonCode).toBe(1);
+    expect(invalidJsonOutput.join("\n")).toContain(
+      "package.json could not be parsed",
+    );
+
     await writeFile(
       join(cwd, "package.json"),
       JSON.stringify(
