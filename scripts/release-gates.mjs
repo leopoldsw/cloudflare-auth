@@ -59,6 +59,7 @@ await requireFile("docs/deploy-button-evidence.example.json");
 await requireFile("docs/deploy-to-cloudflare.md");
 await requireFile("docs/known-limitations.md");
 await requireFile("docs/package-ownership.example.json");
+await requireFile("docs/platform-assumptions.md");
 await requireFile("docs/public-beta.md");
 await requireFile("docs/release-readiness-audit.md");
 await requireFile("docs/security-release-tracker.example.json");
@@ -83,6 +84,7 @@ await requireText("docs/release-checklist.md", "unresolved high/critical");
 await requireText("docs/release-checklist.md", "public API report reviewed");
 await requireText("docs/release-checklist.md", "config schema reviewed");
 await requireText("docs/release-checklist.md", "security review decision");
+await requireText("docs/release-checklist.md", "docs/platform-assumptions.md");
 await requireText("docs/release-checklist.md", "release-readiness-audit.md");
 await requireText(
   "docs/release-checklist.md",
@@ -106,6 +108,22 @@ await requireText(
   "docs/release-readiness-audit.md",
   "cloudflare_auth_implementation_plan.md",
 );
+for (const text of [
+  "Date rechecked:",
+  "Wrangler environments",
+  'withSession("first-primary")',
+  "PRAGMA defer_foreign_keys",
+  "Cloudflare Email Service",
+  "Wrangler `4.36.0` or later",
+  "`10` or `60` seconds",
+  "`nodejs_compat`",
+  "`2024-09-23`",
+  "Workers Vitest",
+  "Turnstile",
+  "Deploy to Cloudflare",
+]) {
+  await requireText("docs/platform-assumptions.md", text);
+}
 for (const text of [
   "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
   "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",

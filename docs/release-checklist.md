@@ -34,6 +34,7 @@ recorded before public beta or 1.0.
 ## Prerelease
 
 - package names confirmed or fallback docs updated
+- platform assumptions rechecked in `docs/platform-assumptions.md`
 - npm publisher 2FA and package ownership verified before dispatching the release workflow
 - package ownership verifier passes before publishing prerelease or stable packages
 - `pnpm check:package-names` passes before publishing prerelease or stable packages

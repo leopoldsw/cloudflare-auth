@@ -144,6 +144,7 @@ await verifyPackageNamingDocs();
 await verifyReadmeAndNonGoals();
 await verifyDocsManifest();
 await verifyReleaseReadinessAudit();
+await verifyPlatformAssumptionsDocs();
 await verifyBenchmarkDocs();
 await verifyToolchainDocs();
 await verifyTroubleshootingDocs();
@@ -474,6 +475,7 @@ async function verifyDocsManifest() {
     "docs/public-beta.md",
     "docs/deploy-to-cloudflare.md",
     "docs/known-limitations.md",
+    "docs/platform-assumptions.md",
     "docs/release-checklist.md",
     "docs/release-readiness-audit.md",
     "docs/upgrade-guide.md",
@@ -523,6 +525,40 @@ async function verifyReleaseReadinessAudit() {
   if (!releaseChecklist.includes("release-readiness-audit.md")) {
     failures.push(
       "docs/release-checklist.md: missing release-readiness-audit.md",
+    );
+  }
+}
+
+async function verifyPlatformAssumptionsDocs() {
+  let assumptions;
+  try {
+    assumptions = await readFile("docs/platform-assumptions.md", "utf8");
+  } catch {
+    return;
+  }
+  for (const needle of [
+    "Date rechecked:",
+    "Wrangler environments",
+    'withSession("first-primary")',
+    "PRAGMA defer_foreign_keys",
+    "Cloudflare Email Service",
+    "Wrangler `4.36.0` or later",
+    "`10` or `60` seconds",
+    "`nodejs_compat`",
+    "`2024-09-23`",
+    "Workers Vitest",
+    "Turnstile",
+    "Deploy to Cloudflare",
+  ]) {
+    if (!assumptions.includes(needle)) {
+      failures.push(`docs/platform-assumptions.md: missing ${needle}`);
+    }
+  }
+
+  const releaseChecklist = await readFile("docs/release-checklist.md", "utf8");
+  if (!releaseChecklist.includes("docs/platform-assumptions.md")) {
+    failures.push(
+      "docs/release-checklist.md: missing docs/platform-assumptions.md",
     );
   }
 }
