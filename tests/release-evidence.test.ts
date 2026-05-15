@@ -35,6 +35,42 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("cf-auth deploy --env production");
   });
 
+  it("rejects non-array evidence command lists", async () => {
+    const alphaEvidence = validAlphaEvidence();
+    (alphaEvidence.localSetups[0] as Record<string, unknown>).commands =
+      "npx --package @cf-auth/cli@alpha cf-auth init my-app --template hono-basic";
+    const alphaPath = await writeEvidence(
+      "alpha-non-array-commands",
+      alphaEvidence,
+    );
+    const alphaResult = runScript("scripts/verify-alpha-evidence.mjs", {
+      CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+      CF_AUTH_ALPHA_EVIDENCE_PATH: alphaPath,
+    });
+
+    expect(alphaResult.status).toBe(1);
+    expect(alphaResult.stderr).toContain(
+      "localSetups[0].commands must be an array",
+    );
+
+    const betaEvidence = validBetaEvidence();
+    (betaEvidence.manualQuickstart as Record<string, unknown>).commands =
+      "npx --package @cf-auth/cli@beta cf-auth init my-app --template hono-basic";
+    const betaPath = await writeEvidence(
+      "beta-non-array-commands",
+      betaEvidence,
+    );
+    const betaResult = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: betaPath,
+    });
+
+    expect(betaResult.status).toBe(1);
+    expect(betaResult.stderr).toContain(
+      "manualQuickstart.commands must be an array",
+    );
+  });
+
   it("rejects alpha evidence with maintainer-supplied commands outside the docs", async () => {
     const evidence = validAlphaEvidence();
     evidence.localSetups[0]!.commands = [

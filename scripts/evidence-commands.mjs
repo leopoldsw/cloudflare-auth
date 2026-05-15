@@ -6,7 +6,11 @@ export function requireOnlyDocumentedCommands({
   allowedPatterns,
   label,
 }) {
-  const commandList = Array.isArray(commands) ? commands : [];
+  if (!Array.isArray(commands)) {
+    failures.push(`${evidencePath}: ${path} must be an array`);
+    return;
+  }
+  const commandList = commands;
   for (const [index, command] of commandList.entries()) {
     const itemPath = `${path}[${index}]`;
     if (typeof command !== "string" || command.trim().length === 0) {
