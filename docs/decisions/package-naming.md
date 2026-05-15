@@ -71,6 +71,17 @@ The `version` values in `docs/package-ownership.json` must match the target
 package versions in `packages/*/package.json`. The verifier rejects placeholder
 `0.0.0` package versions.
 
+Release package versions must use one of the supported implementation-plan
+channels:
+
+- private alpha: `x.y.z-alpha.N` or another `x.y.z-alpha.*` prerelease
+- public beta: `x.y.z-beta.N` or another `x.y.z-beta.*` prerelease
+- stable: `1.0.0` or later without a prerelease suffix
+
+Do not publish other prerelease shapes such as `rc`, `next`, or unclassified
+`0.x` stable versions unless the implementation plan is updated and
+`pnpm release:gates` is changed with tests.
+
 For an already-published npm name, include `registryVersion` with the current
 registry version at review time. The registry check fails if that value is stale
 or if the target package version already exists.

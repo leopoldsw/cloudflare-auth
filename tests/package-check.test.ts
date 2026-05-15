@@ -212,6 +212,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires documented release version channels", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/decisions/package-naming.md",
+      "private alpha: `x.y.z-alpha.N`",
+      "private alpha releases",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/decisions/package-naming.md: missing private alpha: `x.y.z-alpha.N`",
+    );
+  });
+
   it("requires release gates before package publication", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

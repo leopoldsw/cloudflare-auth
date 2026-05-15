@@ -856,7 +856,14 @@ async function verifyReleaseControls() {
   for (const [file, needles] of [
     [
       "docs/decisions/package-naming.md",
-      ["npm publisher 2FA", "npm provenance"],
+      [
+        "npm publisher 2FA",
+        "npm provenance",
+        "private alpha: `x.y.z-alpha.N`",
+        "public beta: `x.y.z-beta.N`",
+        "stable: `1.0.0` or later",
+        "Do not publish other prerelease shapes",
+      ],
     ],
     [
       "docs/release-checklist.md",
@@ -871,6 +878,7 @@ async function verifyReleaseControls() {
         "Changesets version/changelog",
         "Changesets fixed package group",
         "dry-run publish summary artifact",
+        "supported release channel",
         "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
         "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
         "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",

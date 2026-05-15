@@ -39,6 +39,7 @@ evidence. When proving one of the release blockers below, run the explicit
 ## Prerelease
 
 - package names confirmed or fallback docs updated
+- package versions use a supported release channel from `docs/decisions/package-naming.md`: private alpha `x.y.z-alpha.*`, public beta `x.y.z-beta.*`, or stable `1.0.0` and later
 - platform assumptions rechecked in `docs/platform-assumptions.md`
 - npm publisher 2FA and package ownership verified before dispatching the release workflow
 - `CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership` passes before publishing prerelease or stable packages
