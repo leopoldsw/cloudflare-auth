@@ -395,6 +395,7 @@ if (stablePackages.length > 0) {
   requireVerifier("scripts/verify-beta-evidence.mjs", {
     CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
   });
+  await requireBetaDeployButtonPackageTagMatch();
   await requireReleaseApproval("docs/api-report.md", "Public API report");
   await requireReleaseApproval("docs/config-schema.md", "Config schema");
   await requireSecurityReviewDecision();
@@ -679,6 +680,30 @@ function parseIsoDateOnly(value) {
     date.getUTCDate() === day
     ? date
     : null;
+}
+
+async function requireBetaDeployButtonPackageTagMatch() {
+  const betaEvidence = await readJsonObject("docs/beta-evidence.json");
+  const deployButtonEvidence = await readJsonObject(
+    "docs/deploy-button-evidence.json",
+  );
+  if (!betaEvidence || !deployButtonEvidence) return;
+  const betaTags = [
+    [
+      "publishedQuickstart.packageTag",
+      betaEvidence.publishedQuickstart?.packageTag,
+    ],
+    ["manualQuickstart.packageTag", betaEvidence.manualQuickstart?.packageTag],
+    ["productionSmoke.packageTag", betaEvidence.productionSmoke?.packageTag],
+  ].filter((entry) => typeof entry[1] === "string");
+  if (typeof deployButtonEvidence.packageTag !== "string") return;
+  for (const [path, betaTag] of betaTags) {
+    if (betaTag !== deployButtonEvidence.packageTag) {
+      failures.push(
+        `docs/deploy-button-evidence.json: packageTag ${deployButtonEvidence.packageTag} must match docs/beta-evidence.json ${path} ${betaTag}`,
+      );
+    }
+  }
 }
 
 async function requireUpgradeFixtures() {

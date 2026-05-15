@@ -706,6 +706,28 @@ process.exit(1);
     );
   });
 
+  it("rejects stable release evidence with mismatched deploy button package tags", async () => {
+    const root = await releaseGateFixture({
+      deployButtonEvidence: true,
+      packageVersion: "1.0.0",
+      stableEvidence: true,
+    });
+    const evidence = validDeployButtonEvidence();
+    evidence.packageTag = "0.1.0-beta.1";
+    await writeFixtureFile(
+      root,
+      "docs/deploy-button-evidence.json",
+      JSON.stringify(evidence, null, 2),
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/deploy-button-evidence.json: packageTag",
+    );
+    expect(result.stderr).toContain("docs/beta-evidence.json");
+  });
+
   it("rejects incomplete or placeholder stable release signoffs", async () => {
     const root = await releaseGateFixture({
       deployButtonEvidence: true,
