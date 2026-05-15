@@ -24,6 +24,22 @@ const generatedPackageVersion = JSON.parse(
 ).version as string;
 
 describe("CLI MVP", () => {
+  it("rejects non-v1 command aliases from the implementation plan", async () => {
+    const upgradeErrors: string[] = [];
+    const upgradeCode = await runCli(["upgrade"], {
+      stderr: (line) => upgradeErrors.push(line),
+    });
+    const turnstileErrors: string[] = [];
+    const turnstileCode = await runCli(["add", "turnstile"], {
+      stderr: (line) => turnstileErrors.push(line),
+    });
+
+    expect(upgradeCode).toBe(1);
+    expect(upgradeErrors.join("\n")).toContain("Unknown command: upgrade");
+    expect(turnstileCode).toBe(1);
+    expect(turnstileErrors.join("\n")).toContain("Unknown command: add");
+  });
+
   it("scaffolds a new Hono app without manual source mutation", async () => {
     const cwd = await tempDir();
     const output: string[] = [];
