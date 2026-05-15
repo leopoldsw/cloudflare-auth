@@ -129,7 +129,8 @@ normalization.
 Session cookie names must be valid HTTP token names. `session.domain` is only
 for explicit cross-subdomain cookies and must look like `.example.com`; plain
 hostnames, wildcards, IP addresses, paths, schemes, and trailing-dot domains
-are rejected.
+are rejected. All-numeric dotted domains are also rejected because they are
+ambiguous with noncanonical IPv4 forms.
 
 `request.maxBodyBytes` must be a positive integer. Enumeration delay values
 must be non-negative integers. `doctor` warns when the configured auth

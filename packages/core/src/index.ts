@@ -1115,6 +1115,7 @@ export function assertValidSessionCookieDomain(domain: string): string {
   if (
     labels.length < 2 ||
     isIP(hostname) ||
+    !/[a-z]/iu.test(hostname) ||
     labels.some((label) => !cookieDomainLabelPattern.test(label))
   ) {
     throw new AuthCryptoError(

@@ -18,8 +18,9 @@ cookies from a previous host-only deployment.
 
 Cross-subdomain cookies require explicit `session.domain` configuration using
 a leading-dot parent domain such as `.example.com`. `Domain` values with
-schemes, paths, wildcards, IP addresses, trailing dots, or header separators
-are rejected, and the domain must match the request host or one of its parent
-domains. Host-only production cookies keep the `__Host-` prefix and must not
+schemes, paths, wildcards, IP addresses, ambiguous all-numeric dotted domains,
+trailing dots, or header separators are rejected, and the domain must match the
+request host or one of its parent domains. Host-only production cookies keep
+the `__Host-` prefix and must not
 configure `Domain`; cross-subdomain cookies use the `__Secure-` prefix and
 require HTTPS.

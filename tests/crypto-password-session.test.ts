@@ -283,6 +283,9 @@ describe("crypto, passwords, tokens, and sessions", () => {
       ".example..com",
       "*.example.com",
       ".127.0.0.1",
+      ".127.1",
+      ".127.000.000.001",
+      ".0127.0.0.1",
       ".example.com/path",
       ".example.com; Secure",
     ]) {
