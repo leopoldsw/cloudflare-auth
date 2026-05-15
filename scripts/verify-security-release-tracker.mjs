@@ -169,9 +169,13 @@ function requireIssueSearchUrl(value) {
   } catch {
     return;
   }
-  if (url.hostname !== "github.com" || !githubRepoForIssueSearch(value)) {
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "github.com" ||
+    !githubRepoForIssueSearch(value)
+  ) {
     failures.push(
-      `${trackerPath}: issueSearchUrl must be a GitHub repository issues search URL`,
+      `${trackerPath}: issueSearchUrl must be an https GitHub repository issues search URL`,
     );
     return;
   }
@@ -192,9 +196,13 @@ function requireAdvisorySearchUrl(value) {
   } catch {
     return;
   }
-  if (url.hostname !== "github.com" || !githubRepoForAdvisorySearch(value)) {
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "github.com" ||
+    !githubRepoForAdvisorySearch(value)
+  ) {
     failures.push(
-      `${trackerPath}: advisorySearchUrl must be a GitHub repository security advisory URL`,
+      `${trackerPath}: advisorySearchUrl must be an https GitHub repository security advisory URL`,
     );
   }
 }

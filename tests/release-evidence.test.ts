@@ -723,6 +723,24 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("GitHub Actions run URL");
   });
 
+  it("rejects beta evidence with insecure GitHub Actions workflow URLs", async () => {
+    const evidence = validBetaEvidence();
+    evidence.publishedQuickstart.workflowRunUrl =
+      "http://github.com/acme/cloudflare-auth/actions/runs/123";
+    evidence.productionSmoke.workflowRunUrl =
+      "http://github.com/acme/cloudflare-auth/actions/runs/124";
+    const path = await writeEvidence("beta-http-github-workflow", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("publishedQuickstart.workflowRunUrl");
+    expect(result.stderr).toContain("productionSmoke.workflowRunUrl");
+    expect(result.stderr).toContain("https GitHub Actions run URL");
+  });
+
   it("rejects beta evidence with raw IPv6 addresses", async () => {
     const evidence = validBetaEvidence();
     (evidence.productionSmoke as Record<string, unknown>).notes =
@@ -1302,6 +1320,24 @@ describe("release evidence verifiers", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("open high/critical auth issues");
     expect(result.stderr).toContain("GitHub repository security advisory URL");
+  });
+
+  it("rejects security tracker evidence with insecure GitHub URLs", async () => {
+    const evidence = validSecurityTracker();
+    evidence.issueSearchUrl =
+      "http://github.com/acme/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical";
+    evidence.advisorySearchUrl =
+      "http://github.com/acme/cloudflare-auth/security/advisories";
+    const path = await writeEvidence("security-tracker-http-url", evidence);
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("issueSearchUrl");
+    expect(result.stderr).toContain("advisorySearchUrl");
+    expect(result.stderr).toContain("https GitHub");
   });
 
   it("rejects security tracker evidence with unresolved high or critical issues", async () => {

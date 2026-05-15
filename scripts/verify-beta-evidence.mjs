@@ -269,10 +269,13 @@ function requireGithubActionsRunUrl(value, path) {
     return;
   }
   if (
+    url.protocol !== "https:" ||
     url.hostname !== "github.com" ||
     !/^\/[^/]+\/[^/]+\/actions\/runs\/[1-9]\d*$/u.test(url.pathname)
   ) {
-    failures.push(`${evidencePath}: ${path} must be a GitHub Actions run URL`);
+    failures.push(
+      `${evidencePath}: ${path} must be an https GitHub Actions run URL`,
+    );
   }
 }
 
