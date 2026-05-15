@@ -266,10 +266,17 @@ describe("email adapters and templates", () => {
     await expect(request?.json()).resolves.toEqual({ ok: true });
     const event = await db
       .prepare(
-        "SELECT event_type, metadata_json FROM auth_events ORDER BY created_at DESC LIMIT 1",
+        "SELECT event_type, ip_hash, user_agent_hash, metadata_json FROM auth_events ORDER BY created_at DESC LIMIT 1",
       )
-      .first<{ event_type: string; metadata_json: string }>();
+      .first<{
+        event_type: string;
+        ip_hash: string | null;
+        user_agent_hash: string | null;
+        metadata_json: string;
+      }>();
     expect(event?.event_type).toBe("email_send_failed");
+    expect(event?.ip_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(event?.user_agent_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(event?.metadata_json).toContain('"tokenType":"magic_link"');
     expect(event?.metadata_json).not.toMatch(/person@example\.com|cfauth\./);
   });

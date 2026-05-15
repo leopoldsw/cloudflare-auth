@@ -2157,7 +2157,7 @@ async function handleSignup(
     },
   });
   const verificationEmailSent = runtime.config.emailVerification.enabled
-    ? await sendVerificationEmail(user, runtime, null)
+    ? await sendVerificationEmail(user, runtime, null, request)
     : true;
   if (
     runtime.config.signup.requireEmailVerificationBeforeSession ||
@@ -2384,6 +2384,7 @@ async function handleMagicLinkRequest(
         null,
         redirectTo,
         runtime.config.magicLink.expiresInMinutes * 60 * 1000,
+        request,
       ),
     );
   } else if (user && user.disabled_at !== null) {
@@ -2407,6 +2408,7 @@ async function handleMagicLinkRequest(
         normalizedEmail,
         redirectTo,
         runtime.config.magicLink.expiresInMinutes * 60 * 1000,
+        request,
       ),
     );
   } else {
@@ -2548,7 +2550,10 @@ async function handleEmailVerifyRequest(
       userId: user.id,
       metadata: { subject: "existing_user" },
     });
-    scheduleAuthTask(runtime, sendVerificationEmail(user, runtime, redirectTo));
+    scheduleAuthTask(
+      runtime,
+      sendVerificationEmail(user, runtime, redirectTo, request),
+    );
   } else {
     queueAuthEvent(runtime, request, "email_verification_request", {
       userId: user?.id ?? null,
@@ -2711,6 +2716,7 @@ async function handlePasswordResetRequest(
         null,
         redirectTo,
         runtime.config.passwordReset.expiresInMinutes * 60 * 1000,
+        request,
       ),
     );
   } else {
@@ -2887,6 +2893,7 @@ async function sendVerificationEmail(
   user: UserRow,
   runtime: RuntimeContext,
   redirectToInput: string | null,
+  request?: Request,
 ): Promise<boolean> {
   const redirectTo = safeRedirect(
     redirectToInput,
@@ -2902,6 +2909,7 @@ async function sendVerificationEmail(
     null,
     redirectTo,
     runtime.config.emailVerification.expiresInHours * 60 * 60 * 1000,
+    request,
   );
 }
 
@@ -2914,6 +2922,7 @@ async function createAndSendToken(
   normalizedEmail: string | null,
   redirectTo: string,
   ttlMs: number,
+  request?: Request,
 ): Promise<boolean> {
   const now = Date.now();
   if (
@@ -2968,6 +2977,7 @@ async function createAndSendToken(
       userId,
       normalizedEmail,
       error,
+      ...(request ? { request } : {}),
     });
     return false;
   }
@@ -2980,6 +2990,7 @@ async function recordEmailSendFailure(
     userId: string | null;
     normalizedEmail: string | null;
     error: unknown;
+    request?: Request;
   },
 ): Promise<void> {
   const metadata = {
@@ -3003,6 +3014,7 @@ async function recordEmailSendFailure(
       userId: input.userId,
       eventType: "email_send_failed",
       createdAt: Date.now(),
+      ...(input.request ? authEventRequestHashes(runtime, input.request) : {}),
       requestId: runtime.requestId,
       metadataJson: JSON.stringify(metadata),
     });
@@ -3037,22 +3049,15 @@ async function recordAuthEvent(
     metadata?: Record<string, string | number | boolean | null>;
   },
 ): Promise<void> {
+  const requestHashes = authEventRequestHashes(runtime, request);
   try {
     await runtime.repos.events.writeAuthEvent({
       id: randomId("evt_"),
       userId: options.userId ?? null,
       eventType,
       createdAt: Date.now(),
-      ipHash: deriveEventHash({
-        keyRing: runtime.keyRing,
-        purpose: "event-ip-hash",
-        value: canonicalizeIp(clientIp(request)),
-      }),
-      userAgentHash: deriveEventHash({
-        keyRing: runtime.keyRing,
-        purpose: "event-user-agent-hash",
-        value: canonicalizeUserAgent(request.headers.get("User-Agent")),
-      }),
+      ipHash: requestHashes.ipHash,
+      userAgentHash: requestHashes.userAgentHash,
       requestId: runtime.requestId,
       metadataJson: JSON.stringify(options.metadata ?? {}),
     });
@@ -3062,6 +3067,24 @@ async function recordAuthEvent(
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
   }
+}
+
+function authEventRequestHashes(
+  runtime: RuntimeContext,
+  request: Request,
+): { ipHash: string; userAgentHash: string } {
+  return {
+    ipHash: deriveEventHash({
+      keyRing: runtime.keyRing,
+      purpose: "event-ip-hash",
+      value: canonicalizeIp(clientIp(request)),
+    }),
+    userAgentHash: deriveEventHash({
+      keyRing: runtime.keyRing,
+      purpose: "event-user-agent-hash",
+      value: canonicalizeUserAgent(request.headers.get("User-Agent")),
+    }),
+  };
 }
 
 function scheduleAuthTask(
