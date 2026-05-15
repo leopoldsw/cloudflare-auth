@@ -1429,6 +1429,12 @@ function verifyRootScripts() {
       failures.push(`package.json: missing script ${script}`);
     }
   }
+  const testScript = rootPackage.scripts?.test ?? "";
+  if (!testScript.includes("--no-file-parallelism")) {
+    failures.push(
+      "package.json: test must run vitest with --no-file-parallelism",
+    );
+  }
   const dryRunScript = rootPackage.scripts?.["publish:dry-run"] ?? "";
   for (const needle of [
     "publish",
