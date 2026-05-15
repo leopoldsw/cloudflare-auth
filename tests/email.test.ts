@@ -109,6 +109,43 @@ describe("email adapters and templates", () => {
     expect(prod?.status).toBe(404);
   });
 
+  it("serves the byEnvironment development outbox", async () => {
+    const db = createSqliteD1Database();
+    await applyD1Migrations(db, [
+      await readFile("migrations/0001_initial.sql", "utf8"),
+      await readFile("migrations/0002_indexes.sql", "utf8"),
+    ]);
+    const development = terminalEmail({ outbox: true });
+    const adapter = byEnvironment({
+      development,
+      preview: recordingEmailAdapter("preview", []),
+      production: recordingEmailAdapter("prod", []),
+    });
+    const handler = createAuthHandler(
+      defineAuthConfig({
+        appName: "Email Test",
+        basePath: "/auth",
+        email: adapter,
+      }),
+    );
+    await development.sendMagicLink(sampleEmail(), runtime("development"));
+    const dev = await handler.fetch(
+      new Request("http://localhost:8787/auth/dev/emails"),
+      {
+        AUTH_DB: db,
+        AUTH_SECRET: authSecret,
+        AUTH_ENV: "development",
+        AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+      },
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+
+    expect(dev?.status).toBe(200);
+    await expect(dev?.json()).resolves.toMatchObject({
+      emails: [{ to: "person@example.com", redirectTo: "/dashboard" }],
+    });
+  });
+
   it("sends through the configured Cloudflare Email binding", async () => {
     const sent: unknown[] = [];
     const adapter = cloudflareEmail({

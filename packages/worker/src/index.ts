@@ -3049,9 +3049,13 @@ function stripTokenFromHistoryScript(): string {
 }
 
 function handleDevEmails(runtime: RuntimeContext): Response {
-  if (runtime.mode !== "development" || !("outbox" in runtime.config.email))
+  const email = selectedEmailAdapter(runtime.config.email, "development");
+  if (runtime.mode !== "development" || !("outbox" in email))
     return errorResponse("Not found", 404, "not_found");
-  return json({ emails: runtime.config.email.outbox });
+  return json({
+    emails: (email as AuthEmailAdapter & { outbox: SendAuthEmailInput[] })
+      .outbox,
+  });
 }
 
 function prepareSessionForRequest(
