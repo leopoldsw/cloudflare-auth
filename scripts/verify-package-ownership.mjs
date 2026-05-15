@@ -26,6 +26,7 @@ const packages = workspacePackageIdentities
   .map(({ identity }) => identity)
   .filter((pkg) => pkg !== null)
   .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+const packageNames = new Set(packages.map((pkg) => pkg.name));
 const reservedPackages = workspacePackageIdentities
   .filter(
     ({ entry }) =>
@@ -107,6 +108,10 @@ function validateEvidence(value, rawText) {
       if (reservedPackages.some((pkg) => pkg.name === item.name)) {
         failures.push(
           `${evidencePath}: ${item.name} must be listed under reservedPackages while its workspace package is private`,
+        );
+      } else if (!packageNames.has(item.name)) {
+        failures.push(
+          `${evidencePath}: ${item.name} must match a publishable workspace package`,
         );
       }
       byName.set(item.name, item);

@@ -1570,6 +1570,46 @@ describe("release evidence verifiers", () => {
     expect(result.stdout).toContain("package ownership evidence verified");
   });
 
+  it("rejects package ownership evidence for unknown package names", async () => {
+    const options = {
+      publishCfAuthShim: false,
+      staleCfAuthReservation: false,
+      publishCreatePackage: false,
+      staleCreateReservation: false,
+    };
+    const cwd = await packageOwnershipFixture(options);
+    const evidence = packageOwnershipFixtureEvidence(options);
+    evidence.packages.push({
+      name: "@cf-auth/unknown",
+      registry: "https://registry.npmjs.org/",
+      version: "0.1.0-beta.0",
+      ownershipConfirmed: true,
+      publisherTwoFactorEnabled: true,
+      provenancePublish: true,
+    });
+    await writeFile(
+      join(cwd, "docs", "package-ownership.json"),
+      `${JSON.stringify(evidence, null, 2)}\n`,
+    );
+    const result = runScript(
+      "scripts/verify-package-ownership.mjs",
+      {
+        CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+        CF_AUTH_PACKAGE_OWNERSHIP_PATH: join(
+          cwd,
+          "docs",
+          "package-ownership.json",
+        ),
+      },
+      cwd,
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "@cf-auth/unknown must match a publishable workspace package",
+    );
+  });
+
   it("requires registryVersion for already-published reserved package names", async () => {
     const cwd = await packageOwnershipFixture({
       publishCfAuthShim: false,
