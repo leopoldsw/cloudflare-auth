@@ -232,6 +232,23 @@ describe("package checks", () => {
     );
   });
 
+  it("blocks unsupported v1 command aliases in public docs", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(
+      join(root, "docs", "roadmap.md"),
+      "# Roadmap\n\nRun `cf-auth upgrade` or `cf-auth add turnstile`.\n",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/roadmap.md: unsupported v1 command alias cf-auth upgrade",
+    );
+    expect(result.stderr).toContain(
+      "docs/roadmap.md: unsupported v1 command alias cf-auth add turnstile",
+    );
+  });
+
   it("requires the production smoke workflow safety gate", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

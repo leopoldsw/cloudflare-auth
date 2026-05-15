@@ -484,6 +484,11 @@ async function verifyPackageNamingDocs() {
         `${file}: npm create cloudflare-auth commands are blocked until package ownership is confirmed`,
       );
     }
+    for (const alias of ["cf-auth upgrade", "cf-auth add turnstile"]) {
+      if (text.includes(alias)) {
+        failures.push(`${file}: unsupported v1 command alias ${alias}`);
+      }
+    }
   }
 
   const deployment = await readFile("docs/deployment.md", "utf8");
