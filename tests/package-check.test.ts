@@ -865,6 +865,64 @@ describe("package checks", () => {
     );
   });
 
+  it("requires package-name confirmation to be a required boolean input", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "        required: true\n        type: boolean",
+      "        required: false\n        type: string",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package_names_confirmed must be a required boolean workflow input",
+    );
+  });
+
+  it("requires the package-name confirmation gate to fail before checkout", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "        if: ${{ !inputs.package_names_confirmed }}",
+      "        if: ${{ false }}",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package_names_confirmed must be enforced by an early failing gate step",
+    );
+  });
+
+  it("requires the package-name confirmation gate to run before checkout", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      `      - name: Require package-name gate
+        if: \${{ !inputs.package_names_confirmed }}
+        run: |
+          echo "Set package_names_confirmed=true only after npm package names and public docs are verified."
+          exit 1
+      - uses: actions/checkout@v5`,
+      `      - uses: actions/checkout@v5
+      - name: Require package-name gate
+        if: \${{ !inputs.package_names_confirmed }}
+        run: |
+          echo "Set package_names_confirmed=true only after npm package names and public docs are verified."
+          exit 1`,
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package-name gate must run before checkout",
+    );
+  });
+
   it("requires checked-in password benchmark evidence", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
