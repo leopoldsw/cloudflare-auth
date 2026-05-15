@@ -5,6 +5,15 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+type AlphaFailureEvidence = {
+  id: string;
+  flow: string;
+  classification: string;
+  doctorDiagnostic?: boolean;
+  exactFixDocumented?: boolean;
+  troubleshootingEntry?: string;
+};
+
 describe("release evidence verifiers", () => {
   it("accepts redaction-safe alpha evidence with production command proof", async () => {
     const path = await writeEvidence("alpha", validAlphaEvidence());
@@ -2761,7 +2770,7 @@ function validAlphaEvidence() {
       deployPassed: true,
       signupLoginVerified: true,
     })),
-    failures: [],
+    failures: [] as AlphaFailureEvidence[],
   };
 }
 
