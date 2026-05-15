@@ -31,7 +31,13 @@ await cp("templates/hono-basic", target, {
   recursive: true,
   filter: (source) => {
     const name = basename(source);
-    return name !== "node_modules" && name !== ".wrangler";
+    return (
+      name !== "node_modules" &&
+      name !== ".wrangler" &&
+      name !== ".dev.vars" &&
+      name !== ".env" &&
+      !name.startsWith(".env.")
+    );
   },
 });
 

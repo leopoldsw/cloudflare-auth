@@ -213,9 +213,16 @@ async function checkIsolatedTree(dir) {
     "node_modules",
     ".wrangler",
     "pnpm-workspace.yaml",
+    ".dev.vars",
+    ".env",
   ]) {
     if (entries.has(forbidden)) {
       failures.push(`template tree: must not include ${forbidden}`);
+    }
+  }
+  for (const entry of entries) {
+    if (entry.startsWith(".env.")) {
+      failures.push(`template tree: must not include ${entry}`);
     }
   }
   for (const required of [
