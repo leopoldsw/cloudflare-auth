@@ -251,7 +251,7 @@ describe("generated auth app", () => {
       ctx,
     );
     expect(signup.status).toBe(200);
-    expect(signup.headers.get("Set-Cookie") ?? "").toContain("cfauth-session=");
+    assertLocalSessionCookie(signup.headers.get("Set-Cookie") ?? "", "signup");
 
     const login = await app.fetch(
       new Request("http://localhost:8787/auth/login", {
@@ -267,7 +267,7 @@ describe("generated auth app", () => {
     );
     expect(login.status).toBe(200);
     const loginCookie = login.headers.get("Set-Cookie") ?? "";
-    expect(loginCookie).toContain("cfauth-session=");
+    assertLocalSessionCookie(loginCookie, "login");
     const cookie = loginCookie.split(";")[0];
 
     const user = await app.fetch(
@@ -291,7 +291,9 @@ describe("generated auth app", () => {
       ctx,
     );
     expect(logout.status).toBe(200);
-    expect(logout.headers.get("Set-Cookie") ?? "").toContain("Max-Age=0");
+    assertLocalSessionCookie(logout.headers.get("Set-Cookie") ?? "", "logout", {
+      cleared: true,
+    });
 
     const userAfterLogout = await app.fetch(
       new Request("http://localhost:8787/auth/user", {
@@ -304,5 +306,36 @@ describe("generated auth app", () => {
     await expect(userAfterLogout.json()).resolves.toEqual({ user: null });
   });
 });
+
+function assertLocalSessionCookie(
+  setCookie: string,
+  context: string,
+  options = { cleared: false },
+) {
+  if (!setCookie.startsWith("cfauth-session=")) {
+    throw new Error(context + " did not set the local cfauth-session cookie");
+  }
+  if (setCookie.includes("__Host-cfauth-session=")) {
+    throw new Error(context + " local session cookie must not use __Host-");
+  }
+  if (setCookie.includes("__Secure-cfauth-session=")) {
+    throw new Error(context + " local session cookie must not use __Secure-");
+  }
+  if (/;\\s*Secure(?:;|$)/iu.test(setCookie)) {
+    throw new Error(context + " local session cookie must not use Secure");
+  }
+  if (/;\\s*Domain=/iu.test(setCookie)) {
+    throw new Error(context + " local session cookie must not set Domain");
+  }
+  if (!/;\\s*HttpOnly(?:;|$)/iu.test(setCookie)) {
+    throw new Error(context + " local session cookie missing HttpOnly");
+  }
+  if (!/;\\s*Path=\\/(?:;|$)/iu.test(setCookie)) {
+    throw new Error(context + " local session cookie missing Path=/");
+  }
+  if (options.cleared && !/;\\s*Max-Age=0(?:;|$)/iu.test(setCookie)) {
+    throw new Error(context + " did not clear the session cookie");
+  }
+}
 `;
 }

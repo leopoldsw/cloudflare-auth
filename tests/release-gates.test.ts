@@ -192,6 +192,22 @@ describe("release gates", () => {
     expect(result.stderr).toContain("migrationFiles.map");
   });
 
+  it("requires tarball smoke to assert local cookie policy", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await writeFixtureFile(
+      root,
+      "scripts/smoke-local-tarballs.mjs",
+      "expect(cookie).toContain('cfauth-session=');\n",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/smoke-local-tarballs.mjs");
+    expect(result.stderr).toContain("assertLocalSessionCookie");
+    expect(result.stderr).toContain("__Host-cfauth-session=");
+    expect(result.stderr).toContain("Path=/");
+  });
+
   it("rejects non-object root package manifests", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(root, "package.json", "null\n");
@@ -1069,7 +1085,17 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     ],
     [
       "scripts/smoke-local-tarballs.mjs",
-      ['readdir(join(process.cwd(), "migrations"))', "migrationFiles.map"],
+      [
+        'readdir(join(process.cwd(), "migrations"))',
+        "migrationFiles.map",
+        "assertLocalSessionCookie",
+        "cfauth-session=",
+        "__Host-cfauth-session=",
+        "HttpOnly",
+        "Path=/",
+        "Secure",
+        "Domain=",
+      ],
     ],
     [
       "scripts/verify-deploy-template.mjs",

@@ -304,6 +304,15 @@ await requireText(
 );
 await requireText("scripts/smoke-local-tarballs.mjs", "migrationFiles.map");
 await requireText(
+  "scripts/smoke-local-tarballs.mjs",
+  "assertLocalSessionCookie",
+);
+await requireText("scripts/smoke-local-tarballs.mjs", "cfauth-session=");
+await requireText("scripts/smoke-local-tarballs.mjs", "__Host-cfauth-session=");
+for (const cookieAttribute of ["HttpOnly", "Path=/", "Secure", "Domain="]) {
+  await requireText("scripts/smoke-local-tarballs.mjs", cookieAttribute);
+}
+await requireText(
   "scripts/smoke-production-cloudflare.mjs",
   'assertNoWorkspaceDependencies(pkg, "production smoke package.json")',
 );
