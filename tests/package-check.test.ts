@@ -260,6 +260,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires deploy button evidence before beta evidence", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "      - run: pnpm verify:deploy-button-evidence\n      - run: pnpm verify:beta-evidence",
+      "      - run: pnpm verify:beta-evidence\n      - run: pnpm verify:deploy-button-evidence",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: pnpm verify:beta-evidence must appear after pnpm verify:deploy-button-evidence",
+    );
+  });
+
   it("derives release workflow coverage from verifier scripts", async () => {
     const root = await packageCheckFixture();
     const packagePath = join(root, "package.json");
