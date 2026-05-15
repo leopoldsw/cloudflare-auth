@@ -999,6 +999,15 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     ],
     [".github/workflows/wrangler-dev-smoke.yml", ["pnpm smoke:wrangler-dev"]],
     [
+      "scripts/verify-deploy-template.mjs",
+      [
+        "checkMigrations",
+        "rootMigrationFiles",
+        "deploy template must include every root migration",
+        "must match root migration",
+      ],
+    ],
+    [
       "scripts/smoke-published-quickstart.mjs",
       [
         "assertLocalSessionCookie",
@@ -1856,6 +1865,20 @@ async function writeDeployTemplateFixtures(root: string) {
 const dir = process.argv[2];
 await mkdir(dir + "/src", { recursive: true });
 await mkdir(dir + "/migrations", { recursive: true });
+await writeFile(dir + "/migrations/0001_initial.sql", ${JSON.stringify(
+      `${[
+        "CREATE TABLE auth_schema_migrations(version TEXT);",
+        "CREATE TABLE auth_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0001', 'initial', 0);",
+        "INSERT INTO auth_meta (key, value) VALUES ('schema_version', '1');",
+      ].join("\n")}\n`,
+    )});
+await writeFile(dir + "/migrations/0002_indexes.sql", ${JSON.stringify(
+      `${[
+        "INSERT INTO auth_schema_migrations (version, name, applied_at) VALUES ('0002', 'indexes', 0);",
+        "UPDATE auth_meta SET value = '2' WHERE key = 'schema_version';",
+      ].join("\n")}\n`,
+    )});
 await writeFile(dir + "/package.json", JSON.stringify({
   name: "cloudflare-auth-template",
   private: true,

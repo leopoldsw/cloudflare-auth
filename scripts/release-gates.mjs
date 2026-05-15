@@ -302,6 +302,16 @@ await requireText(
   "scripts/smoke-production-cloudflare.mjs",
   "CF_AUTH_ALLOW_LOCAL_PACKAGE_SPECS",
 );
+await requireText("scripts/verify-deploy-template.mjs", "checkMigrations");
+await requireText("scripts/verify-deploy-template.mjs", "rootMigrationFiles");
+await requireText(
+  "scripts/verify-deploy-template.mjs",
+  "deploy template must include every root migration",
+);
+await requireText(
+  "scripts/verify-deploy-template.mjs",
+  "must match root migration",
+);
 await requireText(".github/workflows/release.yml", "package_names_confirmed");
 await requireText(
   ".github/workflows/release.yml",
