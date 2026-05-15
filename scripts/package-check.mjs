@@ -1430,7 +1430,10 @@ function verifyRootScripts() {
     }
   }
   const testScript = rootPackage.scripts?.test ?? "";
-  if (!testScript.includes("--no-file-parallelism")) {
+  if (
+    !testScript.includes("vitest run") ||
+    !testScript.includes("--no-file-parallelism")
+  ) {
     failures.push(
       "package.json: test must run vitest with --no-file-parallelism",
     );

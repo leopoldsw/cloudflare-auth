@@ -675,6 +675,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires the root test script to keep running Vitest", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "package.json",
+      "vitest run --no-file-parallelism",
+      "node scripts/custom-test-runner.mjs --no-file-parallelism",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "package.json: test must run vitest with --no-file-parallelism",
+    );
+  });
+
   it("requires release gates before package publication", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
