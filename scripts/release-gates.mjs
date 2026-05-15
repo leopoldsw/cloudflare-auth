@@ -405,6 +405,10 @@ async function requireReleaseApproval(path, label) {
     failures.push(
       `${path}: ${label} release approval date must be a valid ISO date`,
     );
+  } else if (isFutureIsoDateOnly(approvalDate)) {
+    failures.push(
+      `${path}: ${label} release approval date must not be in the future`,
+    );
   }
 }
 
@@ -485,6 +489,10 @@ async function requireSecurityReviewDecision() {
     failures.push(
       `${decisionPath}: security review decision must include a valid ISO date`,
     );
+  } else if (isFutureIsoDateOnly(decisionDate)) {
+    failures.push(
+      `${decisionPath}: security review decision date must not be in the future`,
+    );
   }
   if (status === "external-review-completed") {
     const reviewer = requireReleaseField(
@@ -537,18 +545,32 @@ function releaseFieldValue(text, field) {
 }
 
 function isIsoDateOnly(value) {
+  return parseIsoDateOnly(value) !== null;
+}
+
+function isFutureIsoDateOnly(value, nowMs = Date.now()) {
+  const date = parseIsoDateOnly(value);
+  if (!date) return false;
+  const now = new Date(nowMs);
+  const today = new Date(Date.UTC(0, now.getUTCMonth(), now.getUTCDate()));
+  today.setUTCFullYear(now.getUTCFullYear());
+  return date.getTime() > today.getTime();
+}
+
+function parseIsoDateOnly(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
-  if (!match) return false;
+  if (!match) return null;
   const [, yearText, monthText, dayText] = match;
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
+  const date = new Date(Date.UTC(0, month - 1, day));
+  date.setUTCFullYear(year);
+  return date.getUTCFullYear() === year &&
     date.getUTCMonth() === month - 1 &&
     date.getUTCDate() === day
-  );
+    ? date
+    : null;
 }
 
 async function requireUpgradeFixtures() {

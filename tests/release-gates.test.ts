@@ -653,7 +653,7 @@ process.exit(1);
       root,
       "docs/config-schema.md",
       configSchemaFixtureText(
-        "Release approval: release-approved by release-reviewer on 2026-05-14",
+        "Release approval: release-approved by release-reviewer on 9999-01-01",
       ),
     );
     await writeFixtureFile(
@@ -662,7 +662,7 @@ process.exit(1);
       [
         "Status: maintainer-signoff",
         "Signed by: maintainer",
-        "Date: 2026-02-30",
+        "Date: 9999-01-01",
       ].join("\n"),
     );
     const result = runReleaseGates(root);
@@ -675,7 +675,10 @@ process.exit(1);
       "docs/config-schema.md: Config schema release approver must not be a placeholder",
     );
     expect(result.stderr).toContain(
-      "docs/decisions/security-review.md: security review decision must include a valid ISO date",
+      "docs/config-schema.md: Config schema release approval date must not be in the future",
+    );
+    expect(result.stderr).toContain(
+      "docs/decisions/security-review.md: security review decision date must not be in the future",
     );
     expect(result.stderr).toContain(
       "docs/decisions/security-review.md: maintainer sign-off signer must not be a placeholder",
