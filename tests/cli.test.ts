@@ -702,6 +702,34 @@ describe("CLI MVP", () => {
     );
   });
 
+  it("rejects named remote migrations without explicit remote AUTH_ENV", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const wranglerPath = join(cwd, "wrangler.jsonc");
+    const config = JSON.parse(await readFile(wranglerPath, "utf8")) as {
+      env: { production: { vars: Record<string, string> } };
+    };
+    delete config.env.production.vars.AUTH_ENV;
+    await writeFile(wranglerPath, JSON.stringify(config, null, 2));
+
+    const errors: string[] = [];
+    const calls: string[] = [];
+    const code = await runCli(["migrate", "--remote", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: (command, args) => {
+        calls.push([command, ...args].join(" "));
+        return { status: 0, stdout: "remote migrated\n", stderr: "" };
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Remote migrations must target vars.AUTH_ENV=preview or production",
+    );
+    expect(calls).toEqual([]);
+  });
+
   it("parses Wrangler JSONC comments and trailing commas", async () => {
     const cwd = await tempDir();
     await mkdir(join(cwd, "migrations"), { recursive: true });
@@ -2248,6 +2276,34 @@ export default app;
 
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("Remote cleanup requires --env");
+  });
+
+  it("rejects named remote cleanup without explicit remote AUTH_ENV", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const wranglerPath = join(cwd, "wrangler.jsonc");
+    const config = JSON.parse(await readFile(wranglerPath, "utf8")) as {
+      env: { production: { vars: Record<string, string> } };
+    };
+    delete config.env.production.vars.AUTH_ENV;
+    await writeFile(wranglerPath, JSON.stringify(config, null, 2));
+
+    const errors: string[] = [];
+    const calls: string[] = [];
+    const code = await runCli(["clean", "--remote", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: (command, args) => {
+        calls.push([command, ...args].join(" "));
+        return { status: 0, stdout: "cleaned\n", stderr: "" };
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Remote cleanup must target vars.AUTH_ENV=preview or production",
+    );
+    expect(calls).toEqual([]);
   });
 
   it("rejects remote cleanup from top-level development configs", async () => {

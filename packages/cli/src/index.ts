@@ -2973,9 +2973,15 @@ function assertRemoteAuthEnvironment(
   label: string,
 ): void {
   const selected = envName ? config.env?.[envName] : config;
-  if (isRecord(selected?.vars) && selected.vars.AUTH_ENV === "development") {
+  const authEnv = isRecord(selected?.vars) ? selected.vars.AUTH_ENV : undefined;
+  if (authEnv === "development") {
     throw new Error(
       `${label} must not target vars.AUTH_ENV=development. Set the selected Wrangler environment to preview or production.`,
+    );
+  }
+  if (authEnv !== "preview" && authEnv !== "production") {
+    throw new Error(
+      `${label} must target vars.AUTH_ENV=preview or production. Set the selected Wrangler environment vars.AUTH_ENV to preview or production.`,
     );
   }
 }
