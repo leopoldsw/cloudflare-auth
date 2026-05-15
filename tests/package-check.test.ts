@@ -98,6 +98,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires public non-goal summaries to include every v1 exclusion", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/roadmap.md",
+      "password peppering",
+      "password hardening",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/roadmap.md: missing v1 exclusion password peppering",
+    );
+  });
+
   it("requires the production smoke workflow safety gate", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

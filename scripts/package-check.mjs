@@ -33,6 +33,20 @@ const expectedPackages = new Map([
   ["testing", { name: "@cf-auth/testing" }],
   ["worker", { name: "@cf-auth/worker" }],
 ]);
+const v1Exclusions = [
+  "OAuth/social login",
+  "SAML/enterprise SSO",
+  "passkeys",
+  "MFA",
+  "organizations/teams",
+  "role/permission framework",
+  "hosted dashboard",
+  "hosted auth service",
+  "billing integration",
+  "admin impersonation",
+  "multi-project control plane",
+  "password peppering",
+];
 const packageDirs = (await readdir("packages", { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => join("packages", entry.name))
@@ -647,23 +661,18 @@ async function verifyReadmeAndNonGoals() {
     }
   }
 
-  const nonGoals = await readFile("docs/non-goals.md", "utf8");
-  for (const item of [
-    "OAuth/social login",
-    "SAML/enterprise SSO",
-    "passkeys",
-    "MFA",
-    "organizations/teams",
-    "role/permission framework",
-    "hosted dashboard",
-    "hosted auth service",
-    "billing integration",
-    "admin impersonation",
-    "multi-project control plane",
-    "password peppering",
+  for (const file of [
+    "README.md",
+    "docs/non-goals.md",
+    "docs/roadmap.md",
+    "docs/known-limitations.md",
   ]) {
-    if (!nonGoals.includes(item)) {
-      failures.push(`docs/non-goals.md: missing v1 exclusion ${item}`);
+    const text = file === "README.md" ? readme : await readFile(file, "utf8");
+    const normalizedText = text.replace(/\s+/gu, " ");
+    for (const item of v1Exclusions) {
+      if (!normalizedText.includes(item)) {
+        failures.push(`${file}: missing v1 exclusion ${item}`);
+      }
     }
   }
 }

@@ -65,7 +65,7 @@ Known v1 limitations are listed in [docs/known-limitations.md](docs/known-limita
 
 ## Non-Goals
 
-OAuth, SAML, passkeys, MFA, organizations, hosted dashboards, hosted auth service, billing, and authorization roles are outside v1. See [docs/non-goals.md](docs/non-goals.md).
+OAuth/social login, SAML/enterprise SSO, passkeys, MFA, organizations/teams, role/permission framework, hosted dashboard, hosted auth service, billing integration, admin impersonation, multi-project control plane, and password peppering are outside v1. See [docs/non-goals.md](docs/non-goals.md).
 
 ## Security Policy
 
