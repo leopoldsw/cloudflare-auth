@@ -531,7 +531,15 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
                AND used_at IS NULL
                AND consume_id IS NULL
                AND revoked_at IS NULL
-               AND expires_at > ?`,
+               AND expires_at > ?
+               AND (
+                 user_id IS NULL
+                 OR EXISTS (
+                   SELECT 1 FROM users
+                   WHERE users.id = verification_tokens.user_id
+                     AND users.disabled_at IS NULL
+                 )
+               )`,
           )
           .bind(
             input.consumedAt,

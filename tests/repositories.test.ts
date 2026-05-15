@@ -340,6 +340,15 @@ describe("D1 migrations and repositories", () => {
       }),
     ).resolves.toBeNull();
     await expect(
+      repos.verificationTokens.consumeVerificationToken({
+        tokenHash: resetHash,
+        type: "password_reset",
+        consumeId: "con_disabled_generic",
+        consumedAt: 201,
+        now: 201,
+      }),
+    ).resolves.toBeNull();
+    await expect(
       db
         .prepare(
           "SELECT used_at, consume_id FROM verification_tokens WHERE id = ?",
