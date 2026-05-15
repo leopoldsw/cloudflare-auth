@@ -193,6 +193,31 @@ describe("package checks", () => {
     );
   });
 
+  it("requires troubleshooting docs to cover the plan matrix", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/troubleshooting.md",
+      "JSON request returns `415`",
+      "JSON request fails",
+    );
+    await replaceFixtureText(
+      root,
+      "docs/troubleshooting.md",
+      "Magic link redirect rejected",
+      "Magic redirect rejected",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/troubleshooting.md: missing exact fix for JSON request returns `415`",
+    );
+    expect(result.stderr).toContain(
+      "docs/troubleshooting.md: missing exact fix for Magic link redirect rejected",
+    );
+  });
+
   it("blocks unavailable package commands in package READMEs", async () => {
     const root = await packageCheckFixture();
     await writeFile(

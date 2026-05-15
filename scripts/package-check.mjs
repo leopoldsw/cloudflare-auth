@@ -686,16 +686,35 @@ async function verifyTroubleshootingDocs() {
     }
   }
   for (const [problem, fix] of [
+    ["Scoped CLI fallback fails", "@cf-auth/cli"],
+    ["Scoped CLI fallback fails", "npx --package @cf-auth/cli@latest cf-auth"],
+    ["Wrangler unavailable or wrong version", "npx wrangler --version"],
+    ["Cloudflare login or account mismatch", "wrangler login"],
     ["Missing D1 binding", "AUTH_DB"],
     ["Missing D1 binding", "cf-auth init --repair"],
+    ["Schema version mismatch", "auth_schema_migrations"],
     ["Missing `AUTH_SECRET`", "cf-auth rotate-secret --apply --env production"],
+    ["Missing `AUTH_SECRET`", "cf-auth rotate-secret --print"],
     ["Migrations not applied", "cf-auth migrate --local"],
     ["Migrations not applied", "cf-auth migrate --remote --env production"],
+    ["Sender/domain not ready", "docs/cloudflare-email.md"],
+    ["Cookie not set locally", "__Host-"],
     ["Cookie not set in production", "__Host-"],
     ["Cookie not set in production", "__Secure-"],
     ["Cross-subdomain cookie rejected", "session.domain"],
+    ["Cookie not sent", "fetch credentials"],
+    ["Magic link opens but does not log in", "`GET` does not consume"],
+    ["Magic link redirect rejected", "redirect allowlist"],
+    ["Local dev behaves like production", "vars.AUTH_ENV"],
+    ["Deploy uses development settings", "cf-auth doctor --env production"],
+    ["Works locally but not deployed", "cf-auth doctor --env production"],
+    ["Password hashing timeout", "pnpm benchmark:password"],
     ["Cloudflare Email binding missing", "AUTH_EMAIL"],
     ["Cloudflare Email binding missing", "custom email"],
+    ["Reset email says OK but no email arrives", "email_send_failed"],
+    ["JSON request returns `415`", "Content-Type: application/json"],
+    ["Cross-site frontend cannot stay logged in", "SameSite=None"],
+    ["Reset token appears in analytics/referrer logs", "built-in reset page"],
   ]) {
     if (!troubleshooting.includes(problem) || !troubleshooting.includes(fix)) {
       failures.push(
