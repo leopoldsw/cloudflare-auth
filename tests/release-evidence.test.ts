@@ -1090,6 +1090,27 @@ describe("release evidence verifiers", () => {
     );
   });
 
+  it("rejects beta production smoke evidence with duplicate smoke endpoints", async () => {
+    const evidence = validBetaEvidence();
+    evidence.productionSmoke.smokedEndpoints = [
+      ...evidence.productionSmoke.smokedEndpoints,
+      "/auth/login",
+    ];
+    const path = await writeEvidence(
+      "beta-duplicate-smoke-endpoints",
+      evidence,
+    );
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "productionSmoke.smokedEndpoints[4] duplicates /auth/login",
+    );
+  });
+
   it("rejects beta manual quickstart evidence without command proof", async () => {
     const evidence = validBetaEvidence();
     evidence.manualQuickstart.commands = [];
@@ -1470,6 +1491,24 @@ describe("release evidence verifiers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("smokedEndpoints must be an array");
+  });
+
+  it("rejects deploy button evidence with duplicate smoke endpoints", async () => {
+    const evidence = validDeployButtonEvidence();
+    evidence.smokedEndpoints = [...evidence.smokedEndpoints, "/auth/login"];
+    const path = await writeEvidence(
+      "deploy-button-duplicate-smoke-endpoints",
+      evidence,
+    );
+    const result = runScript("scripts/verify-deploy-button-evidence.mjs", {
+      CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+      CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "smokedEndpoints[4] duplicates /auth/login",
+    );
   });
 
   it("rejects deploy button evidence with raw emails, IPs, and user agents", async () => {

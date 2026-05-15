@@ -46,6 +46,7 @@ export function requireSmokedEndpointEvidence({
   }
 
   const endpoints = [];
+  const seen = new Set();
   for (const [index, endpoint] of value.entries()) {
     const itemPath = `${path}[${index}]`;
     if (typeof endpoint !== "string" || endpoint.trim().length === 0) {
@@ -64,6 +65,11 @@ export function requireSmokedEndpointEvidence({
       );
       continue;
     }
+    if (seen.has(endpoint)) {
+      failures.push(`${evidencePath}: ${itemPath} duplicates ${endpoint}`);
+      continue;
+    }
+    seen.add(endpoint);
     endpoints.push(endpoint);
   }
   return endpoints;
