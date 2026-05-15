@@ -2321,6 +2321,28 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("must be resolved before stable 1.0");
   });
 
+  it("rejects security tracker evidence with duplicate advisory IDs", async () => {
+    const evidence = validSecurityTracker();
+    evidence.advisories.push({
+      id: ` ${evidence.advisories[0]!.id} `,
+      severity: "moderate",
+      status: "resolved",
+    });
+    const path = await writeEvidence(
+      "security-tracker-duplicate-advisory",
+      evidence,
+    );
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "advisories[1].id duplicates GHSA-abcd-1234-5678",
+    );
+  });
+
   it("rejects security tracker URLs that are not scoped to one repository", async () => {
     const rootIssueEvidence = validSecurityTracker();
     rootIssueEvidence.issueSearchUrl =

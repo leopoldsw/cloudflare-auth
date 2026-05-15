@@ -100,10 +100,19 @@ function validateTracker(value, rawText) {
     failures.push(`${trackerPath}: advisories must be an array`);
   }
   const advisories = Array.isArray(value.advisories) ? value.advisories : [];
+  const advisoryIds = new Set();
   for (const [index, advisory] of advisories.entries()) {
     const path = `advisories[${index}]`;
     if (!requireObject(advisory, path)) continue;
     requireString(advisory.id, `${path}.id`);
+    const advisoryId =
+      typeof advisory.id === "string" ? advisory.id.trim() : "";
+    if (advisoryId.length > 0) {
+      if (advisoryIds.has(advisoryId)) {
+        failures.push(`${trackerPath}: ${path}.id duplicates ${advisoryId}`);
+      }
+      advisoryIds.add(advisoryId);
+    }
     requireString(advisory.severity, `${path}.severity`);
     requireString(advisory.status, `${path}.status`);
     const severity =
