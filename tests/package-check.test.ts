@@ -461,6 +461,22 @@ describe("package checks", () => {
     );
   });
 
+  it("requires release audit verification before security docs verification", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "      - run: pnpm verify:release-audit\n      - run: pnpm verify:security-docs",
+      "      - run: pnpm verify:security-docs\n      - run: pnpm verify:release-audit",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: pnpm verify:security-docs must appear after pnpm verify:release-audit",
+    );
+  });
+
   it("derives release workflow coverage from verifier scripts", async () => {
     const root = await packageCheckFixture();
     const packagePath = join(root, "package.json");
