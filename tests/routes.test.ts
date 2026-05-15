@@ -349,6 +349,7 @@ describe("auth HTTP runtime", () => {
       emailVerification: { enabled: false },
       turnstile: { mode: "optional" },
       redirects: { allowedOrigins: ["https://example.com"] },
+      rateLimit: { edgePrefilter: "disabled" },
     });
 
     expect(config.database.binding).toBe("OTHER_DB");
@@ -361,6 +362,10 @@ describe("auth HTTP runtime", () => {
     expect(config.login.magicLink).toBe(false);
     expect(config.passwordReset.enabled).toBe(false);
     expect(config.turnstile.mode).toBe("optional");
+    expect(config.rateLimit).toEqual({
+      adapter: "d1",
+      edgePrefilter: "disabled",
+    });
   });
 
   it("normalizes partial runtime overrides passed directly to the handler", async () => {
@@ -584,6 +589,20 @@ describe("auth HTTP runtime", () => {
       invalid({
         signup: {
           username: { minLength: 5, maxLength: 4 },
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        rateLimit: {
+          adapter: "memory" as never,
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        rateLimit: {
+          edgePrefilter: "required" as never,
         },
       }),
     ).toThrow(AuthCryptoError);

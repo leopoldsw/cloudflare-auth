@@ -17,6 +17,8 @@ await cloudflareRateLimitPrefilter({
 });
 ```
 
+Set `rateLimit.edgePrefilter` to `disabled` to skip the Cloudflare binding even when `AUTH_RATE_LIMITER` is present. `rateLimit.adapter` is fixed to `d1` in v1.
+
 The binding is an edge-abuse prefilter only. D1 remains authoritative for account-sensitive auth decisions because it tracks both the IP key and the account/identifier key inside the auth database. If the optional binding is absent, throws, or returns a malformed response, the runtime fails open to the D1 limiter. Only an explicit `{ success: false }` response blocks before D1 writes.
 
 Use Cloudflare's current Rate Limiting binding documentation for the `wrangler.jsonc` binding shape. The runtime expects a binding with `limit({ key })` returning `{ success: boolean }`.

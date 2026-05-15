@@ -22,6 +22,7 @@ Top-level keys:
 | `turnstile`         | see below                | Optional Turnstile enforcement.                                                                                 |
 | `email`             | terminal adapter locally | Use `byEnvironment(...)` to keep terminal email local and Cloudflare/custom adapters in preview and production. |
 | `redirects`         | see below                | Default redirects and redirect-origin allowlists.                                                               |
+| `rateLimit`         | see below                | D1 rate limiting and optional Cloudflare edge prefilter.                                                        |
 
 Runtime and storage:
 
@@ -54,16 +55,18 @@ Sessions and requests:
 
 Security, hashing, and bot checks:
 
-| Key                                             | Default            | Notes                                               |
-| ----------------------------------------------- | ------------------ | --------------------------------------------------- |
-| `security.allowedRequestOrigins`                | `[]`               | Extra exact origins allowed for browser mutations.  |
-| `security.allowedPreviewRequestOrigins`         | `[]`               | Preview-only request-origin allowlist.              |
-| `passwordHashing.profile`                       | `workers-balanced` | `doctor` benchmarks the configured profile locally. |
-| `passwordHashing.maxConcurrentHashesPerIsolate` | `1`                | Per-isolate semaphore limit for password hashing.   |
-| `passwordHashing.queueTimeoutMs`                | `2000`             | Maximum time a hash waits for the semaphore.        |
-| `turnstile.mode`                                | `disabled`         | `disabled`, `optional`, or `required`.              |
-| `turnstile.endpoints`                           | `[]`               | Endpoint names that require or accept Turnstile.    |
-| `turnstile.verify`                              | built-in verifier  | Optional custom verifier.                           |
+| Key                                             | Default            | Notes                                                                   |
+| ----------------------------------------------- | ------------------ | ----------------------------------------------------------------------- |
+| `security.allowedRequestOrigins`                | `[]`               | Extra exact origins allowed for browser mutations.                      |
+| `security.allowedPreviewRequestOrigins`         | `[]`               | Preview-only request-origin allowlist.                                  |
+| `passwordHashing.profile`                       | `workers-balanced` | `doctor` benchmarks the configured profile locally.                     |
+| `passwordHashing.maxConcurrentHashesPerIsolate` | `1`                | Per-isolate semaphore limit for password hashing.                       |
+| `passwordHashing.queueTimeoutMs`                | `2000`             | Maximum time a hash waits for the semaphore.                            |
+| `turnstile.mode`                                | `disabled`         | `disabled`, `optional`, or `required`.                                  |
+| `turnstile.endpoints`                           | `[]`               | Endpoint names that require or accept Turnstile.                        |
+| `turnstile.verify`                              | built-in verifier  | Optional custom verifier.                                               |
+| `rateLimit.adapter`                             | `d1`               | Authoritative fixed-window limiter; only `d1` is supported in v1.       |
+| `rateLimit.edgePrefilter`                       | `optional`         | `optional` calls `AUTH_RATE_LIMITER` when present; `disabled` skips it. |
 
 Same-origin unsafe browser requests pass origin validation after host
 validation. Credentialed CORS response headers are emitted only for origins

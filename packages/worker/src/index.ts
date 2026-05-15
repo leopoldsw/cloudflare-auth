@@ -78,6 +78,7 @@ export type AuthConfigInput = MinimalAuthConfig & {
   emailVerification?: Partial<AuthConfig["emailVerification"]>;
   turnstile?: Partial<AuthConfig["turnstile"]>;
   redirects?: Partial<AuthConfig["redirects"]>;
+  rateLimit?: Partial<AuthConfig["rateLimit"]>;
 };
 
 export type AuthHelperConfig = AuthConfig | AuthConfigInput;
@@ -1341,6 +1342,10 @@ export interface AuthConfig extends MinimalAuthConfig {
     allowedOrigins: string[];
     allowedPreviewOrigins: string[];
   };
+  rateLimit: {
+    adapter: "d1";
+    edgePrefilter: "optional" | "disabled";
+  };
 }
 
 type RuntimeEnv = Record<string, unknown> & {
@@ -1511,12 +1516,18 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
       allowedPreviewOrigins: [],
       ...config.redirects,
     },
+    rateLimit: {
+      adapter: "d1",
+      edgePrefilter: "optional",
+      ...config.rateLimit,
+    },
   };
   assertRuntimeOptions(resolved);
   assertAuthConfigOrigins(resolved);
   assertSessionOptions(resolved);
   assertRequestOptions(resolved);
   assertFeatureOptions(resolved);
+  assertRateLimitOptions(resolved);
   return resolved;
 }
 
@@ -1816,6 +1827,24 @@ function assertFeatureOptions(config: AuthConfig): void {
     throw new AuthCryptoError(
       "custom password reset page path must be a safe app path outside basePath",
       "invalid_reset_page_config",
+    );
+  }
+}
+
+function assertRateLimitOptions(config: AuthConfig): void {
+  if (config.rateLimit.adapter !== "d1") {
+    throw new AuthCryptoError(
+      "unsupported rate limit adapter",
+      "invalid_rate_limit_config",
+    );
+  }
+  if (
+    config.rateLimit.edgePrefilter !== "optional" &&
+    config.rateLimit.edgePrefilter !== "disabled"
+  ) {
+    throw new AuthCryptoError(
+      "unsupported rate limit edge prefilter mode",
+      "invalid_rate_limit_config",
     );
   }
 }
@@ -3550,18 +3579,20 @@ async function rateLimit(
     subjectType,
     subject: subjectType === "ip" ? canonicalizeIp(subject) : subject,
   });
-  const prefilterAllowed = await cloudflareRateLimitPrefilter({
-    env: runtime.env,
-    key: `${action}:${ipKey}`,
-  });
-  if (!prefilterAllowed) {
-    queueAuthEvent(runtime, request, "rate_limit_hit", {
-      metadata: { action, limiter: "cloudflare_prefilter" },
+  if (runtime.config.rateLimit.edgePrefilter === "optional") {
+    const prefilterAllowed = await cloudflareRateLimitPrefilter({
+      env: runtime.env,
+      key: `${action}:${ipKey}`,
     });
-    throw new AuthCryptoError(
-      "Too many attempts. Try again later.",
-      "rate_limited",
-    );
+    if (!prefilterAllowed) {
+      queueAuthEvent(runtime, request, "rate_limit_hit", {
+        metadata: { action, limiter: "cloudflare_prefilter" },
+      });
+      throw new AuthCryptoError(
+        "Too many attempts. Try again later.",
+        "rate_limited",
+      );
+    }
   }
   const ipHit = await runtime.repos.rateLimits.hitFixedWindow({
     action,

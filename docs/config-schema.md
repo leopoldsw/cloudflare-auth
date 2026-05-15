@@ -22,6 +22,7 @@ Stable top-level keys:
 - `turnstile`
 - `email`
 - `redirects`
+- `rateLimit`
 
 Stable nested keys:
 
@@ -84,6 +85,8 @@ Stable nested keys:
 - `redirects.defaultAfterPasswordReset`
 - `redirects.allowedOrigins`
 - `redirects.allowedPreviewOrigins`
+- `rateLimit.adapter`
+- `rateLimit.edgePrefilter`
 
 Environment keys:
 
@@ -112,6 +115,8 @@ Defaults:
 - `passwordHashing.queueTimeoutMs` defaults to `2000`
 - `turnstile.mode` defaults to `disabled`
 - `turnstile.endpoints` defaults to `[]` and unknown endpoint names are rejected
+- `rateLimit.adapter` defaults to `d1`
+- `rateLimit.edgePrefilter` defaults to `optional`
 
 `session.domain` must be a leading-dot parent domain such as `.example.com`.
 

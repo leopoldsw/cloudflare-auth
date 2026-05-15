@@ -1417,6 +1417,8 @@ const configFixtureKeys = [
   "redirects.defaultAfterPasswordReset",
   "redirects.allowedOrigins",
   "redirects.allowedPreviewOrigins",
+  "rateLimit.adapter",
+  "rateLimit.edgePrefilter",
 ];
 
 function configSchemaFixtureText(releaseApproval: string) {
@@ -1584,6 +1586,10 @@ async function writeDocsCoverageFixtures(root: string) {
       "    defaultAfterPasswordReset: string;",
       "    allowedOrigins: string[];",
       "    allowedPreviewOrigins: string[];",
+      "  };",
+      "  rateLimit: {",
+      "    adapter: string;",
+      "    edgePrefilter: string;",
       "  };",
       "}",
       "async function dispatchAuthRequest(path: string, request: Request) {",

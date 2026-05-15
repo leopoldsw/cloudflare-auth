@@ -309,6 +309,34 @@ describe("security hardening helpers", () => {
     ).resolves.toBe(0);
   });
 
+  it("skips Cloudflare rate-limit bindings when the edge prefilter is disabled", async () => {
+    const { authFetch, db } = await setup(
+      {
+        rateLimit: { adapter: "d1", edgePrefilter: "disabled" },
+      },
+      {
+        AUTH_RATE_LIMITER: {
+          limit: async () => ({ success: false }),
+        },
+      },
+    );
+    const response = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "prefilter-disabled@example.com",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(response.status).toBe(200);
+    await expect(
+      db.prepare("SELECT count(*) AS count FROM rate_limits").first("count"),
+    ).resolves.toBe(2);
+    await expect(
+      db.prepare("SELECT count(*) AS count FROM users").first("count"),
+    ).resolves.toBe(1);
+  });
+
   it("allows missing Cloudflare rate-limit bindings and forwards keys to present bindings", async () => {
     await expect(
       cloudflareRateLimitPrefilter({ env: {}, key: "auth-key" }),
