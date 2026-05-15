@@ -21,4 +21,6 @@ The binding is an edge-abuse prefilter only. D1 remains authoritative for accoun
 
 Use Cloudflare's current Rate Limiting binding documentation for the `wrangler.jsonc` binding shape. The runtime expects a binding with `limit({ key })` returning `{ success: boolean }`.
 
+Production deployments should use at least one edge-abuse control before D1 for signup, magic-link request, password-reset request, and token consume endpoints: a Cloudflare Rate Limiting API prefilter, a WAF rule, or Turnstile. These controls reduce traffic spikes before auth reaches D1; they do not replace the authoritative D1 counters.
+
 Tests in `tests/routes.test.ts` verify opaque D1 keys. Tests in `tests/security-hardening.test.ts` verify that a denied Cloudflare prefilter prevents D1 writes and user creation.
