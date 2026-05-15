@@ -10,7 +10,6 @@ import {
 } from "./release-readiness-audit-checks.mjs";
 import {
   isPlaceholderPrerelease,
-  isPrivateAlpha,
   isPublishedReleaseVersion,
   isPublicBeta,
   isStableOneOrLater,
@@ -379,7 +378,6 @@ requireVerifier("scripts/verify-security-docs.mjs");
 const stablePackages = packages.filter((pkg) =>
   isStableOneOrLater(pkg.version),
 );
-const betaPackages = packages.filter((pkg) => isPublicBeta(pkg.version));
 const unsupportedReleasePackages = packages.filter(
   (pkg) =>
     isPublishedReleaseVersion(pkg.version) &&
