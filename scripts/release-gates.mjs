@@ -141,6 +141,7 @@ for (const text of [
   "Workers Vitest",
   "Turnstile",
   "Deploy to Cloudflare",
+  "binding name rather than the database name",
   "npm package execution",
   "npx --package <pkg> <bin>",
   "Cookie prefixes",
@@ -213,6 +214,10 @@ await requireText(
 await requireText(
   "docs/deploy-to-cloudflare.md",
   "Cloudflare Email Service binding is configured for `AUTH_EMAIL`",
+);
+await requireText(
+  "docs/deploy-to-cloudflare.md",
+  "wrangler d1 migrations apply AUTH_DB --remote",
 );
 await requireText(
   "docs/public-beta.md",

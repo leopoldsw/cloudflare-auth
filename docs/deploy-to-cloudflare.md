@@ -46,6 +46,7 @@ The button flow must prove:
 - starter template is created
 - D1 binding is configured for `AUTH_DB`
 - Cloudflare Email Service binding is configured for `AUTH_EMAIL`
+- deploy script applies migrations with `wrangler d1 migrations apply AUTH_DB --remote` before `wrangler deploy`
 - migrations are applied or the user is given the exact command to apply them
 - `AUTH_SECRET` and `AUTH_PUBLIC_ORIGIN` are configured
 - deployed `/auth/signup`, `/auth/login`, `/auth/logout`, and `/auth/user` smoke tests pass

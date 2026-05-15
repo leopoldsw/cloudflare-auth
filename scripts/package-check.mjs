@@ -748,6 +748,7 @@ async function verifyPlatformAssumptionsDocs() {
     "Workers Vitest",
     "Turnstile",
     "Deploy to Cloudflare",
+    "binding name rather than the database name",
     "npm package execution",
     "npx --package <pkg> <bin>",
     "Cookie prefixes",

@@ -1225,6 +1225,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "Workers Vitest",
         "Turnstile",
         "Deploy to Cloudflare",
+        "binding name rather than the database name",
         "npm package execution",
         "npx --package <pkg> <bin>",
         "Cookie prefixes",
@@ -1278,6 +1279,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "Deploy to Cloudflare button is a public-beta gate",
         "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
         "Cloudflare Email Service binding is configured for `AUTH_EMAIL`",
+        "wrangler d1 migrations apply AUTH_DB --remote",
       ],
     ],
     [
