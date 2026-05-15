@@ -1394,6 +1394,27 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("https GitHub Actions run URL");
   });
 
+  it("rejects beta evidence with non-exact GitHub Actions workflow URLs", async () => {
+    const evidence = validBetaEvidence();
+    evidence.publishedQuickstart.workflowRunUrl =
+      "https://release-token@github.com/cf-auth-release/cloudflare-auth/actions/runs/123";
+    evidence.productionSmoke.workflowRunUrl =
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/124?check_suite_focus=true#summary";
+    const path = await writeEvidence(
+      "beta-non-exact-github-workflow",
+      evidence,
+    );
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("publishedQuickstart.workflowRunUrl");
+    expect(result.stderr).toContain("productionSmoke.workflowRunUrl");
+    expect(result.stderr).toContain("without credentials, query, or fragment");
+  });
+
   it("rejects beta evidence with placeholder workflow repositories and reserved origins", async () => {
     const evidence = validBetaEvidence();
     evidence.publishedQuickstart.workflowRunUrl =
@@ -2291,6 +2312,28 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("issueSearchUrl");
     expect(result.stderr).toContain("advisorySearchUrl");
     expect(result.stderr).toContain("https GitHub");
+  });
+
+  it("rejects security tracker evidence with non-exact GitHub URLs", async () => {
+    const evidence = validSecurityTracker();
+    evidence.issueSearchUrl =
+      "https://release-token@github.com/cf-auth-release/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical#open";
+    evidence.advisorySearchUrl =
+      "https://github.com/cf-auth-release/cloudflare-auth/security/advisories?state=open";
+    const path = await writeEvidence(
+      "security-tracker-non-exact-url",
+      evidence,
+    );
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("issueSearchUrl");
+    expect(result.stderr).toContain("URL credentials or fragments");
+    expect(result.stderr).toContain("advisorySearchUrl");
+    expect(result.stderr).toContain("without credentials, query, or fragment");
   });
 
   it("rejects security tracker evidence with placeholder GitHub repositories", async () => {

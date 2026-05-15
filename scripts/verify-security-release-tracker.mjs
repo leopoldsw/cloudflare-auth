@@ -202,6 +202,11 @@ function requireIssueSearchUrl(value) {
     );
     return;
   }
+  if (url.username || url.password || url.hash) {
+    failures.push(
+      `${trackerPath}: issueSearchUrl must not include URL credentials or fragments`,
+    );
+  }
   if (isPlaceholderRepositoryUrl(value)) {
     failures.push(
       `${trackerPath}: issueSearchUrl must not use a placeholder GitHub repository`,
@@ -254,6 +259,10 @@ function requireAdvisorySearchUrl(value) {
   ) {
     failures.push(
       `${trackerPath}: advisorySearchUrl must be an https GitHub repository security advisory URL`,
+    );
+  } else if (url.username || url.password || url.search || url.hash) {
+    failures.push(
+      `${trackerPath}: advisorySearchUrl must be an exact GitHub repository security advisory URL without credentials, query, or fragment`,
     );
   } else if (isPlaceholderRepositoryUrl(value)) {
     failures.push(

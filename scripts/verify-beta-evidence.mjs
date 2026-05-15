@@ -355,6 +355,10 @@ function requireGithubActionsRunUrl(value, path) {
     failures.push(
       `${evidencePath}: ${path} must be an https GitHub Actions run URL`,
     );
+  } else if (url.username || url.password || url.search || url.hash) {
+    failures.push(
+      `${evidencePath}: ${path} must be an exact GitHub Actions run URL without credentials, query, or fragment`,
+    );
   } else if (isPlaceholderRepositoryUrl(value)) {
     failures.push(
       `${evidencePath}: ${path} must not use a placeholder GitHub repository`,
