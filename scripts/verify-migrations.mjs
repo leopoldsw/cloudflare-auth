@@ -20,6 +20,18 @@ for (const file of files) {
       `${file}: migrations must not disable foreign key enforcement`,
     );
   }
+  for (const definition of metadataJsonColumnDefinitions(sql)) {
+    if (
+      !/\bCHECK\s*\(\s*json_valid\s*\(\s*metadata_json\s*\)\s*\)/iu.test(
+        definition,
+      )
+    ) {
+      failures.push(
+        `${file}: metadata_json columns must enforce CHECK (json_valid(metadata_json))`,
+      );
+      break;
+    }
+  }
   if (
     file !== "0001_initial.sql" &&
     containsTableRewrite(sql) &&
@@ -73,6 +85,17 @@ function containsTableRewrite(sql) {
     /\bDROP\s+TABLE\b/i.test(sql) ||
     /\bALTER\s+TABLE\b[^;]+\bRENAME\s+TO\b/i.test(sql)
   );
+}
+
+function metadataJsonColumnDefinitions(sql) {
+  return sql
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        /^metadata_json\b/iu.test(line) ||
+        /\bADD\s+COLUMN\s+metadata_json\b/iu.test(line),
+    );
 }
 
 function recordsMigrationVersion(sql, version) {

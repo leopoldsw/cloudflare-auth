@@ -41,6 +41,31 @@ describe("migration verifier", () => {
     expect(result.stderr).toContain("must not disable foreign key enforcement");
   });
 
+  it("rejects metadata_json columns without json_valid checks", async () => {
+    const root = await migrationFixture({
+      secondMigration: migrationSql({
+        body: "ALTER TABLE users ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';",
+      }),
+    });
+    const result = runMigrationVerifier(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "metadata_json columns must enforce CHECK (json_valid(metadata_json))",
+    );
+  });
+
+  it("accepts metadata_json columns with json_valid checks", async () => {
+    const root = await migrationFixture({
+      secondMigration: migrationSql({
+        body: "ALTER TABLE users ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json));",
+      }),
+    });
+    const result = runMigrationVerifier(root);
+
+    expect(result.status).toBe(0);
+  });
+
   it("rejects invalid migration filenames", async () => {
     const root = await migrationFixture({
       secondMigration: migrationSql({
