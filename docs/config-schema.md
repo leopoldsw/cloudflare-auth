@@ -51,6 +51,8 @@ Stable nested keys:
 - `signup.enumerationSafe`
 - `signup.username.enabled`
 - `signup.username.required`
+- `signup.username.minLength`
+- `signup.username.maxLength`
 - `login.emailPassword`
 - `login.usernamePassword`
 - `login.magicLink`

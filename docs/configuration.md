@@ -79,6 +79,8 @@ Signup and login:
 | `signup.enumerationSafe`                       | `false` | Generic signup response; requires email verification before session and optional username. |
 | `signup.username.enabled`                      | `true`  | Allows usernames on signup.                                                                |
 | `signup.username.required`                     | `false` | Requires username when enabled.                                                            |
+| `signup.username.minLength`                    | `3`     | Minimum normalized username length.                                                        |
+| `signup.username.maxLength`                    | `32`    | Maximum normalized username length.                                                        |
 | `login.emailPassword`                          | `true`  | Enables email/password login.                                                              |
 | `login.usernamePassword`                       | `true`  | Enables username/password login.                                                           |
 | `login.magicLink`                              | `true`  | Enables magic-link request and consume routes.                                             |

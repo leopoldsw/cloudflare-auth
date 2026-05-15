@@ -112,6 +112,12 @@ describe("crypto, passwords, tokens, and sessions", () => {
     expect(() => normalizeEmail("bad@-example.com")).toThrow(AuthCryptoError);
 
     expect(normalizeUsername(" Person_123 ")).toBe("person_123");
+    expect(normalizeUsername(" Al ", { minLength: 2, maxLength: 4 })).toBe(
+      "al",
+    );
+    expect(() =>
+      normalizeUsername("alice", { minLength: 2, maxLength: 4 }),
+    ).toThrow(AuthCryptoError);
     expect(() => normalizeUsername("me")).toThrow(AuthCryptoError);
     expect(() => normalizeUsername("admin")).toThrow(AuthCryptoError);
     expect(() => normalizeUsername("person@example.com")).toThrow(

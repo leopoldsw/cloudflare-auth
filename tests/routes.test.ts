@@ -355,6 +355,8 @@ describe("auth HTTP runtime", () => {
     expect(config.signup.username).toEqual({
       enabled: false,
       required: false,
+      minLength: 3,
+      maxLength: 32,
     });
     expect(config.login.magicLink).toBe(false);
     expect(config.passwordReset.enabled).toBe(false);
@@ -574,6 +576,20 @@ describe("auth HTTP runtime", () => {
     expect(() =>
       invalid({
         signup: {
+          username: { minLength: 0 },
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        signup: {
+          username: { minLength: 5, maxLength: 4 },
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        signup: {
           enumerationSafe: true,
           requireEmailVerificationBeforeSession: false,
           username: { enabled: true, required: false },
@@ -599,6 +615,8 @@ describe("auth HTTP runtime", () => {
     expect(config.signup.username).toEqual({
       enabled: false,
       required: false,
+      minLength: 3,
+      maxLength: 32,
     });
 
     const rejected = await authFetch("/auth/signup", {
@@ -633,6 +651,53 @@ describe("auth HTTP runtime", () => {
         .bind("no-username@example.com")
         .first("username"),
     ).resolves.toBeNull();
+  });
+
+  it("honors configured signup username length bounds", async () => {
+    const { authFetch, config } = await setup({
+      signup: {
+        username: { minLength: 2, maxLength: 4 },
+      },
+    });
+    expect(config.signup.username).toMatchObject({
+      minLength: 2,
+      maxLength: 4,
+    });
+
+    const signup = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "short-name@example.com",
+        username: "Al",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(signup.status).toBe(200);
+
+    const login = await authFetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: "al",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(login.status).toBe(200);
+
+    const tooLong = await authFetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "long-name@example.com",
+        username: "Alice",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(tooLong.status).toBe(400);
+    await expect(tooLong.json()).resolves.toMatchObject({
+      error: { code: "invalid_username" },
+    });
   });
 
   it("returns not_found for disabled token feature pages and consumes", async () => {

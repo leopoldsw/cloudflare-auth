@@ -1288,7 +1288,12 @@ export interface AuthConfig extends MinimalAuthConfig {
     enabled: boolean;
     requireEmailVerificationBeforeSession: boolean;
     enumerationSafe: boolean;
-    username: { enabled: boolean; required: boolean };
+    username: {
+      enabled: boolean;
+      required: boolean;
+      minLength: number;
+      maxLength: number;
+    };
   };
   login: {
     emailPassword: boolean;
@@ -1455,7 +1460,13 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
       requireEmailVerificationBeforeSession: false,
       enumerationSafe: false,
       ...config.signup,
-      username: { enabled: true, required: false, ...config.signup?.username },
+      username: {
+        enabled: true,
+        required: false,
+        minLength: 3,
+        maxLength: 32,
+        ...config.signup?.username,
+      },
     },
     login: {
       emailPassword: true,
@@ -1732,6 +1743,17 @@ function assertFeatureOptions(config: AuthConfig): void {
   if (!config.signup.username.enabled && config.signup.username.required) {
     throw new AuthCryptoError(
       "disabled signup usernames cannot be required",
+      "invalid_feature_config",
+    );
+  }
+  if (
+    !Number.isInteger(config.signup.username.minLength) ||
+    config.signup.username.minLength < 1 ||
+    !Number.isInteger(config.signup.username.maxLength) ||
+    config.signup.username.maxLength < config.signup.username.minLength
+  ) {
+    throw new AuthCryptoError(
+      "invalid signup username length policy",
       "invalid_feature_config",
     );
   }
@@ -2181,8 +2203,10 @@ async function handleSignup(
   await enforceTurnstile(runtime, "signup", rawBody, request);
   const body = signupSchema.parse(rawBody);
   const normalizedEmail = normalizeEmail(body.email);
-  const username = body.username ? body.username.trim() : null;
-  const normalizedUsername = username ? normalizeUsername(username) : null;
+  const username = body.username?.trim() || null;
+  const normalizedUsername = username
+    ? normalizeUsername(username, runtime.config.signup.username)
+    : null;
   if (!runtime.config.signup.username.enabled && normalizedUsername) {
     return errorResponse("Username signup disabled", 400, "validation_failed");
   }
@@ -2280,7 +2304,10 @@ async function handleLogin(
       );
       user = await runtime.repos.users.findUserByNormalizedEmail(normalized);
     } else if (!isEmail && runtime.config.login.usernamePassword) {
-      const normalized = normalizeUsername(body.identifier);
+      const normalized = normalizeUsername(
+        body.identifier,
+        runtime.config.signup.username,
+      );
       await rateLimit(
         runtime,
         "password_login",

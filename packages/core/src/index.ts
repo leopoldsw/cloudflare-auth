@@ -485,11 +485,24 @@ const reservedUsernames = new Set([
   "sessions",
 ]);
 
-export function normalizeUsername(username: string): string {
+export function normalizeUsername(
+  username: string,
+  options: { minLength?: number; maxLength?: number } = {},
+): string {
+  const minLength = options.minLength ?? 3;
+  const maxLength = options.maxLength ?? 32;
+  if (
+    !Number.isInteger(minLength) ||
+    minLength < 1 ||
+    !Number.isInteger(maxLength) ||
+    maxLength < minLength
+  ) {
+    throw new AuthCryptoError("invalid username policy", "invalid_username");
+  }
   const normalized = username.trim().toLowerCase();
   if (
-    normalized.length < 3 ||
-    normalized.length > 32 ||
+    normalized.length < minLength ||
+    normalized.length > maxLength ||
     normalized.includes("@") ||
     !/^[a-z0-9_-]+$/u.test(normalized) ||
     reservedUsernames.has(normalized)
