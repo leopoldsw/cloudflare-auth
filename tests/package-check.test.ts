@@ -354,6 +354,74 @@ describe("package checks", () => {
     );
   });
 
+  it("rejects package ownership evidence without explicit arrays before publishing reserved shims", async () => {
+    const root = await packageCheckFixture();
+    await updatePackageJson(root, "packages/cf-auth-shim/package.json", {
+      privateValue: false,
+      version: "0.1.0-beta.0",
+    });
+    await writeChangesetFixedGroup(root, [
+      ...defaultPublishablePackages,
+      "cf-auth",
+    ]);
+    await writeFile(
+      join(root, "docs", "package-ownership.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          verifiedAt: "2026-05-14T00:00:00.000Z",
+          verifiedBy: "release-reviewer",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: packages must be an array",
+    );
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: reservedPackages must be an array",
+    );
+  });
+
+  it("rejects duplicate package ownership evidence before publishing reserved shims", async () => {
+    const root = await packageCheckFixture();
+    await updatePackageJson(root, "packages/cf-auth-shim/package.json", {
+      privateValue: false,
+      version: "0.1.0-beta.0",
+    });
+    await writeOwnershipEvidence(root, ["cf-auth"]);
+    await writeChangesetFixedGroup(root, [
+      ...defaultPublishablePackages,
+      "cf-auth",
+    ]);
+    const target = join(root, "docs", "package-ownership.json");
+    const evidence = JSON.parse(await readFile(target, "utf8")) as {
+      packages: unknown[];
+      reservedPackages: unknown[];
+    };
+    evidence.packages.push(evidence.packages[0]);
+    evidence.reservedPackages.push({
+      name: "create-cloudflare-auth",
+      registry: "https://registry.npmjs.org/",
+      publishableAfterOwnershipConfirmed: true,
+    });
+    evidence.reservedPackages.push(evidence.reservedPackages[0]);
+    await writeFile(target, `${JSON.stringify(evidence, null, 2)}\n`);
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: duplicate package evidence for cf-auth",
+    );
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: duplicate reserved package evidence for create-cloudflare-auth",
+    );
+  });
+
   it("allows reserved package shims to publish after ownership evidence", async () => {
     const root = await packageCheckFixture();
     await updatePackageJson(root, "packages/cf-auth-shim/package.json", {

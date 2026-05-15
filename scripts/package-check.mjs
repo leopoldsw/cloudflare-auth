@@ -298,6 +298,9 @@ async function readOwnershipEvidence() {
     ownershipEvidence = { packagesByName, reservedByName };
     return ownershipEvidence;
   }
+  if (!Array.isArray(parsed.packages)) {
+    failures.push("docs/package-ownership.json: packages must be an array");
+  }
   for (const [index, item] of (Array.isArray(parsed.packages)
     ? parsed.packages
     : []
@@ -309,8 +312,18 @@ async function readOwnershipEvidence() {
       continue;
     }
     if (typeof item.name === "string") {
+      if (packagesByName.has(item.name)) {
+        failures.push(
+          `docs/package-ownership.json: duplicate package evidence for ${item.name}`,
+        );
+      }
       packagesByName.set(item.name, item);
     }
+  }
+  if (!Array.isArray(parsed.reservedPackages)) {
+    failures.push(
+      "docs/package-ownership.json: reservedPackages must be an array",
+    );
   }
   for (const [index, item] of (Array.isArray(parsed.reservedPackages)
     ? parsed.reservedPackages
@@ -323,6 +336,11 @@ async function readOwnershipEvidence() {
       continue;
     }
     if (typeof item.name === "string") {
+      if (reservedByName.has(item.name)) {
+        failures.push(
+          `docs/package-ownership.json: duplicate reserved package evidence for ${item.name}`,
+        );
+      }
       reservedByName.set(item.name, item);
     }
   }
