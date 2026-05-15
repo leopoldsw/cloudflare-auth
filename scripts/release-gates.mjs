@@ -287,6 +287,12 @@ await requireText(
   "scripts/smoke-published-quickstart.mjs",
   "assertLocalSessionCookie",
 );
+await requireText(
+  "scripts/smoke-published-quickstart.mjs",
+  'appName = "my-app"',
+);
+await requireText("scripts/smoke-published-quickstart.mjs", "{ cwd: temp }");
+await requireText("scripts/smoke-published-quickstart.mjs", "{ cwd: appDir }");
 await requireText("scripts/smoke-published-quickstart.mjs", "cfauth-session=");
 await requireText(
   "scripts/smoke-published-quickstart.mjs",

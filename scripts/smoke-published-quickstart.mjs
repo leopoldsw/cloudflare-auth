@@ -13,23 +13,22 @@ const root = process.cwd();
 const packageTag =
   process.env.CF_AUTH_PUBLISHED_QUICKSTART_PACKAGE_TAG?.trim() || "beta";
 const temp = await mkdtemp(join(tmpdir(), "cf-auth-published-quickstart-"));
-const appDir = join(temp, "app");
+const appName = "my-app";
+const appDir = join(temp, appName);
 const port = await findOpenPort();
 const origin = `http://127.0.0.1:${port}`;
 const authSecret = `k_smoke.${"A".repeat(43)}`;
 
-runCfAuth(["init", appDir, "--template", "hono-basic", "--yes"]);
+runCfAuth(["init", appName, "--template", "hono-basic"], { cwd: temp });
 await assertNoWorkspaceDependencies(appDir);
 
-run("pnpm", ["--dir", appDir, "install", "--no-frozen-lockfile"]);
-run("pnpm", ["--dir", appDir, "build"]);
+run("pnpm", ["install", "--no-frozen-lockfile"], { cwd: appDir });
+run("pnpm", ["build"], { cwd: appDir });
 runCfAuth(["migrate", "--local"], { cwd: appDir });
 
 const dev = spawn(
   "pnpm",
   [
-    "--dir",
-    appDir,
     "exec",
     "wrangler",
     "dev",
@@ -47,7 +46,7 @@ const dev = spawn(
     "error",
   ],
   {
-    cwd: root,
+    cwd: appDir,
     env: { ...process.env, CI: "true" },
     stdio: ["ignore", "pipe", "pipe"],
   },

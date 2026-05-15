@@ -1131,6 +1131,9 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
       "scripts/smoke-published-quickstart.mjs",
       [
         "assertLocalSessionCookie",
+        'appName = "my-app"',
+        "{ cwd: temp }",
+        "{ cwd: appDir }",
         "cfauth-session=",
         "__Host-cfauth-session=",
         "HttpOnly",
