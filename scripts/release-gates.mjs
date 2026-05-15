@@ -830,7 +830,7 @@ async function requireUpgradeFixtures() {
     }
     if (
       typeof beta.version !== "string" ||
-      !/^\d+\.\d+\.\d+-beta(?:[.-].*)?$/u.test(beta.version)
+      !/^\d+\.\d+\.\d+-beta[.-].+$/u.test(beta.version)
     ) {
       failures.push(
         `${path}.version must be a beta prerelease package version`,

@@ -1090,6 +1090,11 @@ process.exit(1);
               schemaVersion: 1,
               fixture: "../outside",
             },
+            {
+              version: "1.0.0-beta",
+              schemaVersion: 1,
+              fixture: "beta-1",
+            },
           ],
         },
         null,
@@ -1103,6 +1108,7 @@ process.exit(1);
     expect(result.stderr).toContain("betaVersions[0].fixture");
     expect(result.stderr).toContain("betaVersions[1].version");
     expect(result.stderr).toContain("betaVersions[1].fixture");
+    expect(result.stderr).toContain("betaVersions[2].version");
   });
 
   it("rejects non-object stable beta upgrade fixture manifests", async () => {

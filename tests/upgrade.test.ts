@@ -37,7 +37,7 @@ describe("upgrade fixtures", () => {
   it("keeps every beta schema fixture addressable", async () => {
     const manifest = await readUpgradeManifest();
     for (const beta of manifest.betaVersions) {
-      expect(beta.version).toMatch(/^\d+\.\d+\.\d+-beta(?:[.-].*)?$/);
+      expect(beta.version).toMatch(/^\d+\.\d+\.\d+-beta[.-].+$/);
       expect(Number.isSafeInteger(beta.schemaVersion)).toBe(true);
       expect(beta.schemaVersion).toBeGreaterThan(0);
       const fixtureDir = join("tests", "fixtures", "upgrade", beta.fixture);
