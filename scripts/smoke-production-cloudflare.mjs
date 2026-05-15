@@ -10,6 +10,7 @@ import {
   readJsonObject,
   rewriteWorkspaceDependencySpecs,
 } from "./package-json-utils.mjs";
+import { isBetaPackageTag } from "./release-version-policy.mjs";
 
 const root = process.cwd();
 const versionMatrix = await readJsonObject("scripts/version-matrix.json");
@@ -65,13 +66,19 @@ function readConfig() {
   const origin = exactHttpsOrigin(
     requireEnv("CF_AUTH_PRODUCTION_SMOKE_ORIGIN"),
   );
+  const packageTag =
+    process.env.CF_AUTH_PRODUCTION_SMOKE_PACKAGE_TAG?.trim() || null;
+  if (packageTag && !isBetaPackageTag(packageTag)) {
+    throw new Error(
+      "CF_AUTH_PRODUCTION_SMOKE_PACKAGE_TAG must be beta or a beta prerelease package version.",
+    );
+  }
   return {
     accountId,
     databaseId,
     databaseName,
     origin,
-    packageTag:
-      process.env.CF_AUTH_PRODUCTION_SMOKE_PACKAGE_TAG?.trim() || null,
+    packageTag,
     workerName,
   };
 }

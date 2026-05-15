@@ -73,6 +73,18 @@ describe("deploy template export", () => {
       "templates/hono-basic/package.json: must be valid JSON",
     );
   });
+
+  it("rejects deploy template package tags outside the beta channel", async () => {
+    const root = await deployTemplateSourceFixture("{}\n");
+    const result = runExportDeployTemplate(root, {
+      CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG: "latest",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG must be beta or a beta prerelease package version",
+    );
+  });
 });
 
 async function deployTemplateSourceFixture(
@@ -111,7 +123,10 @@ async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function runExportDeployTemplate(cwd: string) {
+function runExportDeployTemplate(
+  cwd: string,
+  env: Record<string, string> = {},
+) {
   const root = process.cwd();
   return spawnSync(
     process.execPath,
@@ -119,6 +134,7 @@ function runExportDeployTemplate(cwd: string) {
     {
       cwd,
       encoding: "utf8",
+      env: { ...process.env, ...env },
     },
   );
 }

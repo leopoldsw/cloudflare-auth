@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 import { isJsonObject } from "./evidence-validation.mjs";
+import { isBetaPackageTag } from "./release-version-policy.mjs";
 
 const outputDir = process.argv[2];
 if (!outputDir) {
@@ -23,6 +24,11 @@ const publicOrigin =
   "https://example.com";
 const packageTag =
   process.env.CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG?.trim() || "beta";
+if (!isBetaPackageTag(packageTag)) {
+  throw new Error(
+    "CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG must be beta or a beta prerelease package version.",
+  );
+}
 const cliPackageSpec = `@cf-auth/cli@${packageTag}`;
 const versionMatrix = await readJsonObject("scripts/version-matrix.json");
 

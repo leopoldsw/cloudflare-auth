@@ -8,10 +8,16 @@ import {
   assertNoWorkspaceDependencies as assertNoWorkspaceDependencySpecs,
   readJsonObject,
 } from "./package-json-utils.mjs";
+import { isBetaPackageTag } from "./release-version-policy.mjs";
 
 const root = process.cwd();
 const packageTag =
   process.env.CF_AUTH_PUBLISHED_QUICKSTART_PACKAGE_TAG?.trim() || "beta";
+if (!isBetaPackageTag(packageTag)) {
+  throw new Error(
+    "CF_AUTH_PUBLISHED_QUICKSTART_PACKAGE_TAG must be beta or a beta prerelease package version.",
+  );
+}
 const temp = await mkdtemp(join(tmpdir(), "cf-auth-published-quickstart-"));
 const appName = "my-app";
 const appDir = join(temp, appName);

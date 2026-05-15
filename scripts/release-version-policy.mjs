@@ -23,6 +23,10 @@ export function isSupportedReleaseVersion(version) {
   );
 }
 
+export function isBetaPackageTag(value) {
+  return value === "beta" || isPublicBeta(value);
+}
+
 export function isPublishedReleaseVersion(version) {
   if (typeof version !== "string") return false;
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?$/u);
