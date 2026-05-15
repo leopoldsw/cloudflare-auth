@@ -142,6 +142,29 @@ describe("package name registry checks", () => {
     expect(result.stderr).toContain("reservedPackages must be an array");
   });
 
+  it("rejects package ownership evidence with placeholder metadata", async () => {
+    const fixture = await packageNameFixture();
+    const evidence = JSON.parse(
+      await readFile(
+        join(fixture.root, "docs", "package-ownership.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    evidence.schemaVersion = 2;
+    evidence.verifiedBy = "<maintainer>";
+    evidence.verifiedAt = "9999-01-01T00:00:00.000Z";
+    await writeFile(
+      join(fixture.root, "docs", "package-ownership.json"),
+      `${JSON.stringify(evidence, null, 2)}\n`,
+    );
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("schemaVersion must be 1");
+    expect(result.stderr).toContain("verifiedBy must not be a placeholder");
+    expect(result.stderr).toContain("verifiedAt must not be in the future");
+  });
+
   it("rejects non-object workspace package manifests", async () => {
     const fixture = await packageNameFixture();
     await writeFile(

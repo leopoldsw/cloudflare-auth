@@ -2,7 +2,12 @@ import { spawnSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { isJsonObject } from "./evidence-validation.mjs";
+import {
+  isFutureIsoDateString,
+  isIsoDateString,
+  isJsonObject,
+  isPlaceholderEvidenceIdentity,
+} from "./evidence-validation.mjs";
 
 const evidencePath =
   process.env.CF_AUTH_PACKAGE_OWNERSHIP_PATH ?? "docs/package-ownership.json";
@@ -188,6 +193,7 @@ async function readOwnershipEvidence() {
     failures.push(`${evidencePath}: top-level JSON value must be an object`);
     fail();
   }
+  validateEvidenceMetadata(parsed);
   if (!Array.isArray(parsed.packages)) {
     failures.push(`${evidencePath}: packages must be an array`);
   }
@@ -249,6 +255,35 @@ async function readOwnershipEvidence() {
     reservedEvidenceByName.set(item.name, item);
   }
   return { packageEvidenceByName, reservedEvidenceByName };
+}
+
+function validateEvidenceMetadata(value) {
+  if (value.schemaVersion !== 1) {
+    failures.push(`${evidencePath}: schemaVersion must be 1`);
+  }
+  requireString(value.verifiedBy, "verifiedBy");
+  if (
+    typeof value.verifiedBy === "string" &&
+    isPlaceholderEvidenceIdentity(value.verifiedBy)
+  ) {
+    failures.push(`${evidencePath}: verifiedBy must not be a placeholder`);
+  }
+  requireDate(value.verifiedAt, "verifiedAt");
+}
+
+function requireString(value, path) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    failures.push(`${evidencePath}: ${path} must be a non-empty string`);
+  }
+}
+
+function requireDate(value, path) {
+  requireString(value, path);
+  if (typeof value === "string" && !isIsoDateString(value)) {
+    failures.push(`${evidencePath}: ${path} must be an ISO date string`);
+  } else if (typeof value === "string" && isFutureIsoDateString(value)) {
+    failures.push(`${evidencePath}: ${path} must not be in the future`);
+  }
 }
 
 async function workspacePackageManifests() {
