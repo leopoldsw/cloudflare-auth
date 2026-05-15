@@ -54,6 +54,7 @@ const packageDirs = (await readdir("packages", { withFileTypes: true }))
 const packDir = await mkdtemp(join(tmpdir(), "cf-auth-package-check-"));
 
 const publishablePackageNames = [];
+const publishablePackages = [];
 let ownershipEvidence;
 for (const expectedDir of expectedPackages.keys()) {
   if (!packageDirs.includes(join("packages", expectedDir))) {
@@ -89,6 +90,10 @@ for (const dir of packageDirs) {
     failures.push(`${pkg.name}: package files must include dist`);
   if (pkg.private !== true) {
     publishablePackageNames.push(pkg.name);
+    publishablePackages.push({
+      name: String(pkg.name),
+      version: String(pkg.version ?? ""),
+    });
   }
   if (expected?.privateUntilOwnershipConfirmed) {
     if (pkg.private !== true) {
@@ -154,6 +159,7 @@ for (const dir of packageDirs) {
   }
 }
 
+verifyFixedPackageVersions();
 await verifyPackageNamingDocs();
 await verifyReadmeAndNonGoals();
 await verifyDocsManifest();
@@ -251,6 +257,18 @@ function verifyPackedManifest(sourcePackage, packedPackage) {
       `${sourcePackage.name}: packed package.json must not contain workspace: dependency ranges`,
     );
   }
+}
+
+function verifyFixedPackageVersions() {
+  const versions = new Set(
+    publishablePackages.map((pkg) => pkg.version).filter(Boolean),
+  );
+  if (versions.size <= 1) return;
+  failures.push(
+    `publishable packages must share one version because the Changesets fixed package group is required: ${publishablePackages
+      .map((pkg) => `${pkg.name}@${pkg.version}`)
+      .join(", ")}`,
+  );
 }
 
 function packagePath(value) {

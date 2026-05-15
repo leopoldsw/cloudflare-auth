@@ -351,6 +351,22 @@ describe("package checks", () => {
     );
   });
 
+  it("rejects publishable package version drift", async () => {
+    const root = await packageCheckFixture();
+    await updatePackageJson(root, "packages/client/package.json", {
+      privateValue: false,
+      version: "0.0.1",
+    });
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "publishable packages must share one version",
+    );
+    expect(result.stderr).toContain("@cf-auth/client@0.0.1");
+    expect(result.stderr).toContain("@cf-auth/cli@0.0.0");
+  });
+
   it("rejects workspace dependency ranges in packed manifests", async () => {
     const root = await packageCheckFixture();
     await writeFakePackTools(root);
@@ -514,6 +530,12 @@ describe("package checks", () => {
 
   it("allows reserved package shims to publish after ownership evidence", async () => {
     const root = await packageCheckFixture();
+    for (const packageDir of defaultPublishablePackageDirs) {
+      await updatePackageJson(root, `packages/${packageDir}/package.json`, {
+        privateValue: false,
+        version: "0.1.0-beta.0",
+      });
+    }
     await updatePackageJson(root, "packages/cf-auth-shim/package.json", {
       privateValue: false,
       version: "0.1.0-beta.0",
@@ -547,6 +569,16 @@ const defaultPublishablePackages = [
   "@cf-auth/hono",
   "@cf-auth/testing",
   "@cf-auth/worker",
+];
+
+const defaultPublishablePackageDirs = [
+  "cli",
+  "client",
+  "core",
+  "email-cloudflare",
+  "hono",
+  "testing",
+  "worker",
 ];
 
 async function packageCheckFixture() {
