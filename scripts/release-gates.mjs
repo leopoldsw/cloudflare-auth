@@ -165,6 +165,7 @@ await requireText(
   "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",
 );
 await requireText("docs/alpha.md", "pnpm check:package-names");
+await requireText("docs/alpha.md", "Cloudflare API tokens");
 await requireText(
   "docs/decisions/package-naming.md",
   "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",

@@ -1190,6 +1190,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
         "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",
         "pnpm check:package-names",
+        "Cloudflare API tokens",
         "doctor --report",
       ],
     ],
