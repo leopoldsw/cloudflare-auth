@@ -727,6 +727,27 @@ async function verifyReadmeAndNonGoals() {
       failures.push(`README.md: missing Stage 0 text ${needle}`);
     }
   }
+  for (const [label, needle] of [
+    ["what this is", "Cloudflare Auth is"],
+    [
+      "independent-project disclaimer",
+      "not affiliated with, endorsed by, or sponsored by Cloudflare",
+    ],
+    ["5-minute quickstart", "## 5-Minute Quickstart"],
+    ["existing Hono app", "## Existing Hono App"],
+    ["local dev email behavior", "## Local Development Email"],
+    ["deploy to Cloudflare", "## Deploy To Cloudflare"],
+    ["security defaults", "## Security Defaults"],
+    ["supported frameworks", "## Supported Frameworks"],
+    ["troubleshooting links", "## Troubleshooting"],
+    ["non-goals", "docs/non-goals.md"],
+  ]) {
+    if (!readme.includes(needle)) {
+      failures.push(
+        `README.md: missing README requirement ${label}: ${needle}`,
+      );
+    }
+  }
 
   for (const file of [
     "README.md",

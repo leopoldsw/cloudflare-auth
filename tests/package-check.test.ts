@@ -88,6 +88,31 @@ describe("package checks", () => {
     );
   });
 
+  it("requires README to cover every plan-required reader path", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "README.md",
+      "## Supported Frameworks",
+      "## Frameworks",
+    );
+    await replaceFixtureText(
+      root,
+      "README.md",
+      "## Troubleshooting",
+      "## Help",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "README.md: missing README requirement supported frameworks",
+    );
+    expect(result.stderr).toContain(
+      "README.md: missing README requirement troubleshooting links",
+    );
+  });
+
   it("requires detailed release readiness audit sections", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
