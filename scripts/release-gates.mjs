@@ -68,6 +68,7 @@ await requireFile("scripts/export-deploy-template.mjs");
 await requireFile("scripts/check-package-names.mjs");
 await requireFile("scripts/smoke-endpoints.mjs");
 await requireFile("scripts/smoke-local-tarballs.mjs");
+await requireFile("scripts/smoke-wrangler-dev.mjs");
 await requireFile("scripts/smoke-published-quickstart.mjs");
 await requireFile("scripts/smoke-production-cloudflare.mjs");
 await requireFile("scripts/verify-alpha-evidence.mjs");
@@ -268,6 +269,12 @@ await requireText(
   ".github/workflows/wrangler-dev-smoke.yml",
   "pnpm smoke:wrangler-dev",
 );
+await requireText("scripts/smoke-wrangler-dev.mjs", "assertLocalSessionCookie");
+await requireText("scripts/smoke-wrangler-dev.mjs", "cfauth-session=");
+await requireText("scripts/smoke-wrangler-dev.mjs", "__Host-cfauth-session=");
+for (const cookieAttribute of ["HttpOnly", "Path=/", "Secure", "Domain="]) {
+  await requireText("scripts/smoke-wrangler-dev.mjs", cookieAttribute);
+}
 await requireText(
   "scripts/smoke-published-quickstart.mjs",
   "assertLocalSessionCookie",

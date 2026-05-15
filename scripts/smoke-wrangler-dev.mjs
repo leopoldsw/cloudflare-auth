@@ -139,9 +139,7 @@ async function exerciseAuth(originUrl) {
     throw new Error(`signup failed: ${signup.status} ${await signup.text()}`);
   }
   const signupCookie = signup.headers.get("Set-Cookie") ?? "";
-  if (!signupCookie.includes("cfauth-session=")) {
-    throw new Error("signup did not set a session cookie");
-  }
+  assertLocalSessionCookie(signupCookie, "signup");
 
   const login = await jsonPost(`${originUrl}/auth/login`, {
     identifier: email,
@@ -151,9 +149,7 @@ async function exerciseAuth(originUrl) {
     throw new Error(`login failed: ${login.status} ${await login.text()}`);
   }
   const loginCookie = login.headers.get("Set-Cookie") ?? "";
-  if (!loginCookie.includes("cfauth-session=")) {
-    throw new Error("login did not set a session cookie");
-  }
+  assertLocalSessionCookie(loginCookie, "login");
   const cookie = loginCookie.split(";")[0];
 
   const user = await fetch(`${originUrl}/auth/user`, {
@@ -181,9 +177,9 @@ async function exerciseAuth(originUrl) {
   if (logout.status !== 200) {
     throw new Error(`logout failed: ${logout.status} ${await logout.text()}`);
   }
-  if (!(logout.headers.get("Set-Cookie") ?? "").includes("Max-Age=0")) {
-    throw new Error("logout did not clear the session cookie");
-  }
+  assertLocalSessionCookie(logout.headers.get("Set-Cookie") ?? "", "logout", {
+    cleared: true,
+  });
 
   const userAfterLogout = await fetch(`${originUrl}/auth/user`, {
     headers: {
@@ -210,6 +206,37 @@ function jsonPost(url, body) {
     },
     body: JSON.stringify(body),
   });
+}
+
+function assertLocalSessionCookie(
+  setCookie,
+  context,
+  options = { cleared: false },
+) {
+  if (!setCookie.startsWith("cfauth-session=")) {
+    throw new Error(`${context} did not set the local cfauth-session cookie`);
+  }
+  if (setCookie.includes("__Host-cfauth-session=")) {
+    throw new Error(`${context} local session cookie must not use __Host-`);
+  }
+  if (setCookie.includes("__Secure-cfauth-session=")) {
+    throw new Error(`${context} local session cookie must not use __Secure-`);
+  }
+  if (/;\s*Secure(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} local session cookie must not use Secure`);
+  }
+  if (/;\s*Domain=/iu.test(setCookie)) {
+    throw new Error(`${context} local session cookie must not set Domain`);
+  }
+  if (!/;\s*HttpOnly(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} local session cookie missing HttpOnly`);
+  }
+  if (!/;\s*Path=\/(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} local session cookie missing Path=/`);
+  }
+  if (options.cleared && !/;\s*Max-Age=0(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} did not clear the session cookie`);
+  }
 }
 
 function delay(ms) {

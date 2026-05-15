@@ -122,6 +122,22 @@ describe("release gates", () => {
     expect(result.stderr).toContain("Path=/");
   });
 
+  it("requires wrangler dev smoke to assert local cookie policy", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await writeFixtureFile(
+      root,
+      "scripts/smoke-wrangler-dev.mjs",
+      "if (!cookie.includes('cfauth-session=')) throw new Error('missing');\n",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/smoke-wrangler-dev.mjs");
+    expect(result.stderr).toContain("assertLocalSessionCookie");
+    expect(result.stderr).toContain("__Host-cfauth-session=");
+    expect(result.stderr).toContain("Path=/");
+  });
+
   it("requires production smoke to assert host-only production cookies", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -895,6 +911,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     "scripts/check-package-names.mjs",
     "scripts/smoke-endpoints.mjs",
     "scripts/smoke-local-tarballs.mjs",
+    "scripts/smoke-wrangler-dev.mjs",
     "scripts/smoke-published-quickstart.mjs",
     "scripts/smoke-production-cloudflare.mjs",
     "scripts/verify-alpha-evidence.mjs",
@@ -1038,6 +1055,18 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
       ],
     ],
     [".github/workflows/wrangler-dev-smoke.yml", ["pnpm smoke:wrangler-dev"]],
+    [
+      "scripts/smoke-wrangler-dev.mjs",
+      [
+        "assertLocalSessionCookie",
+        "cfauth-session=",
+        "__Host-cfauth-session=",
+        "HttpOnly",
+        "Path=/",
+        "Secure",
+        "Domain=",
+      ],
+    ],
     [
       "scripts/smoke-local-tarballs.mjs",
       ['readdir(join(process.cwd(), "migrations"))', "migrationFiles.map"],
