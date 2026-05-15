@@ -2501,6 +2501,28 @@ describe("release evidence verifiers", () => {
     expect(result.stderr).toContain("must be resolved before stable 1.0");
   });
 
+  it("rejects security tracker advisories with unknown severity or status", async () => {
+    const evidence = validSecurityTracker();
+    evidence.advisories[0]!.severity = "critcal";
+    evidence.advisories[0]!.status = "done";
+    const path = await writeEvidence(
+      "security-tracker-unknown-advisory-state",
+      evidence,
+    );
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "advisories[0].severity must be low, moderate, high, or critical",
+    );
+    expect(result.stderr).toContain(
+      "advisories[0].status must be open or resolved",
+    );
+  });
+
   it("rejects security tracker evidence with duplicate advisory IDs", async () => {
     const evidence = validSecurityTracker();
     evidence.advisories.push({

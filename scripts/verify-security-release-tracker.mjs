@@ -22,6 +22,8 @@ const failures = [...packageState.failures];
 const requireTracker =
   process.env.CF_AUTH_REQUIRE_SECURITY_TRACKER === "1" ||
   packageState.hasStable;
+const advisorySeverities = new Set(["low", "moderate", "high", "critical"]);
+const advisoryStatuses = new Set(["open", "resolved"]);
 
 if (failures.length > 0) fail();
 
@@ -123,6 +125,14 @@ function validateTracker(value, rawText) {
       typeof advisory.status === "string"
         ? advisory.status.trim().toLowerCase()
         : "";
+    if (severity.length > 0 && !advisorySeverities.has(severity)) {
+      failures.push(
+        `${trackerPath}: ${path}.severity must be low, moderate, high, or critical`,
+      );
+    }
+    if (status.length > 0 && !advisoryStatuses.has(status)) {
+      failures.push(`${trackerPath}: ${path}.status must be open or resolved`);
+    }
     if (["high", "critical"].includes(severity) && status !== "resolved") {
       failures.push(
         `${trackerPath}: ${path} is high/critical and must be resolved before stable 1.0`,
