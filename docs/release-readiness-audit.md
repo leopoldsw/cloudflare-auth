@@ -4,13 +4,17 @@ Date: May 15, 2026
 
 This audit maps `cloudflare_auth_implementation_plan.md` to concrete repo
 evidence. It is intentionally not a release approval. Maintainers must replace
-the pending evidence and signoff files before public beta or 1.0.
+the pending evidence and signoff files at the stage where each gate applies:
+package ownership, private-alpha, and deploy-button evidence before public beta;
+public-beta and security-tracker evidence plus API/config/security signoffs
+before stable 1.0.
 
 ## Objective
 
 Ship a polished open-source Cloudflare Auth repo that can be installed, tested,
 deployed, consumed as packages, and released only after package ownership,
-alpha/beta, deploy-button, and security-review evidence is recorded.
+alpha, deploy-button, beta, security-tracker, and security-review evidence is
+recorded at the correct release stage.
 
 ## Completion Audit
 
