@@ -450,6 +450,11 @@ async function verifyPackageNamingDocs() {
     }
   }
   for (const needle of [
+    "cf-auth@1.0.2",
+    "public docs must not use `npx cf-auth@latest`",
+    "create and control the `@cf-auth/*` scope",
+    "npm view create-cloudflare-auth name version --json",
+    "public docs must not use `npm create cloudflare-auth`",
     "@cloudflare-auth/cli",
     "@cloudflare-auth/client",
     "@cloudflare-auth/core",
@@ -462,7 +467,7 @@ async function verifyPackageNamingDocs() {
   ]) {
     if (!naming.includes(needle)) {
       failures.push(
-        `docs/decisions/package-naming.md: missing fallback scope evidence ${needle}`,
+        `docs/decisions/package-naming.md: missing package naming evidence ${needle}`,
       );
     }
   }

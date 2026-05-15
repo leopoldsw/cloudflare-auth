@@ -478,10 +478,35 @@ describe("package checks", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "docs/decisions/package-naming.md: missing fallback scope evidence @cloudflare-auth/email-cloudflare",
+      "docs/decisions/package-naming.md: missing package naming evidence @cloudflare-auth/email-cloudflare",
     );
     expect(result.stderr).toContain(
-      "docs/decisions/package-naming.md: missing fallback scope evidence availability signal only",
+      "docs/decisions/package-naming.md: missing package naming evidence availability signal only",
+    );
+  });
+
+  it("requires primary package availability docs to stay explicit", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/decisions/package-naming.md",
+      "cf-auth@1.0.2",
+      "cf-auth exists",
+    );
+    await replaceFixtureText(
+      root,
+      "docs/decisions/package-naming.md",
+      "public docs must not use `npm create cloudflare-auth`",
+      "public docs must use the create package carefully",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/decisions/package-naming.md: missing package naming evidence cf-auth@1.0.2",
+    );
+    expect(result.stderr).toContain(
+      "docs/decisions/package-naming.md: missing package naming evidence public docs must not use `npm create cloudflare-auth`",
     );
   });
 
