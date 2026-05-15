@@ -31,12 +31,17 @@ recorded before public beta or 1.0.
 - `pnpm benchmark:password`
 - `pnpm publish:dry-run`
 
+The evidence verifier scripts are version-aware and may skip when placeholder
+`0.0.0` package versions are still checked in. A skipped verifier is not stage
+evidence. When proving one of the release blockers below, run the explicit
+`CF_AUTH_REQUIRE_*` command for that blocker.
+
 ## Prerelease
 
 - package names confirmed or fallback docs updated
 - platform assumptions rechecked in `docs/platform-assumptions.md`
 - npm publisher 2FA and package ownership verified before dispatching the release workflow
-- package ownership verifier passes before publishing prerelease or stable packages
+- `CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership` passes before publishing prerelease or stable packages
 - `pnpm check:package-names` passes before publishing prerelease or stable packages
 - release workflow `package_names_confirmed` gate set only after package names are verified
 - Changesets version/changelog output reviewed before publishing
@@ -53,6 +58,10 @@ recorded before public beta or 1.0.
 ## Public Beta
 
 - beta packages published from a dry-run artifact
+- `CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence` passes against real private-alpha evidence
+- `CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence` passes against real Deploy to Cloudflare evidence
+- `CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership` passes against real npm ownership evidence
+- `pnpm check:package-names` passes against real npm ownership evidence
 - `pnpm smoke:published-quickstart` passes in the published quickstart smoke workflow using the beta package tag
 - generated Deploy to Cloudflare template passes `pnpm verify:deploy-template`
 - maintainer manually verifies the quickstart
@@ -65,10 +74,10 @@ recorded before public beta or 1.0.
 
 - public API report reviewed and release-approved
 - config schema reviewed and release-approved
-- public-beta evidence verifier passes
+- `CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence` passes against real public-beta evidence
 - upgrade tests cover every beta schema version
 - security review decision record signed
-- security release tracker verifier passes
+- `CF_AUTH_REQUIRE_SECURITY_TRACKER=1 pnpm verify:security-tracker` passes against the real security release tracker
 - Dependabot, dependency review, and CodeQL automation are enabled
 - `pnpm smoke:wrangler-dev` passes in the opt-in Wrangler dev smoke workflow for the release candidate
 - `pnpm smoke:cloudflare-production` passes in the opt-in Cloudflare production smoke workflow for the release candidate

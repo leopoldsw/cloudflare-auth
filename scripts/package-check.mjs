@@ -871,6 +871,11 @@ async function verifyReleaseControls() {
         "Changesets version/changelog",
         "Changesets fixed package group",
         "dry-run publish summary artifact",
+        "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
+        "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
+        "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
+        "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",
+        "CF_AUTH_REQUIRE_SECURITY_TRACKER=1 pnpm verify:security-tracker",
       ],
     ],
   ]) {
