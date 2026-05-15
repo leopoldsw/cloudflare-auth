@@ -328,7 +328,11 @@ await requireText(
   "scripts/verify-deploy-template.mjs",
   "must match root migration",
 );
-await requireText(".github/workflows/release.yml", "package_names_confirmed");
+const releaseWorkflow = await requireText(
+  ".github/workflows/release.yml",
+  "package_names_confirmed",
+);
+requireReleaseWorkflowPackageNameGate(releaseWorkflow);
 await requireText(
   ".github/workflows/release.yml",
   "pnpm install --frozen-lockfile",
@@ -545,6 +549,102 @@ function requireVerifier(script, env) {
       `${script}: verifier failed\n${(result.stderr || result.stdout).trim()}`,
     );
   }
+}
+
+function requireReleaseWorkflowPackageNameGate(releaseWorkflow) {
+  const packageNameInput = workflowInputBlock(
+    releaseWorkflow,
+    "package_names_confirmed",
+  );
+  if (
+    !blockHasTrimmedLine(packageNameInput, "required: true") ||
+    !blockHasTrimmedLine(packageNameInput, "type: boolean")
+  ) {
+    failures.push(
+      ".github/workflows/release.yml: package_names_confirmed must be a required boolean workflow input",
+    );
+  }
+
+  const packageNameGate = workflowNamedStepBlock(
+    releaseWorkflow,
+    "Require package-name gate",
+  );
+  if (
+    !blockHasTrimmedLine(
+      packageNameGate,
+      "if: ${{ !inputs.package_names_confirmed }}",
+    ) ||
+    !blockHasTrimmedLine(packageNameGate, "exit 1")
+  ) {
+    failures.push(
+      ".github/workflows/release.yml: package_names_confirmed must be enforced by an early failing gate step",
+    );
+  }
+
+  const packageNameGateIndex = releaseWorkflow.indexOf(
+    "name: Require package-name gate",
+  );
+  const checkoutIndex = releaseWorkflow.indexOf("uses: actions/checkout");
+  if (
+    packageNameGateIndex === -1 ||
+    checkoutIndex === -1 ||
+    packageNameGateIndex > checkoutIndex
+  ) {
+    failures.push(
+      ".github/workflows/release.yml: package-name gate must run before checkout",
+    );
+  }
+}
+
+function workflowInputBlock(text, inputName) {
+  return workflowIndentedBlock(text, `${inputName}:`, {
+    stopOnSiblingListItem: false,
+  });
+}
+
+function workflowNamedStepBlock(text, stepName) {
+  return workflowIndentedBlock(text, `- name: ${stepName}`, {
+    stopOnSiblingListItem: true,
+  });
+}
+
+function workflowIndentedBlock(
+  text,
+  startTrimmedLine,
+  { stopOnSiblingListItem },
+) {
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => line.trim() === startTrimmedLine);
+  if (start === -1) return "";
+  const indent = workflowLineIndent(lines[start]);
+  const block = [lines[start]];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim().length === 0) {
+      block.push(line);
+      continue;
+    }
+    const lineIndent = workflowLineIndent(line);
+    if (lineIndent < indent) break;
+    if (
+      stopOnSiblingListItem &&
+      lineIndent <= indent &&
+      line.trim().startsWith("- ")
+    ) {
+      break;
+    }
+    if (!stopOnSiblingListItem && lineIndent <= indent) break;
+    block.push(line);
+  }
+  return block.join("\n");
+}
+
+function workflowLineIndent(line) {
+  return line.match(/^\s*/u)?.[0].length ?? 0;
+}
+
+function blockHasTrimmedLine(block, expectedLine) {
+  return block.split("\n").some((line) => line.trim() === expectedLine);
 }
 
 function releaseChecklistScripts(scripts) {

@@ -707,6 +707,49 @@ describe("release gates", () => {
     );
   });
 
+  it("requires release package-name confirmation to be a required boolean input", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      "        required: true\n        type: boolean",
+      "        required: false\n        type: string",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package_names_confirmed must be a required boolean workflow input",
+    );
+  });
+
+  it("requires release package-name confirmation to fail before checkout", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      ".github/workflows/release.yml",
+      `      - name: Require package-name gate
+        if: \${{ !inputs.package_names_confirmed }}
+        run: |
+          exit 1
+      - uses: actions/checkout@v5`,
+      `      - uses: actions/checkout@v5
+      - name: Require package-name gate
+        if: \${{ false }}
+        run: |
+          exit 1`,
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package_names_confirmed must be enforced by an early failing gate step",
+    );
+    expect(result.stderr).toContain(
+      ".github/workflows/release.yml: package-name gate must run before checkout",
+    );
+  });
+
   it("requires production password hashing in examples", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -1324,18 +1367,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "CF_AUTH_ALLOW_LOCAL_PACKAGE_SPECS",
       ],
     ],
-    [
-      ".github/workflows/release.yml",
-      [
-        "package_names_confirmed",
-        "pnpm install --frozen-lockfile",
-        "pnpm package:check",
-        "pnpm release:gates",
-        "pnpm publish:dry-run",
-        "pnpm-publish-summary.json",
-        "pnpm changeset publish --provenance",
-      ],
-    ],
+    [".github/workflows/release.yml", releaseWorkflowFixtureText()],
   ]);
 
   for (const file of new Set([...requiredFiles, ...requiredText.keys()])) {
@@ -1473,6 +1505,33 @@ function releaseChecklistFixtureText() {
       )
       .map((script) => `pnpm ${script}`),
     "opt-in Wrangler dev smoke workflow passes",
+  ];
+}
+
+function releaseWorkflowFixtureText() {
+  return [
+    "on:",
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      package_names_confirmed:",
+    "        required: true",
+    "        type: boolean",
+    "jobs:",
+    "  release:",
+    "    steps:",
+    "      - name: Require package-name gate",
+    "        if: ${{ !inputs.package_names_confirmed }}",
+    "        run: |",
+    "          exit 1",
+    "      - uses: actions/checkout@v5",
+    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm package:check",
+    "      - run: pnpm release:gates",
+    "      - run: pnpm publish:dry-run",
+    "      - uses: actions/upload-artifact@v4",
+    "        with:",
+    "          path: pnpm-publish-summary.json",
+    "      - run: pnpm changeset publish --provenance",
   ];
 }
 
