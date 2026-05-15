@@ -806,6 +806,70 @@ describe("package checks", () => {
     );
   });
 
+  it("rejects malformed package ownership evidence names before publishing reserved shims", async () => {
+    const root = await packageCheckFixture();
+    await updatePackageJson(root, "packages/cf-auth-shim/package.json", {
+      privateValue: false,
+      version: "0.1.0-beta.0",
+    });
+    await writeOwnershipEvidence(root, ["cf-auth"]);
+    await writeChangesetFixedGroup(root, [
+      ...defaultPublishablePackages,
+      "cf-auth",
+    ]);
+    const target = join(root, "docs", "package-ownership.json");
+    const evidence = JSON.parse(await readFile(target, "utf8")) as {
+      packages: unknown[];
+      reservedPackages: unknown[];
+    };
+    evidence.packages.push(
+      {
+        name: "   ",
+        registry: "https://registry.npmjs.org/",
+        version: "0.1.0-beta.0",
+        ownershipConfirmed: true,
+        publisherTwoFactorEnabled: true,
+        provenancePublish: true,
+      },
+      {
+        name: "@cf-auth/unknown",
+        registry: "https://registry.npmjs.org/",
+        version: "0.1.0-beta.0",
+        ownershipConfirmed: true,
+        publisherTwoFactorEnabled: true,
+        provenancePublish: true,
+      },
+    );
+    evidence.reservedPackages.push(
+      {
+        name: 1,
+        registry: "https://registry.npmjs.org/",
+        publishableAfterOwnershipConfirmed: true,
+      },
+      {
+        name: "not-a-workspace-package",
+        registry: "https://registry.npmjs.org/",
+        publishableAfterOwnershipConfirmed: true,
+      },
+    );
+    await writeFile(target, `${JSON.stringify(evidence, null, 2)}\n`);
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: packages[1].name must be a non-empty string",
+    );
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: @cf-auth/unknown must match a publishable workspace package",
+    );
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: reservedPackages[0].name must be a non-empty string",
+    );
+    expect(result.stderr).toContain(
+      "docs/package-ownership.json: not-a-workspace-package must not be listed under reservedPackages unless its workspace package is private",
+    );
+  });
+
   it("rejects package ownership evidence without explicit arrays before publishing reserved shims", async () => {
     const root = await packageCheckFixture();
     await updatePackageJson(root, "packages/cf-auth-shim/package.json", {

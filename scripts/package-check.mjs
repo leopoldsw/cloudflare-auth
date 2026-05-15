@@ -37,6 +37,9 @@ const expectedPackages = new Map([
   ["testing", { name: "@cf-auth/testing" }],
   ["worker", { name: "@cf-auth/worker" }],
 ]);
+const expectedPackageNames = new Set(
+  [...expectedPackages.values()].map((pkg) => pkg.name),
+);
 const v1Exclusions = [
   "OAuth/social login",
   "SAML/enterprise SSO",
@@ -59,6 +62,10 @@ const packDir = await mkdtemp(join(tmpdir(), "cf-auth-package-check-"));
 
 const publishablePackageNames = [];
 const publishablePackages = [];
+const reservedPackageEvidenceNames = new Set([
+  "cf-auth",
+  "create-cloudflare-auth",
+]);
 let ownershipEvidence;
 for (const expectedDir of expectedPackages.keys()) {
   if (!packageDirs.includes(join("packages", expectedDir))) {
@@ -389,14 +396,23 @@ async function readOwnershipEvidence() {
       );
       continue;
     }
-    if (typeof item.name === "string") {
-      if (packagesByName.has(item.name)) {
-        failures.push(
-          `docs/package-ownership.json: duplicate package evidence for ${item.name}`,
-        );
-      }
-      packagesByName.set(item.name, item);
+    if (typeof item.name !== "string" || item.name.trim().length === 0) {
+      failures.push(
+        `docs/package-ownership.json: packages[${index}].name must be a non-empty string`,
+      );
+      continue;
     }
+    if (packagesByName.has(item.name)) {
+      failures.push(
+        `docs/package-ownership.json: duplicate package evidence for ${item.name}`,
+      );
+    }
+    if (!expectedPackageNames.has(item.name)) {
+      failures.push(
+        `docs/package-ownership.json: ${item.name} must match a publishable workspace package`,
+      );
+    }
+    packagesByName.set(item.name, item);
   }
   if (!Array.isArray(parsed.reservedPackages)) {
     failures.push(
@@ -413,14 +429,23 @@ async function readOwnershipEvidence() {
       );
       continue;
     }
-    if (typeof item.name === "string") {
-      if (reservedByName.has(item.name)) {
-        failures.push(
-          `docs/package-ownership.json: duplicate reserved package evidence for ${item.name}`,
-        );
-      }
-      reservedByName.set(item.name, item);
+    if (typeof item.name !== "string" || item.name.trim().length === 0) {
+      failures.push(
+        `docs/package-ownership.json: reservedPackages[${index}].name must be a non-empty string`,
+      );
+      continue;
     }
+    if (reservedByName.has(item.name)) {
+      failures.push(
+        `docs/package-ownership.json: duplicate reserved package evidence for ${item.name}`,
+      );
+    }
+    if (!reservedPackageEvidenceNames.has(item.name)) {
+      failures.push(
+        `docs/package-ownership.json: ${item.name} must not be listed under reservedPackages unless its workspace package is private`,
+      );
+    }
+    reservedByName.set(item.name, item);
   }
   ownershipEvidence = { packagesByName, reservedByName };
   return ownershipEvidence;
