@@ -1,8 +1,6 @@
-import { readFile } from "node:fs/promises";
-
 import { AuthCryptoError } from "@cf-auth/core";
 import { cloudflareEmail } from "@cf-auth/email-cloudflare";
-import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
+import { createSqliteD1Database } from "@cf-auth/testing";
 import {
   type AuthEmailAdapter,
   byEnvironment,
@@ -12,6 +10,8 @@ import {
   type AuthEmailRuntime,
 } from "@cf-auth/worker";
 import { describe, expect, it } from "vitest";
+
+import { applyRootD1Migrations } from "./migration-helpers.js";
 
 const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -68,10 +68,7 @@ describe("email adapters and templates", () => {
 
   it("serves the dev outbox only in development", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile("migrations/0001_initial.sql", "utf8"),
-      await readFile("migrations/0002_indexes.sql", "utf8"),
-    ]);
+    await applyRootD1Migrations(db);
     const adapter = terminalEmail({ outbox: true });
     const handler = createAuthHandler(
       defineAuthConfig({
@@ -111,10 +108,7 @@ describe("email adapters and templates", () => {
 
   it("serves the byEnvironment development outbox", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile("migrations/0001_initial.sql", "utf8"),
-      await readFile("migrations/0002_indexes.sql", "utf8"),
-    ]);
+    await applyRootD1Migrations(db);
     const development = terminalEmail({ outbox: true });
     const adapter = byEnvironment({
       development,
@@ -207,10 +201,7 @@ describe("email adapters and templates", () => {
 
   it("records redacted email send failures and keeps request responses generic", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile("migrations/0001_initial.sql", "utf8"),
-      await readFile("migrations/0002_indexes.sql", "utf8"),
-    ]);
+    await applyRootD1Migrations(db);
     const adapter: AuthEmailAdapter = {
       kind: "failing-test",
       async sendMagicLink() {
@@ -285,10 +276,7 @@ describe("email adapters and templates", () => {
 
   it("handles signup verification email failures by session policy", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile("migrations/0001_initial.sql", "utf8"),
-      await readFile("migrations/0002_indexes.sql", "utf8"),
-    ]);
+    await applyRootD1Migrations(db);
     const adapter: AuthEmailAdapter = {
       kind: "failing-verification",
       async sendMagicLink() {},

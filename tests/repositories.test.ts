@@ -1,9 +1,13 @@
-import { readFile } from "node:fs/promises";
-
 import { AuthRepositoryError } from "@cf-auth/core";
-import { createSqliteD1Database, applyD1Migrations } from "@cf-auth/testing";
+import { createSqliteD1Database } from "@cf-auth/testing";
 import { cleanCfAuth, createD1Repositories } from "@cf-auth/worker";
 import { beforeEach, describe, expect, it } from "vitest";
+
+import {
+  applyRootD1Migrations,
+  rootMigrationVersions,
+  rootSchemaVersion,
+} from "./migration-helpers.js";
 
 const sessionHash =
   "hmac-sha256$v=1$kid=k1$purpose=session$hash=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -20,10 +24,7 @@ const verifyHash =
 
 async function migratedDb() {
   const db = createSqliteD1Database();
-  await applyD1Migrations(db, [
-    await readFile("migrations/0001_initial.sql", "utf8"),
-    await readFile("migrations/0002_indexes.sql", "utf8"),
-  ]);
+  await applyRootD1Migrations(db);
   return db;
 }
 
@@ -41,14 +42,13 @@ describe("D1 migrations and repositories", () => {
       db
         .prepare("SELECT value FROM auth_meta WHERE key = 'schema_version'")
         .first("value"),
-    ).resolves.toBe("2");
+    ).resolves.toBe(await rootSchemaVersion());
     const migrations = await db
       .prepare("SELECT version FROM auth_schema_migrations ORDER BY version")
       .all<{ version: string }>();
-    expect(migrations.results?.map((row) => row.version)).toEqual([
-      "0001",
-      "0002",
-    ]);
+    expect(migrations.results?.map((row) => row.version)).toEqual(
+      await rootMigrationVersions(),
+    );
   });
 
   it("uses first-primary D1 sessions for auth state lookups", async () => {

@@ -1,9 +1,6 @@
-import { readFile } from "node:fs/promises";
-
 import { createAuthClient, AuthClientError } from "@cf-auth/client";
 import {
   createMockEmailAdapter,
-  applyD1Migrations,
   createSqliteD1Database,
 } from "@cf-auth/testing";
 import {
@@ -24,6 +21,8 @@ import {
 } from "@cf-auth/hono";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+
+import { applyRootD1Migrations } from "./migration-helpers.js";
 
 const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const origin = "http://localhost:8787";
@@ -416,10 +415,7 @@ describe("Hono adapter and browser client", () => {
 
 async function fixture(overrides: Partial<AuthConfig> = {}) {
   const db = createSqliteD1Database();
-  await applyD1Migrations(db, [
-    await readFile("migrations/0001_initial.sql", "utf8"),
-    await readFile("migrations/0002_indexes.sql", "utf8"),
-  ]);
+  await applyRootD1Migrations(db);
   const config = defineAuthConfig({
     appName: "Hono Test",
     basePath: "/auth",

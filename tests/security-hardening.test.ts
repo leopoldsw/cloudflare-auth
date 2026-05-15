@@ -1,7 +1,4 @@
-import { readFile } from "node:fs/promises";
-
 import {
-  applyD1Migrations,
   createMockEmailAdapter,
   createSqliteD1Database,
 } from "@cf-auth/testing";
@@ -15,6 +12,8 @@ import {
 } from "@cf-auth/worker";
 import { describe, expect, it } from "vitest";
 
+import { applyRootD1Migrations } from "./migration-helpers.js";
+
 const origin = "http://localhost:8787";
 const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -23,10 +22,7 @@ async function setup(
   envOverrides: Record<string, unknown> = {},
 ) {
   const db = createSqliteD1Database();
-  await applyD1Migrations(db, [
-    await readFile("migrations/0001_initial.sql", "utf8"),
-    await readFile("migrations/0002_indexes.sql", "utf8"),
-  ]);
+  await applyRootD1Migrations(db);
   const email = createMockEmailAdapter();
   const config = defineAuthConfig({
     appName: "Security Test",

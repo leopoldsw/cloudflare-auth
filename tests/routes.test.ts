@@ -1,12 +1,9 @@
-import { readFile } from "node:fs/promises";
-
 import {
   AuthCryptoError,
   hashRawAuthToken,
   parseAuthKeyRing,
 } from "@cf-auth/core";
 import {
-  applyD1Migrations,
   createMockEmailAdapter,
   createSqliteD1Database,
 } from "@cf-auth/testing";
@@ -19,6 +16,8 @@ import {
   type AuthConfigInput,
 } from "@cf-auth/worker";
 import { describe, expect, it } from "vitest";
+
+import { applyRootD1Migrations } from "./migration-helpers.js";
 
 const origin = "http://localhost:8787";
 const authSecret = "k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -50,10 +49,7 @@ async function expectSafeFormError(response: Response, secret: string) {
 
 async function setup(overrides: Partial<AuthConfigInput> = {}) {
   const db = createSqliteD1Database();
-  await applyD1Migrations(db, [
-    await readFile("migrations/0001_initial.sql", "utf8"),
-    await readFile("migrations/0002_indexes.sql", "utf8"),
-  ]);
+  await applyRootD1Migrations(db);
   const email = createMockEmailAdapter();
   const config = defineAuthConfig({
     appName: "Route Test",
@@ -307,10 +303,7 @@ describe("auth HTTP runtime", () => {
 
   it("normalizes partial runtime overrides passed directly to the handler", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile("migrations/0001_initial.sql", "utf8"),
-      await readFile("migrations/0002_indexes.sql", "utf8"),
-    ]);
+    await applyRootD1Migrations(db);
     const handler = createAuthHandler({
       appName: "Partial Runtime Test",
       basePath: "/auth",
