@@ -121,6 +121,13 @@ for (const text of [
   "Workers Vitest",
   "Turnstile",
   "Deploy to Cloudflare",
+  "npm package execution",
+  "npx --package <pkg> <bin>",
+  "Cookie prefixes",
+  "__Host-",
+  "__Secure-",
+  "Password storage",
+  "N=2^17, r=8, p=1",
 ]) {
   await requireText("docs/platform-assumptions.md", text);
 }

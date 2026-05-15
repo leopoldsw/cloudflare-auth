@@ -580,6 +580,13 @@ async function verifyPlatformAssumptionsDocs() {
     "Workers Vitest",
     "Turnstile",
     "Deploy to Cloudflare",
+    "npm package execution",
+    "npx --package <pkg> <bin>",
+    "Cookie prefixes",
+    "__Host-",
+    "__Secure-",
+    "Password storage",
+    "N=2^17, r=8, p=1",
   ]) {
     if (!assumptions.includes(needle)) {
       failures.push(`docs/platform-assumptions.md: missing ${needle}`);
