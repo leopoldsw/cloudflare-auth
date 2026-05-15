@@ -83,8 +83,28 @@ for (const dir of packageDirs) {
   } catch {
     failures.push(`${pkg.name}: LICENSE file missing`);
   }
-  if (!pkg.exports?.["."])
-    failures.push(`${pkg.name}: missing root export map`);
+  const rootExport = rootExportMap(pkg);
+  if (!rootExport) {
+    failures.push(`${pkg.name}: missing explicit root export map`);
+  } else {
+    for (const field of ["types", "import", "require"]) {
+      if (
+        typeof rootExport[field] !== "string" ||
+        rootExport[field].trim().length === 0
+      ) {
+        failures.push(`${pkg.name}: root export map missing ${field}`);
+      }
+    }
+    if (pkg.types && rootExport.types !== pkg.types) {
+      failures.push(`${pkg.name}: root export types must match types field`);
+    }
+    if (pkg.module && rootExport.import !== pkg.module) {
+      failures.push(`${pkg.name}: root export import must match module field`);
+    }
+    if (pkg.main && rootExport.require !== pkg.main) {
+      failures.push(`${pkg.name}: root export require must match main field`);
+    }
+  }
   if (!pkg.types) failures.push(`${pkg.name}: missing types field`);
   if (!pkg.files?.includes("dist"))
     failures.push(`${pkg.name}: package files must include dist`);
@@ -143,9 +163,9 @@ for (const dir of packageDirs) {
       packagePath(pkg.types),
       packagePath(pkg.main),
       packagePath(pkg.module),
-      packagePath(pkg.exports?.["."]?.types),
-      packagePath(pkg.exports?.["."]?.import),
-      packagePath(pkg.exports?.["."]?.require),
+      packagePath(rootExport?.types),
+      packagePath(rootExport?.import),
+      packagePath(rootExport?.require),
       ...Object.values(pkg.bin ?? {}).map((target) => packagePath(target)),
     ].filter(Boolean)) {
       if (!packedPaths.has(required)) {
@@ -175,6 +195,12 @@ await verifyReleaseControls();
 if (failures.length) {
   console.error(failures.join("\n"));
   process.exit(1);
+}
+
+function rootExportMap(pkg) {
+  if (!isJsonObject(pkg.exports)) return null;
+  const rootExport = pkg.exports["."];
+  return isJsonObject(rootExport) ? rootExport : null;
 }
 
 function packArtifact(dir, name) {

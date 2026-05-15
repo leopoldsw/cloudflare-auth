@@ -44,6 +44,28 @@ describe("package checks", () => {
     );
   });
 
+  it("requires explicit root export map fields to match package entrypoints", async () => {
+    const root = await packageCheckFixture();
+    const manifestPath = join(root, "packages", "client", "package.json");
+    const pkg = JSON.parse(await readFile(manifestPath, "utf8"));
+    delete pkg.exports["."].types;
+    pkg.exports["."].import = "./dist/other.js";
+    pkg.exports["."].require = "./dist/other.cjs";
+    await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "@cf-auth/client: root export map missing types",
+    );
+    expect(result.stderr).toContain(
+      "@cf-auth/client: root export import must match module field",
+    );
+    expect(result.stderr).toContain(
+      "@cf-auth/client: root export require must match main field",
+    );
+  });
+
   it("rejects non-object version matrix manifests", async () => {
     const root = await packageCheckFixture();
     await writeFile(join(root, "scripts", "version-matrix.json"), "null\n");
