@@ -159,6 +159,23 @@ describe("release gates", () => {
     expect(result.stderr).toContain("CF_AUTH_ALLOW_LOCAL_PACKAGE_SPECS");
   });
 
+  it("requires tarball smoke to apply every generated migration", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await writeFixtureFile(
+      root,
+      "scripts/smoke-local-tarballs.mjs",
+      'await readFile(join(process.cwd(), "migrations", "0001_initial.sql"), "utf8");\n',
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scripts/smoke-local-tarballs.mjs");
+    expect(result.stderr).toContain(
+      'readdir(join(process.cwd(), "migrations"))',
+    );
+    expect(result.stderr).toContain("migrationFiles.map");
+  });
+
   it("rejects non-object root package manifests", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(root, "package.json", "null\n");
@@ -877,6 +894,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     "scripts/export-deploy-template.mjs",
     "scripts/check-package-names.mjs",
     "scripts/smoke-endpoints.mjs",
+    "scripts/smoke-local-tarballs.mjs",
     "scripts/smoke-published-quickstart.mjs",
     "scripts/smoke-production-cloudflare.mjs",
     "scripts/verify-alpha-evidence.mjs",
@@ -1020,6 +1038,10 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
       ],
     ],
     [".github/workflows/wrangler-dev-smoke.yml", ["pnpm smoke:wrangler-dev"]],
+    [
+      "scripts/smoke-local-tarballs.mjs",
+      ['readdir(join(process.cwd(), "migrations"))', "migrationFiles.map"],
+    ],
     [
       "scripts/verify-deploy-template.mjs",
       [

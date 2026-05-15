@@ -67,6 +67,7 @@ await requireFile("schemas/doctor-report.schema.json");
 await requireFile("scripts/export-deploy-template.mjs");
 await requireFile("scripts/check-package-names.mjs");
 await requireFile("scripts/smoke-endpoints.mjs");
+await requireFile("scripts/smoke-local-tarballs.mjs");
 await requireFile("scripts/smoke-published-quickstart.mjs");
 await requireFile("scripts/smoke-production-cloudflare.mjs");
 await requireFile("scripts/verify-alpha-evidence.mjs");
@@ -290,6 +291,11 @@ await requireText(
 for (const cookieAttribute of ["Secure", "HttpOnly", "Path=/", "Domain="]) {
   await requireText("scripts/smoke-production-cloudflare.mjs", cookieAttribute);
 }
+await requireText(
+  "scripts/smoke-local-tarballs.mjs",
+  'readdir(join(process.cwd(), "migrations"))',
+);
+await requireText("scripts/smoke-local-tarballs.mjs", "migrationFiles.map");
 await requireText(
   "scripts/smoke-production-cloudflare.mjs",
   'assertNoWorkspaceDependencies(pkg, "production smoke package.json")',

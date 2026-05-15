@@ -206,19 +206,26 @@ function run(command, args, options = {}) {
 }
 
 function smokeAuthTestSource() {
-  return `import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import app from "./src/index";
-import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
+  return `import { readdir, readFile } from "node:fs/promises";
+  import { join } from "node:path";
+  import { describe, expect, it } from "vitest";
+  import app from "./src/index";
+  import { applyD1Migrations, createSqliteD1Database } from "@cf-auth/testing";
 
 describe("generated auth app", () => {
   it("signs up and logs in against migrated D1", async () => {
     const db = createSqliteD1Database();
-    await applyD1Migrations(db, [
-      await readFile(join(process.cwd(), "migrations", "0001_initial.sql"), "utf8"),
-      await readFile(join(process.cwd(), "migrations", "0002_indexes.sql"), "utf8"),
-    ]);
+    const migrationFiles = (await readdir(join(process.cwd(), "migrations")))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    await applyD1Migrations(
+      db,
+      await Promise.all(
+        migrationFiles.map((file) =>
+          readFile(join(process.cwd(), "migrations", file), "utf8"),
+        ),
+      ),
+    );
     const env = {
       AUTH_DB: db,
       AUTH_ENV: "development",
