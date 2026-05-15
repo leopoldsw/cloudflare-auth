@@ -1,5 +1,9 @@
 # Release Checklist
 
+Use [release-readiness-audit.md](release-readiness-audit.md) to distinguish
+local verification evidence from maintainer/manual evidence that must be
+recorded before public beta or 1.0.
+
 ## Every Release
 
 - `pnpm install --frozen-lockfile`
