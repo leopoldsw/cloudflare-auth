@@ -968,6 +968,49 @@ process.exit(1);
     );
   });
 
+  it("rejects slash stable release signoff placeholders", async () => {
+    const root = await releaseGateFixture({
+      deployButtonEvidence: true,
+      packageVersion: "1.0.0",
+      stableEvidence: true,
+    });
+    await writeFixtureFile(
+      root,
+      "docs/api-report.md",
+      "Release approval: release-approved by n/a on 2026-05-15\n",
+    );
+    await writeFixtureFile(
+      root,
+      "docs/config-schema.md",
+      configSchemaFixtureText(
+        "Release approval: release-approved by not applicable on 2026-05-15",
+      ),
+    );
+    await writeFixtureFile(
+      root,
+      "docs/decisions/security-review.md",
+      [
+        "Status: maintainer-signoff",
+        "Signed by: N/A",
+        "Date: 2026-05-15",
+        "Rationale: Stable release proceeds without external review after local security gates passed.",
+        "Compensating controls: public security policy, dependency review, CodeQL, npm audit, and release tracker gates.",
+      ].join("\n"),
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/api-report.md: Public API report release approver must not be a placeholder",
+    );
+    expect(result.stderr).toContain(
+      "docs/config-schema.md: Config schema release approver must not be a placeholder",
+    );
+    expect(result.stderr).toContain(
+      "docs/decisions/security-review.md: maintainer sign-off signer must not be a placeholder",
+    );
+  });
+
   it("rejects malformed stable beta upgrade fixture manifests", async () => {
     const root = await releaseGateFixture({
       deployButtonEvidence: true,
