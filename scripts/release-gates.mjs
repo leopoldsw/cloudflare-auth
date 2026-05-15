@@ -213,6 +213,7 @@ await requireText("docs/public-beta.md", "docs/known-limitations.md");
 await requireText("docs/public-beta.md", "pnpm verify:beta-evidence");
 await requireText("docs/public-beta.md", "pnpm verify:deploy-button-evidence");
 await requireText("docs/public-beta.md", "pnpm verify:package-ownership");
+await requireText("docs/public-beta.md", "pnpm check:package-names");
 await requireText("docs/beta-evidence.example.json", '"cleanDirectory"');
 await requireText(
   "docs/beta-evidence.example.json",

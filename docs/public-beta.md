@@ -7,6 +7,7 @@ Public beta starts only after private-alpha evidence is recorded and the package
 - `CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence` passes against `docs/alpha-evidence.json`
 - `CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence` passes against `docs/deploy-button-evidence.json`
 - `CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership` passes against `docs/package-ownership.json`
+- `pnpm check:package-names` passes against `docs/package-ownership.json`
 - published beta packages pass the documented quickstart from a clean directory in CI
 - one maintainer completes the same quickstart manually
 - one opt-in Cloudflare account fixture passes the production path:

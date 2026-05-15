@@ -942,6 +942,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "pnpm verify:beta-evidence",
         "pnpm verify:deploy-button-evidence",
         "pnpm verify:package-ownership",
+        "pnpm check:package-names",
         ".github/workflows/published-quickstart-smoke.yml",
         ".github/workflows/cloudflare-production-smoke.yml",
       ],
