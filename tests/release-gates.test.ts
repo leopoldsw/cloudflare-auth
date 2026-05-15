@@ -118,6 +118,8 @@ describe("release gates", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("scripts/smoke-production-cloudflare.mjs");
     expect(result.stderr).toContain("__Host-cfauth-session=");
+    expect(result.stderr).toContain("assertHostOnlySessionCookie");
+    expect(result.stderr).toContain("Path=/");
   });
 
   it("requires production smoke to reject workspace dependencies", async () => {
@@ -983,6 +985,11 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
       "scripts/smoke-production-cloudflare.mjs",
       [
         "__Host-cfauth-session=",
+        "assertHostOnlySessionCookie",
+        "Secure",
+        "HttpOnly",
+        "Path=/",
+        "Domain=",
         'assertNoWorkspaceDependencies(pkg, "production smoke package.json")',
         '"@cf-auth/email-cloudflare": packageTag',
         "CF_AUTH_ALLOW_LOCAL_PACKAGE_SPECS",

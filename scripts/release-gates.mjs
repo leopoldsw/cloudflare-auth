@@ -272,6 +272,13 @@ await requireText(
 );
 await requireText(
   "scripts/smoke-production-cloudflare.mjs",
+  "assertHostOnlySessionCookie",
+);
+for (const cookieAttribute of ["Secure", "HttpOnly", "Path=/", "Domain="]) {
+  await requireText("scripts/smoke-production-cloudflare.mjs", cookieAttribute);
+}
+await requireText(
+  "scripts/smoke-production-cloudflare.mjs",
   'assertNoWorkspaceDependencies(pkg, "production smoke package.json")',
 );
 await requireText(

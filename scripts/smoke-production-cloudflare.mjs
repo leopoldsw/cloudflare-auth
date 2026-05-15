@@ -330,11 +330,7 @@ async function exerciseDeployedAuth(origin) {
     throw new Error(`signup failed: ${signup.status} ${await signup.text()}`);
   }
   const signupCookie = signup.headers.get("Set-Cookie") ?? "";
-  if (!signupCookie.includes("__Host-cfauth-session=")) {
-    throw new Error(
-      "signup did not set a host-only Cloudflare Auth session cookie",
-    );
-  }
+  assertHostOnlySessionCookie(signupCookie, "signup");
 
   const login = await jsonPost(`${origin}/auth/login`, {
     identifier: email,
@@ -344,11 +340,7 @@ async function exerciseDeployedAuth(origin) {
     throw new Error(`login failed: ${login.status} ${await login.text()}`);
   }
   const loginCookie = login.headers.get("Set-Cookie") ?? "";
-  if (!loginCookie.includes("__Host-cfauth-session=")) {
-    throw new Error(
-      "login did not set a host-only Cloudflare Auth session cookie",
-    );
-  }
+  assertHostOnlySessionCookie(loginCookie, "login");
   const cookie = loginCookie.split(";")[0];
   const user = await fetch(`${origin}/auth/user`, {
     headers: {
@@ -376,9 +368,7 @@ async function exerciseDeployedAuth(origin) {
     throw new Error(`logout failed: ${logout.status} ${await logout.text()}`);
   }
   const clearCookie = logout.headers.get("Set-Cookie") ?? "";
-  if (!clearCookie.includes("Max-Age=0")) {
-    throw new Error("logout did not clear the session cookie");
-  }
+  assertHostOnlySessionCookie(clearCookie, "logout", { cleared: true });
 
   const userAfterLogout = await fetch(`${origin}/auth/user`, {
     headers: {
@@ -405,4 +395,31 @@ function jsonPost(url, body) {
     },
     body: JSON.stringify(body),
   });
+}
+
+function assertHostOnlySessionCookie(
+  setCookie,
+  context,
+  options = { cleared: false },
+) {
+  if (!setCookie.includes("__Host-cfauth-session=")) {
+    throw new Error(
+      `${context} did not set a host-only Cloudflare Auth session cookie`,
+    );
+  }
+  if (!/;\s*Secure(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing Secure`);
+  }
+  if (!/;\s*HttpOnly(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing HttpOnly`);
+  }
+  if (!/;\s*Path=\/(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing Path=/`);
+  }
+  if (/;\s*Domain=/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie must not set Domain`);
+  }
+  if (options.cleared && !/;\s*Max-Age=0(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} did not clear the session cookie`);
+  }
 }
