@@ -424,7 +424,8 @@ async function verifyPackageNamingDocs() {
   }
 
   const docs = await listMarkdownFiles("docs");
-  const publicCommandFiles = ["README.md", ...docs].filter(
+  const packageReadmes = packageDirs.map((dir) => join(dir, "README.md"));
+  const publicCommandFiles = ["README.md", ...docs, ...packageReadmes].filter(
     (file) => file !== "docs/decisions/package-naming.md",
   );
   for (const file of publicCommandFiles) {

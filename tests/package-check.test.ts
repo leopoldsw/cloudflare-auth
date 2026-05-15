@@ -114,6 +114,20 @@ describe("package checks", () => {
     );
   });
 
+  it("blocks unavailable package commands in package READMEs", async () => {
+    const root = await packageCheckFixture();
+    await writeFile(
+      join(root, "packages", "cli", "README.md"),
+      "# @cf-auth/cli\n\nRun `npx cf-auth@latest init`.\n",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packages/cli/README.md: npx cf-auth commands are blocked until package ownership is confirmed",
+    );
+  });
+
   it("requires the production smoke workflow safety gate", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
