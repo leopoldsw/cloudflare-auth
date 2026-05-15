@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import {
   collectReleaseReadinessAuditFailures,
+  collectReleaseReadinessAuditPathReferenceFailures,
   collectReleaseReadinessAuditTestReferenceFailures,
   releaseReadinessAuditPath,
 } from "./release-readiness-audit-checks.mjs";
@@ -16,6 +17,7 @@ try {
 
 const failures = [
   ...collectReleaseReadinessAuditFailures(audit),
+  ...collectReleaseReadinessAuditPathReferenceFailures(audit),
   ...collectReleaseReadinessAuditTestReferenceFailures(audit),
 ];
 if (failures.length > 0) {

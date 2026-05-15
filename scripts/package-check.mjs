@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { isJsonObject } from "./evidence-validation.mjs";
 import {
   collectReleaseReadinessAuditFailures,
+  collectReleaseReadinessAuditPathReferenceFailures,
   collectReleaseReadinessAuditTestReferenceFailures,
   releaseReadinessAuditPath,
 } from "./release-readiness-audit-checks.mjs";
@@ -720,6 +721,7 @@ async function verifyReleaseReadinessAudit() {
     return;
   }
   failures.push(...collectReleaseReadinessAuditFailures(audit));
+  failures.push(...collectReleaseReadinessAuditPathReferenceFailures(audit));
   failures.push(...collectReleaseReadinessAuditTestReferenceFailures(audit));
 
   const releaseChecklist = await readFile("docs/release-checklist.md", "utf8");

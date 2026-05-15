@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -24,7 +24,16 @@ type ReleaseReadinessAuditChecks = {
       missingTestMessage?: (testPath: string) => string;
     },
   ): string[];
+  collectReleaseReadinessAuditPathReferenceFailures(
+    audit: string,
+    options?: {
+      root?: string;
+      path?: string;
+      missingPathMessage?: (repoPath: string) => string;
+    },
+  ): string[];
   requiredReleaseReadinessAuditText: string[];
+  releaseReadinessAuditPathReferences(audit: string): string[];
 };
 
 describe("release readiness audit checks", () => {
@@ -87,9 +96,29 @@ describe("release readiness audit checks", () => {
     ]);
   });
 
+  it("reports missing referenced repo paths except known evidence blockers", async () => {
+    const checks = await loadChecks();
+    const fixture = await mkdtemp(join(tmpdir(), "cf-auth-release-audit-"));
+    await writeFixtureFile(fixture, "README.md", "");
+
+    expect(
+      checks.collectReleaseReadinessAuditPathReferenceFailures(
+        [
+          "`README.md` exists.",
+          "`docs/missing.md` is stale.",
+          "`docs/alpha-evidence.json` is intentionally blocked.",
+          "`tests/missing.test.ts` is handled by the test-reference check.",
+        ].join("\n"),
+        { root: fixture },
+      ),
+    ).toEqual([
+      "docs/release-readiness-audit.md: referenced repo path does not exist: docs/missing.md",
+    ]);
+  });
+
   it("verifies release audit files from the command line", async () => {
     const checks = await loadChecks();
-    const fixture = await writeAuditFixture(completeAuditText(checks));
+    const fixture = await writeAuditFixture(completeAuditText(checks), checks);
     const result = runReleaseAuditVerifier(fixture);
 
     expect(result.status).toBe(0);
@@ -100,6 +129,7 @@ describe("release readiness audit checks", () => {
     const checks = await loadChecks();
     const fixture = await writeAuditFixture(
       completeAuditText(checks).replace("Stage 12", "Stable 12"),
+      checks,
     );
     const result = runReleaseAuditVerifier(fixture);
 
@@ -126,13 +156,37 @@ function completeAuditText(checks: ReleaseReadinessAuditChecks) {
   ].join("\n");
 }
 
-async function writeAuditFixture(audit: string) {
+async function writeAuditFixture(
+  audit: string,
+  checks: ReleaseReadinessAuditChecks,
+) {
   const fixture = await mkdtemp(join(tmpdir(), "cf-auth-release-audit-"));
   await mkdir(join(fixture, "docs"));
   await mkdir(join(fixture, "tests"));
   await writeFile(join(fixture, "tests/lint.test.ts"), "");
+  for (const repoPath of checks.releaseReadinessAuditPathReferences(audit)) {
+    if (repoPath.endsWith(".test.ts")) continue;
+    if (
+      [
+        "docs/alpha-evidence.json",
+        "docs/beta-evidence.json",
+        "docs/deploy-button-evidence.json",
+        "docs/package-ownership.json",
+        "docs/security-release-tracker.json",
+      ].includes(repoPath)
+    ) {
+      continue;
+    }
+    await writeFixtureFile(fixture, repoPath, "");
+  }
   await writeFile(join(fixture, "docs/release-readiness-audit.md"), audit);
   return fixture;
+}
+
+async function writeFixtureFile(root: string, path: string, content: string) {
+  const target = join(root, path);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, content);
 }
 
 function runReleaseAuditVerifier(cwd: string) {

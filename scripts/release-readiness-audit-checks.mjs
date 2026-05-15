@@ -3,6 +3,14 @@ import { join } from "node:path";
 
 export const releaseReadinessAuditPath = "docs/release-readiness-audit.md";
 
+const allowedMissingReleaseReadinessAuditPaths = new Set([
+  "docs/alpha-evidence.json",
+  "docs/beta-evidence.json",
+  "docs/deploy-button-evidence.json",
+  "docs/package-ownership.json",
+  "docs/security-release-tracker.json",
+]);
+
 export const requiredReleaseReadinessAuditText = [
   "cloudflare_auth_implementation_plan.md",
   "## Completion Audit",
@@ -158,4 +166,40 @@ export function collectReleaseReadinessAuditTestReferenceFailures(
   }
 
   return failures;
+}
+
+export function collectReleaseReadinessAuditPathReferenceFailures(
+  audit,
+  options = {},
+) {
+  const {
+    root = process.cwd(),
+    path = releaseReadinessAuditPath,
+    missingPathMessage = (repoPath) =>
+      `${path}: referenced repo path does not exist: ${repoPath}`,
+  } = options;
+  const failures = [];
+
+  for (const repoPath of releaseReadinessAuditPathReferences(audit)) {
+    if (allowedMissingReleaseReadinessAuditPaths.has(repoPath)) continue;
+    if (/^tests\/[^`\s]+\.test\.ts$/u.test(repoPath)) continue;
+    if (!existsSync(join(root, repoPath))) {
+      failures.push(missingPathMessage(repoPath));
+    }
+  }
+
+  return failures;
+}
+
+export function releaseReadinessAuditPathReferences(audit) {
+  const pathPrefix =
+    /^(?:\.changeset\/|\.github\/|docs\/|examples\/|migrations\/|packages\/|schemas\/|scripts\/|templates\/|tests\/|CONTRIBUTING\.md$|LICENSE$|README\.md$|SECURITY\.md$|package\.json$|pnpm-workspace\.yaml$|tsconfig[\w.-]*$|tsup\.config\.ts$|vitest[\w.-]*$)/u;
+  return [
+    ...new Set(
+      [...audit.matchAll(/`([^`]+)`/gu)]
+        .map((match) => match[1])
+        .filter((value) => pathPrefix.test(value))
+        .filter((value) => !/[\s*]/u.test(value)),
+    ),
+  ].sort();
 }
