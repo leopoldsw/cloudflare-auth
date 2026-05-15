@@ -1323,6 +1323,8 @@ function releaseReadinessAuditFixtureText() {
     "## V1 Exclusion Audit",
     "role/permission framework",
     "peppering",
+    "docs/metrics.md",
+    "runtime auth-event metrics docs",
     "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
     "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
     "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
