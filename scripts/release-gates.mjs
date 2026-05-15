@@ -316,6 +316,8 @@ await requireText(
   "scripts/smoke-local-tarballs.mjs",
   'readdir(join(process.cwd(), "migrations"))',
 );
+await requireText("scripts/smoke-local-tarballs.mjs", 'appName = "my-app"');
+await requireText("scripts/smoke-local-tarballs.mjs", "{ cwd: appDir }");
 await requireText("scripts/smoke-local-tarballs.mjs", "migrationFiles.map");
 await requireText(
   "scripts/smoke-local-tarballs.mjs",

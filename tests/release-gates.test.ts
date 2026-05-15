@@ -1108,6 +1108,8 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
       "scripts/smoke-local-tarballs.mjs",
       [
         'readdir(join(process.cwd(), "migrations"))',
+        'appName = "my-app"',
+        "{ cwd: appDir }",
         "migrationFiles.map",
         "assertLocalSessionCookie",
         "cfauth-session=",

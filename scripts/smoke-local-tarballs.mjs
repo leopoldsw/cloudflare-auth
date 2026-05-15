@@ -27,7 +27,8 @@ const temp = await mkdtemp(join(tmpdir(), "cf-auth-tarball-smoke-"));
 const packDir = join(temp, "packs");
 const stagedDir = join(temp, "staged");
 const createRunnerDir = join(temp, "create-runner");
-const appDir = join(temp, "app");
+const appName = "my-app";
+const appDir = join(createRunnerDir, appName);
 await mkdir(packDir, { recursive: true });
 await mkdir(stagedDir, { recursive: true });
 await mkdir(createRunnerDir, { recursive: true });
@@ -81,7 +82,7 @@ run("pnpm", [
   createRunnerDir,
   "exec",
   "create-cloudflare-auth",
-  appDir,
+  appName,
   "--yes",
 ]);
 
@@ -138,15 +139,11 @@ await writeFile(appPackagePath, JSON.stringify(appPackage, null, 2) + "\n");
 const installMode = process.env.CF_AUTH_TARBALL_INSTALL === "1";
 if (installMode) {
   await writeFile(join(appDir, "smoke-auth.test.ts"), smokeAuthTestSource());
-  run("pnpm", [
-    "--dir",
-    appDir,
-    "install",
-    "--prefer-offline",
-    "--no-frozen-lockfile",
-  ]);
-  run("pnpm", ["--dir", appDir, "build"]);
-  run("pnpm", ["--dir", appDir, "test"]);
+  run("pnpm", ["install", "--prefer-offline", "--no-frozen-lockfile"], {
+    cwd: appDir,
+  });
+  run("pnpm", ["build"], { cwd: appDir });
+  run("pnpm", ["test"], { cwd: appDir });
   run(process.execPath, [
     join(root, "scripts", "smoke-wrangler-dev.mjs"),
     appDir,
@@ -154,7 +151,7 @@ if (installMode) {
 }
 
 const migrate = installMode
-  ? run("pnpm", ["--dir", appDir, "exec", "cf-auth", "migrate", "--local"])
+  ? run("pnpm", ["exec", "cf-auth", "migrate", "--local"], { cwd: appDir })
   : run(
       "node",
       [join(root, "packages", "cli", "dist", "bin.js"), "migrate", "--local"],
