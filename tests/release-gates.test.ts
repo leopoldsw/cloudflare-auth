@@ -1,4 +1,11 @@
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -619,6 +626,19 @@ process.exit(1);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("release gates passed");
+  });
+
+  it("requires package ownership evidence before alpha packages publish", async () => {
+    const root = await releaseGateFixture({
+      alphaEvidence: false,
+      deployButtonEvidence: false,
+      packageVersion: "0.1.0-alpha.0",
+    });
+    await rm(join(root, "docs", "package-ownership.json"));
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docs/package-ownership.json");
   });
 
   it("requires stable release artifacts when packages enter 1.0", async () => {
