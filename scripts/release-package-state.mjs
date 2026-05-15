@@ -22,7 +22,7 @@ export async function readReleasePackageState() {
       continue;
     }
     if (!pkg.private) {
-      if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+      if (typeof pkg.version !== "string" || pkg.version.trim().length === 0) {
         failures.push(`${path}: version must be a non-empty string`);
         continue;
       }

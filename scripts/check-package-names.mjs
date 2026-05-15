@@ -11,10 +11,8 @@ const failures = [];
 const workspacePackages = await workspacePackageManifests();
 const packages = workspacePackages
   .filter((entry) => !entry.pkg.private)
-  .map((entry) => ({
-    name: String(entry.pkg.name),
-    version: String(entry.pkg.version),
-  }))
+  .map((entry) => workspacePackageIdentity(entry))
+  .filter((pkg) => pkg !== null)
   .sort((a, b) => a.name.localeCompare(b.name));
 const reservedPackages = workspacePackages
   .filter(
@@ -23,10 +21,8 @@ const reservedPackages = workspacePackages
       (entry.pkg.name === "cf-auth" ||
         entry.pkg.name === "create-cloudflare-auth"),
   )
-  .map((entry) => ({
-    name: String(entry.pkg.name),
-    version: String(entry.pkg.version),
-  }))
+  .map((entry) => workspacePackageIdentity(entry))
+  .filter((pkg) => pkg !== null)
   .sort((a, b) => a.name.localeCompare(b.name));
 const reservedPackageNames = new Set(reservedPackages.map((pkg) => pkg.name));
 
@@ -253,6 +249,21 @@ async function workspacePackageManifests() {
   return output;
 }
 
+function workspacePackageIdentity(entry) {
+  const name = entry.pkg.name;
+  const version = entry.pkg.version;
+  let valid = true;
+  if (typeof name !== "string" || name.trim().length === 0) {
+    failures.push(`${entry.path}: name must be a non-empty string`);
+    valid = false;
+  }
+  if (typeof version !== "string" || version.trim().length === 0) {
+    failures.push(`${entry.path}: version must be a non-empty string`);
+    valid = false;
+  }
+  return valid ? { name, version } : null;
+}
+
 async function readJsonObject(path) {
   let parsed;
   try {
@@ -304,17 +315,20 @@ function parseRegistryPackageResult(value, label) {
   }
   const registryName = parsed.name;
   const registryVersion = parsed.version;
-  if (typeof registryName !== "string" || registryName.length === 0) {
+  if (typeof registryName !== "string" || registryName.trim().length === 0) {
     failures.push(`${label}: name must be a non-empty string`);
   }
-  if (typeof registryVersion !== "string" || registryVersion.length === 0) {
+  if (
+    typeof registryVersion !== "string" ||
+    registryVersion.trim().length === 0
+  ) {
     failures.push(`${label}: version must be a non-empty string`);
   }
   if (
     typeof registryName !== "string" ||
-    registryName.length === 0 ||
+    registryName.trim().length === 0 ||
     typeof registryVersion !== "string" ||
-    registryVersion.length === 0
+    registryVersion.trim().length === 0
   ) {
     return null;
   }

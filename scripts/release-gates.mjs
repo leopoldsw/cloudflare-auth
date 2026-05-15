@@ -24,11 +24,11 @@ for (const dir of packageDirs) {
   if (!pkg) continue;
   if (!pkg.private) {
     let validPackageIdentity = true;
-    if (typeof pkg.name !== "string" || pkg.name.length === 0) {
+    if (typeof pkg.name !== "string" || pkg.name.trim().length === 0) {
       failures.push(`${dir}/package.json: name must be a non-empty string`);
       validPackageIdentity = false;
     }
-    if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+    if (typeof pkg.version !== "string" || pkg.version.trim().length === 0) {
       failures.push(`${dir}/package.json: version must be a non-empty string`);
       validPackageIdentity = false;
     }

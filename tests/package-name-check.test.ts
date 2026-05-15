@@ -112,6 +112,23 @@ describe("package name registry checks", () => {
     );
   });
 
+  it("rejects workspace package manifests without nonblank string identities", async () => {
+    const fixture = await packageNameFixture();
+    await writeFile(
+      join(fixture.root, "packages", "cli", "package.json"),
+      `${JSON.stringify({ name: "   ", version: "   " })}\n`,
+    );
+    const result = runPackageNameCheck(fixture.root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packages/cli/package.json: name must be a non-empty string",
+    );
+    expect(result.stderr).toContain(
+      "packages/cli/package.json: version must be a non-empty string",
+    );
+  });
+
   it("rejects non-object package ownership array entries", async () => {
     const fixture = await packageNameFixture();
     await writeFile(
@@ -175,11 +192,14 @@ describe("package name registry checks", () => {
 
   it("rejects npm package lookup results without string versions", async () => {
     const fixture = await packageNameFixture({
-      cliRegistryOutput: JSON.stringify({ name: "@cf-auth/cli", version: 1 }),
+      cliRegistryOutput: JSON.stringify({ name: "   ", version: "   " }),
     });
     const result = runPackageNameCheck(fixture.root);
 
     expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "@cf-auth/cli: npm view result: name must be a non-empty string",
+    );
     expect(result.stderr).toContain(
       "@cf-auth/cli: npm view result: version must be a non-empty string",
     );
