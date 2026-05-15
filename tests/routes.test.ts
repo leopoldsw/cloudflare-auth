@@ -1666,13 +1666,40 @@ describe("auth HTTP runtime", () => {
     });
     expect(unsupportedPulls).toBeLessThan(2);
 
+    const productionEnv = {
+      ...env,
+      AUTH_ENV: "production",
+      AUTH_PUBLIC_ORIGIN: "https://example.com",
+    };
+    for (const [path, body] of [
+      ["/auth/magic-link/consume", "token=missing-origin"],
+      ["/auth/email/verify/consume", "token=missing-origin"],
+      [
+        "/auth/password/reset/confirm",
+        "token=missing-origin&password=correct+horse+battery+staple",
+      ],
+    ] as const) {
+      const tokenFormWithoutOrigin = await handler.fetch(
+        new Request(`https://example.com${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+        }),
+        productionEnv,
+        { waitUntil() {} } as unknown as ExecutionContext,
+      );
+      expect(tokenFormWithoutOrigin?.status).toBe(403);
+      expectAuthSecurityHeaders(tokenFormWithoutOrigin);
+      if (!tokenFormWithoutOrigin)
+        throw new Error("expected missing-origin token form response");
+      await expect(tokenFormWithoutOrigin.json()).resolves.toMatchObject({
+        error: { code: "invalid_origin" },
+      });
+    }
+
     const prod = await handler.fetch(
       new Request("https://example.com/auth/logout", { method: "POST" }),
-      {
-        ...env,
-        AUTH_ENV: "production",
-        AUTH_PUBLIC_ORIGIN: "https://example.com",
-      },
+      productionEnv,
       { waitUntil() {} } as unknown as ExecutionContext,
     );
     expect(prod?.status).toBe(403);
