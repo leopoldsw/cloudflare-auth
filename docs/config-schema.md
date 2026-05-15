@@ -57,6 +57,7 @@ Stable nested keys:
 - `login.requireVerifiedEmail`
 - `magicLink.allowSignups`
 - `magicLink.expiresInMinutes`
+- `magicLink.consumeMethod`
 - `magicLink.activeTokenPolicy`
 - `passwordReset.enabled`
 - `passwordReset.expiresInMinutes`
@@ -68,6 +69,7 @@ Stable nested keys:
 - `passwordReset.activeTokenPolicy`
 - `emailVerification.enabled`
 - `emailVerification.expiresInHours`
+- `emailVerification.consumeMethod`
 - `emailVerification.createSessionAfterVerification`
 - `emailVerification.activeTokenPolicy`
 - `turnstile.mode`
@@ -101,6 +103,8 @@ Defaults:
 - `request.enumerationMinResponseMs` defaults to `0`
 - `request.enumerationJitterMs` defaults to `0`
 - `passwordReset.resetPage.mode` defaults to `built-in`
+- `magicLink.consumeMethod` defaults to `confirmation-post`
+- `emailVerification.consumeMethod` defaults to `confirmation-post`
 - `passwordHashing.profile` defaults to `workers-balanced`
 - `passwordHashing.maxConcurrentHashesPerIsolate` defaults to `1`
 - `passwordHashing.queueTimeoutMs` defaults to `2000`

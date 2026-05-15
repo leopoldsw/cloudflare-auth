@@ -90,6 +90,7 @@ Email-token flows:
 | -------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
 | `magicLink.allowSignups`                           | `false`               | Allows magic-link JIT signup.                                                                             |
 | `magicLink.expiresInMinutes`                       | `15`                  | Magic-link token lifetime.                                                                                |
+| `magicLink.consumeMethod`                          | `confirmation-post`   | Magic-link GET pages render a form; token consumption happens on POST.                                    |
 | `magicLink.activeTokenPolicy`                      | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
 | `passwordReset.enabled`                            | `true`                | Enables password-reset request and confirm routes.                                                        |
 | `passwordReset.expiresInMinutes`                   | `30`                  | Reset token lifetime.                                                                                     |
@@ -101,6 +102,7 @@ Email-token flows:
 | `passwordReset.activeTokenPolicy`                  | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
 | `emailVerification.enabled`                        | `true`                | Enables verification request and consume routes.                                                          |
 | `emailVerification.expiresInHours`                 | `24`                  | Verification token lifetime.                                                                              |
+| `emailVerification.consumeMethod`                  | `confirmation-post`   | Verification GET pages render a form; token consumption happens on POST.                                  |
 | `emailVerification.createSessionAfterVerification` | `false`               | Creates a session after verification when true.                                                           |
 | `emailVerification.activeTokenPolicy`              | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
 

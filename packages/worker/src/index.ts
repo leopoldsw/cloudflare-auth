@@ -1299,6 +1299,7 @@ export interface AuthConfig extends MinimalAuthConfig {
   magicLink: {
     allowSignups: boolean;
     expiresInMinutes: number;
+    consumeMethod: "confirmation-post";
     activeTokenPolicy: "invalidate-previous" | "allow-multiple-active";
   };
   passwordReset: {
@@ -1313,6 +1314,7 @@ export interface AuthConfig extends MinimalAuthConfig {
   emailVerification: {
     enabled: boolean;
     expiresInHours: number;
+    consumeMethod: "confirmation-post";
     createSessionAfterVerification: boolean;
     activeTokenPolicy: "invalidate-previous" | "allow-multiple-active";
   };
@@ -1465,6 +1467,7 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
     magicLink: {
       allowSignups: false,
       expiresInMinutes: 15,
+      consumeMethod: "confirmation-post",
       activeTokenPolicy: "invalidate-previous",
       ...config.magicLink,
     },
@@ -1481,6 +1484,7 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
     emailVerification: {
       enabled: true,
       expiresInHours: 24,
+      consumeMethod: "confirmation-post",
       createSessionAfterVerification: false,
       activeTokenPolicy: "invalidate-previous",
       ...config.emailVerification,
@@ -1697,6 +1701,17 @@ function assertFeatureOptions(config: AuthConfig): void {
       throw new AuthCryptoError(
         "invalid active token policy",
         "invalid_active_token_policy",
+      );
+    }
+  }
+  for (const method of [
+    config.magicLink.consumeMethod,
+    config.emailVerification.consumeMethod,
+  ]) {
+    if (method !== "confirmation-post") {
+      throw new AuthCryptoError(
+        "unsupported token consume method",
+        "invalid_feature_config",
       );
     }
   }

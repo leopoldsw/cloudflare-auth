@@ -530,6 +530,21 @@ describe("auth HTTP runtime", () => {
     ).toThrow(AuthCryptoError);
     expect(() =>
       invalid({
+        magicLink: {
+          consumeMethod: "get" as AuthConfig["magicLink"]["consumeMethod"],
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        emailVerification: {
+          consumeMethod:
+            "get" as AuthConfig["emailVerification"]["consumeMethod"],
+        },
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
         passwordReset: {
           resetPage: { mode: "custom" },
         } as AuthConfig["passwordReset"],
