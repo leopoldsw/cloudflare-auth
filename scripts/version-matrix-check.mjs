@@ -109,7 +109,35 @@ await requireText(
 await requireText("packages/cli/src/index.ts", `"observability": {`);
 await requireText(
   "scripts/export-deploy-template.mjs",
-  `compatibility_date: "${matrix.workersCompatibilityDate}"`,
+  'const versionMatrix = await readJsonObject("scripts/version-matrix.json")',
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "pkg.packageManager = `pnpm@${versionMatrix.pnpm}`",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "pkg.engines = { node: versionMatrix.node }",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "hono: versionMatrix.hono",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "typescript: versionMatrix.typescript",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "vitest: versionMatrix.vitest",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "wrangler: versionMatrix.wrangler",
+);
+await requireText(
+  "scripts/export-deploy-template.mjs",
+  "compatibility_date: versionMatrix.workersCompatibilityDate",
 );
 await requireText("scripts/export-deploy-template.mjs", "observability: {");
 await requireText(
@@ -118,7 +146,23 @@ await requireText(
 );
 await requireText(
   "scripts/smoke-production-cloudflare.mjs",
-  `compatibility_date: "${matrix.workersCompatibilityDate}"`,
+  'const versionMatrix = await readJsonObject("scripts/version-matrix.json")',
+);
+await requireText(
+  "scripts/smoke-production-cloudflare.mjs",
+  "dependencies.hono = versionMatrix.hono",
+);
+await requireText(
+  "scripts/smoke-production-cloudflare.mjs",
+  "devDependencies.typescript = versionMatrix.typescript",
+);
+await requireText(
+  "scripts/smoke-production-cloudflare.mjs",
+  "devDependencies.wrangler = versionMatrix.wrangler",
+);
+await requireText(
+  "scripts/smoke-production-cloudflare.mjs",
+  "compatibility_date: versionMatrix.workersCompatibilityDate",
 );
 await requireText(
   "scripts/smoke-production-cloudflare.mjs",

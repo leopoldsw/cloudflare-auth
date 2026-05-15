@@ -24,6 +24,7 @@ const publicOrigin =
 const packageTag =
   process.env.CF_AUTH_DEPLOY_TEMPLATE_PACKAGE_TAG?.trim() || "beta";
 const cliPackageSpec = `@cf-auth/cli@${packageTag}`;
+const versionMatrix = await readJsonObject("scripts/version-matrix.json");
 
 await assertEmptyOrMissing(target);
 await mkdir(target, { recursive: true });
@@ -67,6 +68,8 @@ async function writePackageJson(dir) {
   const pkg = await readJsonObject("templates/hono-basic/package.json");
   pkg.name = templateName;
   pkg.private = true;
+  pkg.packageManager = `pnpm@${versionMatrix.pnpm}`;
+  pkg.engines = { node: versionMatrix.node };
   pkg.scripts = {
     dev: "wrangler dev",
     build: "tsc -p tsconfig.json --noEmit",
@@ -78,13 +81,13 @@ async function writePackageJson(dir) {
     "@cf-auth/email-cloudflare": packageTag,
     "@cf-auth/hono": packageTag,
     "@cf-auth/worker": packageTag,
-    hono: "4.12.18",
+    hono: versionMatrix.hono,
   };
   pkg.devDependencies = {
     "@cf-auth/cli": packageTag,
-    typescript: "6.0.3",
-    vitest: "4.1.6",
-    wrangler: "4.90.1",
+    typescript: versionMatrix.typescript,
+    vitest: versionMatrix.vitest,
+    wrangler: versionMatrix.wrangler,
   };
   pkg.cloudflare = {
     bindings: {
@@ -126,7 +129,7 @@ async function writeWranglerJson(dir) {
     $schema: "./node_modules/wrangler/config-schema.json",
     name: templateName,
     main: "src/index.ts",
-    compatibility_date: "2026-05-15",
+    compatibility_date: versionMatrix.workersCompatibilityDate,
     compatibility_flags: ["nodejs_compat"],
     observability: {
       enabled: true,

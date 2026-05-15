@@ -12,6 +12,7 @@ import {
 } from "./package-json-utils.mjs";
 
 const root = process.cwd();
+const versionMatrix = await readJsonObject("scripts/version-matrix.json");
 const requiredGate = "CF_AUTH_PRODUCTION_SMOKE";
 if (process.env[requiredGate] !== "1") {
   throw new Error(
@@ -122,7 +123,7 @@ async function writeSmokePackageJson(appDir, packageTag) {
   dependencies["@cf-auth/worker"] = packageSpecs["@cf-auth/worker"];
   dependencies["@cf-auth/email-cloudflare"] =
     packageSpecs["@cf-auth/email-cloudflare"];
-  dependencies.hono = "4.12.18";
+  dependencies.hono = versionMatrix.hono;
   const devDependencies = getObjectSection(
     pkg,
     "devDependencies",
@@ -130,8 +131,8 @@ async function writeSmokePackageJson(appDir, packageTag) {
     { create: true },
   );
   devDependencies["@cf-auth/cli"] = packageSpecs["@cf-auth/cli"];
-  devDependencies.typescript = "6.0.3";
-  devDependencies.wrangler = "4.90.1";
+  devDependencies.typescript = versionMatrix.typescript;
+  devDependencies.wrangler = versionMatrix.wrangler;
   if (!packageTag) {
     const pnpm = getObjectSection(
       pkg,
@@ -213,7 +214,7 @@ async function writeSmokeWranglerConfig(appDir, input) {
     name: input.workerName,
     main: "src/index.ts",
     account_id: input.accountId,
-    compatibility_date: "2026-05-15",
+    compatibility_date: versionMatrix.workersCompatibilityDate,
     compatibility_flags: ["nodejs_compat"],
     observability: {
       enabled: true,
