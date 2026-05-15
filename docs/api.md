@@ -47,6 +47,9 @@ effects.
 
 ## Custom Password Reset Pages
 
+Set `passwordReset.resetPage: { mode: "custom", path: "/reset-password" }` to
+send reset email links to an app-owned page instead of the built-in page.
+
 The built-in `GET /auth/password/reset?token=...` page keeps the token on a
 minimal page with `Referrer-Policy: no-referrer`, no third-party assets, and a
 same-page history scrubber that removes the token from the current browser

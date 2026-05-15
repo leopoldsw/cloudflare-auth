@@ -1304,6 +1304,7 @@ export interface AuthConfig extends MinimalAuthConfig {
   passwordReset: {
     enabled: boolean;
     expiresInMinutes: number;
+    resetPage: { mode: "built-in" | "custom"; path?: string };
     revokeExistingSessions: boolean;
     createSessionAfterReset: boolean;
     markEmailVerifiedOnReset: boolean;
@@ -1379,7 +1380,7 @@ const hashSemaphores = new Map<string, PasswordHashSemaphore>();
 
 export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
   const basePath = config.basePath ?? "/auth";
-  if (!/^\/(?!\/)(?!.*\/\/)(?!.*%2f)(?!.*%5c)[^?#]*[^/]$/iu.test(basePath)) {
+  if (!isSafeAppPath(basePath)) {
     throw new AuthCryptoError("invalid auth basePath", "invalid_base_path");
   }
   const turnstile = {
@@ -1470,6 +1471,7 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
     passwordReset: {
       enabled: true,
       expiresInMinutes: 30,
+      resetPage: { mode: "built-in" },
       revokeExistingSessions: true,
       createSessionAfterReset: false,
       markEmailVerifiedOnReset: true,
@@ -1749,6 +1751,44 @@ function assertFeatureOptions(config: AuthConfig): void {
       "invalid_feature_config",
     );
   }
+  const resetPage = config.passwordReset.resetPage;
+  if (!resetPage || typeof resetPage !== "object") {
+    throw new AuthCryptoError(
+      "invalid password reset page config",
+      "invalid_reset_page_config",
+    );
+  }
+  if (resetPage.mode !== "built-in" && resetPage.mode !== "custom") {
+    throw new AuthCryptoError(
+      "invalid password reset page mode",
+      "invalid_reset_page_config",
+    );
+  }
+  if (resetPage.mode === "built-in") {
+    if (resetPage.path !== undefined) {
+      throw new AuthCryptoError(
+        "built-in password reset page must not set path",
+        "invalid_reset_page_config",
+      );
+    }
+  } else if (
+    typeof resetPage.path !== "string" ||
+    !isSafeAppPath(resetPage.path) ||
+    pathWithinBasePath(resetPage.path, config.basePath)
+  ) {
+    throw new AuthCryptoError(
+      "custom password reset page path must be a safe app path outside basePath",
+      "invalid_reset_page_config",
+    );
+  }
+}
+
+function isSafeAppPath(path: string): boolean {
+  return /^\/(?!\/)(?!.*\/\/)(?!.*%2f)(?!.*%5c)[^?#]*[^/]$/iu.test(path);
+}
+
+function pathWithinBasePath(path: string, basePath: string): boolean {
+  return path === basePath || path.startsWith(`${basePath}/`);
 }
 
 function assertExactOriginList(values: string[], code: string): void {
@@ -1954,6 +1994,8 @@ async function dispatchAuthRequest(
       return await handlePasswordResetRequest(request, runtime);
     if (path === "/password/reset" && request.method === "GET") {
       if (!runtime.config.passwordReset.enabled)
+        return errorResponse("Not found", 404, "not_found");
+      if (runtime.config.passwordReset.resetPage.mode === "custom")
         return errorResponse("Not found", 404, "not_found");
       return resetPage(request, runtime);
     }
@@ -2966,13 +3008,8 @@ async function createAndSendToken(
     createdAt: now,
     expiresAt: now + ttlMs,
   });
-  const path =
-    rawPurpose === "magic"
-      ? "/magic-link/verify"
-      : rawPurpose === "verify"
-        ? "/email/verify"
-        : "/password/reset";
-  const url = `${runtime.publicOrigin}${runtime.config.basePath}${path}?token=${encodeURIComponent(token)}`;
+  const path = emailTokenPagePath(runtime, rawPurpose);
+  const url = `${runtime.publicOrigin}${path}?token=${encodeURIComponent(token)}`;
   const input = { to, token, url, redirectTo, expiresAt: now + ttlMs };
   try {
     if (rawPurpose === "magic")
@@ -2998,6 +3035,18 @@ async function createAndSendToken(
     });
     return false;
   }
+}
+
+function emailTokenPagePath(
+  runtime: RuntimeContext,
+  rawPurpose: "magic" | "verify" | "reset",
+): string {
+  if (rawPurpose === "magic")
+    return `${runtime.config.basePath}/magic-link/verify`;
+  if (rawPurpose === "verify") return `${runtime.config.basePath}/email/verify`;
+  return runtime.config.passwordReset.resetPage.mode === "custom"
+    ? (runtime.config.passwordReset.resetPage.path ?? "/password/reset")
+    : `${runtime.config.basePath}/password/reset`;
 }
 
 async function recordEmailSendFailure(

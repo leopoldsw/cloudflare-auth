@@ -86,21 +86,23 @@ Signup and login:
 
 Email-token flows:
 
-| Key                                                | Default               | Notes                                              |
-| -------------------------------------------------- | --------------------- | -------------------------------------------------- |
-| `magicLink.allowSignups`                           | `false`               | Allows magic-link JIT signup.                      |
-| `magicLink.expiresInMinutes`                       | `15`                  | Magic-link token lifetime.                         |
-| `magicLink.activeTokenPolicy`                      | `invalidate-previous` | Also supports `allow-multiple-active`.             |
-| `passwordReset.enabled`                            | `true`                | Enables password-reset request and confirm routes. |
-| `passwordReset.expiresInMinutes`                   | `30`                  | Reset token lifetime.                              |
-| `passwordReset.revokeExistingSessions`             | `true`                | Revokes existing sessions after reset.             |
-| `passwordReset.createSessionAfterReset`            | `false`               | Creates a new session after reset when true.       |
-| `passwordReset.markEmailVerifiedOnReset`           | `true`                | Marks email verified after successful reset.       |
-| `passwordReset.activeTokenPolicy`                  | `invalidate-previous` | Also supports `allow-multiple-active`.             |
-| `emailVerification.enabled`                        | `true`                | Enables verification request and consume routes.   |
-| `emailVerification.expiresInHours`                 | `24`                  | Verification token lifetime.                       |
-| `emailVerification.createSessionAfterVerification` | `false`               | Creates a session after verification when true.    |
-| `emailVerification.activeTokenPolicy`              | `invalidate-previous` | Also supports `allow-multiple-active`.             |
+| Key                                                | Default               | Notes                                                                                                     |
+| -------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `magicLink.allowSignups`                           | `false`               | Allows magic-link JIT signup.                                                                             |
+| `magicLink.expiresInMinutes`                       | `15`                  | Magic-link token lifetime.                                                                                |
+| `magicLink.activeTokenPolicy`                      | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
+| `passwordReset.enabled`                            | `true`                | Enables password-reset request and confirm routes.                                                        |
+| `passwordReset.expiresInMinutes`                   | `30`                  | Reset token lifetime.                                                                                     |
+| `passwordReset.resetPage.mode`                     | `built-in`            | `built-in` sends links to `/auth/password/reset`; `custom` sends links to `passwordReset.resetPage.path`. |
+| `passwordReset.resetPage.path`                     | unset                 | Safe app path for custom reset pages, outside `basePath`.                                                 |
+| `passwordReset.revokeExistingSessions`             | `true`                | Revokes existing sessions after reset.                                                                    |
+| `passwordReset.createSessionAfterReset`            | `false`               | Creates a new session after reset when true.                                                              |
+| `passwordReset.markEmailVerifiedOnReset`           | `true`                | Marks email verified after successful reset.                                                              |
+| `passwordReset.activeTokenPolicy`                  | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
+| `emailVerification.enabled`                        | `true`                | Enables verification request and consume routes.                                                          |
+| `emailVerification.expiresInHours`                 | `24`                  | Verification token lifetime.                                                                              |
+| `emailVerification.createSessionAfterVerification` | `false`               | Creates a session after verification when true.                                                           |
+| `emailVerification.activeTokenPolicy`              | `invalidate-previous` | Also supports `allow-multiple-active`.                                                                    |
 
 Redirects:
 

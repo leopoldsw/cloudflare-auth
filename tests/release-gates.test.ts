@@ -1393,6 +1393,8 @@ const configFixtureKeys = [
   "magicLink.activeTokenPolicy",
   "passwordReset.enabled",
   "passwordReset.expiresInMinutes",
+  "passwordReset.resetPage.mode",
+  "passwordReset.resetPage.path",
   "passwordReset.revokeExistingSessions",
   "passwordReset.createSessionAfterReset",
   "passwordReset.markEmailVerifiedOnReset",

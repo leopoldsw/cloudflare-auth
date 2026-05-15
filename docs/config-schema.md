@@ -60,6 +60,8 @@ Stable nested keys:
 - `magicLink.activeTokenPolicy`
 - `passwordReset.enabled`
 - `passwordReset.expiresInMinutes`
+- `passwordReset.resetPage.mode`
+- `passwordReset.resetPage.path`
 - `passwordReset.revokeExistingSessions`
 - `passwordReset.createSessionAfterReset`
 - `passwordReset.markEmailVerifiedOnReset`
@@ -98,6 +100,7 @@ Defaults:
 - `request.maxBodyBytes` defaults to `16384`
 - `request.enumerationMinResponseMs` defaults to `0`
 - `request.enumerationJitterMs` defaults to `0`
+- `passwordReset.resetPage.mode` defaults to `built-in`
 - `passwordHashing.profile` defaults to `workers-balanced`
 - `passwordHashing.maxConcurrentHashesPerIsolate` defaults to `1`
 - `passwordHashing.queueTimeoutMs` defaults to `2000`

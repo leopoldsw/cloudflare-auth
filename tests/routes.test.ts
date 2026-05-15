@@ -530,6 +530,27 @@ describe("auth HTTP runtime", () => {
     ).toThrow(AuthCryptoError);
     expect(() =>
       invalid({
+        passwordReset: {
+          resetPage: { mode: "custom" },
+        } as AuthConfig["passwordReset"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        passwordReset: {
+          resetPage: { mode: "custom", path: "/auth/reset" },
+        } as AuthConfig["passwordReset"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
+        passwordReset: {
+          resetPage: { mode: "built-in", path: "/reset-password" },
+        } as AuthConfig["passwordReset"],
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      invalid({
         signup: {
           username: { enabled: false, required: true },
         },
@@ -1249,6 +1270,50 @@ describe("auth HTTP runtime", () => {
       headers: { Cookie: oldCookie },
     });
     await expect(oldSession.json()).resolves.toEqual({ user: null });
+  });
+
+  it("sends password reset links to a configured custom reset page", async () => {
+    const { authFetch, email } = await setup({
+      passwordReset: {
+        resetPage: { mode: "custom", path: "/reset-password" },
+      },
+    });
+    await signup(authFetch, "custom-reset@example.com");
+    const request = await authFetch("/auth/password/reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "custom-reset@example.com",
+        afterResetRedirectTo: "/after-custom-reset",
+      }),
+    });
+    expect(request.status).toBe(200);
+    const message = [...email.messages]
+      .reverse()
+      .find((item) => item.type === "reset");
+    if (!message) throw new Error("expected password reset email");
+    const url = new URL(message.url);
+    expect(url.origin).toBe(origin);
+    expect(url.pathname).toBe("/reset-password");
+    expect([...url.searchParams.keys()]).toEqual(["token"]);
+
+    const builtInPage = await authFetch(
+      `/auth/password/reset?token=${encodeURIComponent(message.token)}`,
+    );
+    expect(builtInPage.status).toBe(404);
+
+    const confirm = await authFetch("/auth/password/reset/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: message.token,
+        password: "new correct horse battery staple",
+      }),
+    });
+    await expect(confirm.json()).resolves.toMatchObject({
+      user: { email: "custom-reset@example.com" },
+      redirectTo: "/after-custom-reset",
+    });
   });
 
   it("renders safe HTML errors for invalid built-in token forms", async () => {
