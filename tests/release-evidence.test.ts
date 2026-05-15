@@ -747,6 +747,63 @@ describe("release evidence verifiers", () => {
     }
   });
 
+  it("rejects checked-in example evidence files under forced gates", () => {
+    const cases: Array<{
+      script: string;
+      env: Record<string, string>;
+      message: string;
+    }> = [
+      {
+        script: "scripts/verify-alpha-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_ALPHA_EVIDENCE: "1",
+          CF_AUTH_ALPHA_EVIDENCE_PATH: "docs/alpha-evidence.example.json",
+        },
+        message: "replace placeholder alpha participant values",
+      },
+      {
+        script: "scripts/verify-beta-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+          CF_AUTH_BETA_EVIDENCE_PATH: "docs/beta-evidence.example.json",
+        },
+        message: "reviewedBy must not be a placeholder identity",
+      },
+      {
+        script: "scripts/verify-deploy-button-evidence.mjs",
+        env: {
+          CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE: "1",
+          CF_AUTH_DEPLOY_BUTTON_EVIDENCE_PATH:
+            "docs/deploy-button-evidence.example.json",
+        },
+        message: "status must be verified before public beta",
+      },
+      {
+        script: "scripts/verify-package-ownership.mjs",
+        env: {
+          CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP: "1",
+          CF_AUTH_PACKAGE_OWNERSHIP_PATH: "docs/package-ownership.example.json",
+        },
+        message: "packages[0].ownershipConfirmed must be true",
+      },
+      {
+        script: "scripts/verify-security-release-tracker.mjs",
+        env: {
+          CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+          CF_AUTH_SECURITY_TRACKER_PATH:
+            "docs/security-release-tracker.example.json",
+        },
+        message: "reviewedBy must not be a placeholder identity",
+      },
+    ];
+
+    for (const item of cases) {
+      const result = runScript(item.script, item.env);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(item.message);
+    }
+  });
+
   it("requires alpha evidence for stable package versions", async () => {
     const cwd = await packageVersionFixture("1.0.0");
     const result = runScript("scripts/verify-alpha-evidence.mjs", {}, cwd);
