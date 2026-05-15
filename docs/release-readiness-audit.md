@@ -86,15 +86,15 @@ peppering.
 
 The local implementation and verifier surface is present for the plan stages:
 
-| Plan area                                         | Evidence                                                                                                                                                                              |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stage 0 docs and project identity                 | Root docs, license, security policy, package naming decision, and non-goals are checked in. Public quickstarts use the scoped CLI fallback until package ownership is proven.         |
-| Stage 1 tooling                                   | Root scripts cover format, lint, typecheck, tests, build, package checks, version matrix, platform assumptions, release gates, smoke tests, and publish dry-run.                      |
-| Stages 2-4 D1, crypto, sessions, and HTTP runtime | Migrations, repository contracts, hashed session/token storage, password envelopes, auth routes, CORS/origin checks, token confirmation pages, and route tests are checked in.        |
-| Stages 5-6 email, Hono, Worker, and client SDK    | Terminal, mock, Cloudflare Email, Hono adapter, plain Worker helpers, verified-user helpers, and browser client package are checked in and documented.                                |
-| Stage 7 CLI                                       | `init`, `migrate`, `doctor`, `deploy`, `generate`, `clean`, `rotate-secret`, user/session recovery helpers, Wrangler wrapping, and `doctor --report` are implemented with tests.      |
-| Stages 8-9 examples, docs, and security hardening | Examples, deployment template verifier, docs coverage verifier, Turnstile, Cloudflare Rate Limiting prefilter, cleanup, redaction, security docs, and hardening tests are checked in. |
-| Stages 10-12 release gates                        | Evidence schemas, verifier scripts, opt-in smoke workflows, release workflow gates, package-name checks, API/config approval gates, and security tracker verifier are checked in.     |
+| Plan area                                         | Evidence                                                                                                                                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage 0 docs and project identity                 | Root docs, license, security policy, package naming decision, and non-goals are checked in. Public quickstarts use the scoped CLI fallback until package ownership is proven.                               |
+| Stage 1 tooling                                   | Root scripts cover format, lint, typecheck, tests, build, package checks, version matrix, release gates, smoke tests, and publish dry-run; release gates and package checks cover platform-assumption docs. |
+| Stages 2-4 D1, crypto, sessions, and HTTP runtime | Migrations, repository contracts, hashed session/token storage, password envelopes, auth routes, CORS/origin checks, token confirmation pages, and route tests are checked in.                              |
+| Stages 5-6 email, Hono, Worker, and client SDK    | Terminal, mock, Cloudflare Email, Hono adapter, plain Worker helpers, verified-user helpers, and browser client package are checked in and documented.                                                      |
+| Stage 7 CLI                                       | `init`, `migrate`, `doctor`, `deploy`, `generate`, `clean`, `rotate-secret`, user/session recovery helpers, Wrangler wrapping, and `doctor --report` are implemented with tests.                            |
+| Stages 8-9 examples, docs, and security hardening | Examples, deployment template verifier, docs coverage verifier, Turnstile, Cloudflare Rate Limiting prefilter, cleanup, redaction, security docs, and hardening tests are checked in.                       |
+| Stages 10-12 release gates                        | Evidence schemas, verifier scripts, opt-in smoke workflows, release workflow gates, package-name checks, API/config approval gates, and security tracker verifier are checked in.                           |
 
 Recent local verification has passed for:
 
