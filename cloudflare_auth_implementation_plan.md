@@ -915,7 +915,7 @@ Generated `wrangler.jsonc`:
 ```jsonc
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "compatibility_date": "2026-05-14",
+  "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
@@ -1170,7 +1170,7 @@ Generated `wrangler.jsonc` for a local-first app with a named production environ
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "my-app-dev",
   "main": "src/index.ts",
-  "compatibility_date": "2026-05-14",
+  "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
