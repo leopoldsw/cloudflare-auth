@@ -505,6 +505,12 @@ async function verifyReleaseReadinessAudit() {
   }
   for (const needle of [
     "cloudflare_auth_implementation_plan.md",
+    "## Completion Audit",
+    "## Non-Negotiable Rules Audit",
+    "Repositories never generate raw auth tokens",
+    "## V1 Exclusion Audit",
+    "role/permission framework",
+    "peppering",
     "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
     "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
     "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
@@ -518,6 +524,16 @@ async function verifyReleaseReadinessAudit() {
   ]) {
     if (!audit.includes(needle)) {
       failures.push(`docs/release-readiness-audit.md: missing ${needle}`);
+    }
+  }
+  for (let stage = 0; stage <= 12; stage += 1) {
+    if (!audit.includes(`Stage ${stage}`)) {
+      failures.push(`docs/release-readiness-audit.md: missing Stage ${stage}`);
+    }
+  }
+  for (let rule = 1; rule <= 28; rule += 1) {
+    if (!new RegExp(`\\|\\s*${rule}\\s*\\|`, "u").test(audit)) {
+      failures.push(`docs/release-readiness-audit.md: missing Rule ${rule}`);
     }
   }
 

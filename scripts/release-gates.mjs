@@ -125,6 +125,12 @@ for (const text of [
   await requireText("docs/platform-assumptions.md", text);
 }
 for (const text of [
+  "## Completion Audit",
+  "## Non-Negotiable Rules Audit",
+  "Repositories never generate raw auth tokens",
+  "## V1 Exclusion Audit",
+  "role/permission framework",
+  "peppering",
   "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
   "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
   "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
@@ -138,6 +144,7 @@ for (const text of [
 ]) {
   await requireText("docs/release-readiness-audit.md", text);
 }
+await requireReleaseReadinessAuditCoverage();
 await requireText("SECURITY.md", "secret scanning");
 await requireText("SECURITY.md", "push protection");
 await requireText("SECURITY.md", "advisory evidence only");
@@ -418,6 +425,26 @@ async function requireText(path, needle) {
     failures.push(`${path}: missing required release gate text: ${needle}`);
   }
   return text;
+}
+
+async function requireReleaseReadinessAuditCoverage() {
+  let audit = "";
+  try {
+    audit = await readFile("docs/release-readiness-audit.md", "utf8");
+  } catch {
+    failures.push("docs/release-readiness-audit.md: could not be read");
+    return;
+  }
+  for (let stage = 0; stage <= 12; stage += 1) {
+    if (!audit.includes(`Stage ${stage}`)) {
+      failures.push(`docs/release-readiness-audit.md: missing Stage ${stage}`);
+    }
+  }
+  for (let rule = 1; rule <= 28; rule += 1) {
+    if (!new RegExp(`\\|\\s*${rule}\\s*\\|`, "u").test(audit)) {
+      failures.push(`docs/release-readiness-audit.md: missing Rule ${rule}`);
+    }
+  }
 }
 
 async function requireReleaseApproval(path, label) {

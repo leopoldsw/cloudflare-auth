@@ -36,6 +36,36 @@ describe("release gates", () => {
     expect(result.stderr).toContain("pnpm verify:new-gate");
   });
 
+  it("requires detailed release readiness audit sections", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "docs/release-readiness-audit.md",
+      "## Completion Audit",
+      "## Summary Audit",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docs/release-readiness-audit.md");
+    expect(result.stderr).toContain("## Completion Audit");
+  });
+
+  it("requires release readiness audit coverage for every implementation stage", async () => {
+    const root = await releaseGateFixture({ deployButtonEvidence: true });
+    await replaceFixtureText(
+      root,
+      "docs/release-readiness-audit.md",
+      "| Stage 12 1.0 readiness",
+      "| Stable readiness",
+    );
+    const result = runReleaseGates(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docs/release-readiness-audit.md");
+    expect(result.stderr).toContain("Stage 12");
+  });
+
   it("derives evidence example endpoint coverage from the smoke script", async () => {
     const root = await releaseGateFixture({ deployButtonEvidence: true });
     await writeFixtureFile(
@@ -840,22 +870,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "Deploy to Cloudflare",
       ],
     ],
-    [
-      "docs/release-readiness-audit.md",
-      [
-        "cloudflare_auth_implementation_plan.md",
-        "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
-        "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
-        "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
-        "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",
-        "pnpm check:package-names",
-        "CF_AUTH_REQUIRE_SECURITY_TRACKER=1 pnpm verify:security-tracker",
-        "docs/api-report.md",
-        "docs/config-schema.md",
-        "docs/decisions/security-review.md",
-        "0.0.0",
-      ],
-    ],
+    ["docs/release-readiness-audit.md", releaseReadinessAuditFixtureText()],
     [
       ".github/workflows/dependency-review.yml",
       ["actions/dependency-review-action"],
@@ -1086,6 +1101,41 @@ function releaseChecklistFixtureText() {
       )
       .map((script) => `pnpm ${script}`),
     "opt-in Wrangler dev smoke workflow passes",
+  ];
+}
+
+function releaseReadinessAuditFixtureText() {
+  return [
+    "cloudflare_auth_implementation_plan.md",
+    "## Completion Audit",
+    ...Array.from(
+      { length: 13 },
+      (_, stage) =>
+        `| Stage ${stage}${stage === 12 ? " 1.0 readiness" : ""} | evidence | evidence | status |`,
+    ),
+    "## Non-Negotiable Rules Audit",
+    ...Array.from(
+      { length: 28 },
+      (_, index) =>
+        `| ${String(index + 1).padEnd(4)} | ${
+          index === 27
+            ? "Repositories never generate raw auth tokens."
+            : `Rule ${index + 1}`
+        } | evidence |`,
+    ),
+    "## V1 Exclusion Audit",
+    "role/permission framework",
+    "peppering",
+    "CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence",
+    "CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence",
+    "CF_AUTH_REQUIRE_DEPLOY_BUTTON_EVIDENCE=1 pnpm verify:deploy-button-evidence",
+    "CF_AUTH_REQUIRE_PACKAGE_OWNERSHIP=1 pnpm verify:package-ownership",
+    "pnpm check:package-names",
+    "CF_AUTH_REQUIRE_SECURITY_TRACKER=1 pnpm verify:security-tracker",
+    "docs/api-report.md",
+    "docs/config-schema.md",
+    "docs/decisions/security-review.md",
+    "0.0.0",
   ];
 }
 

@@ -66,6 +66,38 @@ describe("package checks", () => {
     );
   });
 
+  it("requires detailed release readiness audit sections", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/release-readiness-audit.md",
+      "## Non-Negotiable Rules Audit",
+      "## Rule Notes",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/release-readiness-audit.md: missing ## Non-Negotiable Rules Audit",
+    );
+  });
+
+  it("requires release readiness audit coverage for every non-negotiable rule", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      "docs/release-readiness-audit.md",
+      "| 28   | Repositories never generate raw auth tokens.",
+      "| --   | Repositories never generate raw auth tokens.",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "docs/release-readiness-audit.md: missing Rule 28",
+    );
+  });
+
   it("requires the production smoke workflow safety gate", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(
