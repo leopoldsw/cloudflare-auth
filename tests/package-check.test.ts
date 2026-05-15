@@ -690,6 +690,40 @@ describe("package checks", () => {
     );
   });
 
+  it("requires security automation workflow controls", async () => {
+    const root = await packageCheckFixture();
+    await replaceFixtureText(
+      root,
+      ".github/workflows/dependency-review.yml",
+      "actions/dependency-review-action@v5",
+      "actions/checkout@v5",
+    );
+    await replaceFixtureText(
+      root,
+      ".github/workflows/codeql.yml",
+      "languages: javascript-typescript",
+      "languages: csharp",
+    );
+    await replaceFixtureText(
+      root,
+      ".github/dependabot.yml",
+      "package-ecosystem: github-actions",
+      "package-ecosystem: docker",
+    );
+    const result = runPackageCheck(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      ".github/workflows/dependency-review.yml: missing actions/dependency-review-action@v5",
+    );
+    expect(result.stderr).toContain(
+      ".github/workflows/codeql.yml: missing languages: javascript-typescript",
+    );
+    expect(result.stderr).toContain(
+      ".github/dependabot.yml: missing package-ecosystem: github-actions",
+    );
+  });
+
   it("requires npm auth token wiring for publication", async () => {
     const root = await packageCheckFixture();
     await replaceFixtureText(

@@ -228,6 +228,7 @@ await verifyTroubleshootingDocs();
 await verifyRootScripts();
 await verifyCiControls();
 await verifyWorkflowToolchainControls();
+await verifySecurityAutomationControls();
 await verifyReleaseControls();
 
 if (failures.length) {
@@ -1218,6 +1219,51 @@ async function verifyWorkflowToolchainControls() {
     }
     if (!text.includes(`node-version: ${nodeVersion}`)) {
       failures.push(`${file}: node-version must be ${nodeVersion}`);
+    }
+  }
+}
+
+async function verifySecurityAutomationControls() {
+  const dependencyReviewWorkflow = await readFile(
+    ".github/workflows/dependency-review.yml",
+    "utf8",
+  );
+  for (const needle of [
+    "pull_request:",
+    "contents: read",
+    "pull-requests: read",
+    "actions/dependency-review-action@v5",
+  ]) {
+    if (!dependencyReviewWorkflow.includes(needle)) {
+      failures.push(
+        `.github/workflows/dependency-review.yml: missing ${needle}`,
+      );
+    }
+  }
+
+  const codeqlWorkflow = await readFile(".github/workflows/codeql.yml", "utf8");
+  for (const needle of [
+    "pull_request:",
+    "branches: [main]",
+    "security-events: write",
+    "github/codeql-action/init@v4",
+    "languages: javascript-typescript",
+    "github/codeql-action/analyze@v4",
+  ]) {
+    if (!codeqlWorkflow.includes(needle)) {
+      failures.push(`.github/workflows/codeql.yml: missing ${needle}`);
+    }
+  }
+
+  const dependabot = await readFile(".github/dependabot.yml", "utf8");
+  for (const needle of [
+    "version: 2",
+    "package-ecosystem: npm",
+    "package-ecosystem: github-actions",
+    "interval: weekly",
+  ]) {
+    if (!dependabot.includes(needle)) {
+      failures.push(`.github/dependabot.yml: missing ${needle}`);
     }
   }
 }
