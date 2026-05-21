@@ -11,12 +11,12 @@
     "@cf-auth/email-cloudflare": "workspace:*",
     "@cf-auth/hono": "workspace:*",
     "@cf-auth/worker": "workspace:*",
-    "hono": "4.12.18"
+    "hono": "4.12.21"
   },
   "devDependencies": {
     "typescript": "6.0.3",
-    "vitest": "4.1.6",
-    "wrangler": "4.90.1"
+    "vitest": "4.1.7",
+    "wrangler": "4.93.0"
   },
   "engines": {
     "node": ">=22.12.0"
