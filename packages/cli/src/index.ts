@@ -3599,7 +3599,7 @@ function templatePackageJson(name: string, template: InitTemplate) {
       wrangler: "4.90.1",
       vitest: "4.1.6",
     },
-    engines: { node: ">=22.12.0" },
+    engines: { node: ">=22.13.0" },
     pnpm: {
       onlyBuiltDependencies: ["esbuild", "sharp", "workerd"],
     },

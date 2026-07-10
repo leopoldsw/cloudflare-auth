@@ -105,7 +105,7 @@ async function deployTemplateSourceFixture(
 
 function validVersionMatrix(): Record<string, string> {
   return {
-    node: ">=22.12.0",
+    node: ">=22.13.0",
     pnpm: "11.1.1",
     typescript: "6.0.3",
     wrangler: "4.90.1",

@@ -877,7 +877,7 @@ describe("package checks", () => {
     await replaceFixtureText(
       root,
       ".github/workflows/ci.yml",
-      "node-version: 22.12.0",
+      "node-version: 22.13.0",
       "node-version: 20.0.0",
     );
     await replaceFixtureText(
@@ -890,7 +890,7 @@ describe("package checks", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      ".github/workflows/ci.yml: node-version must be 22.12.0",
+      ".github/workflows/ci.yml: node-version must be 22.13.0",
     );
     expect(result.stderr).toContain(
       ".github/workflows/release.yml: pnpm/action-setup version must be 11.1.1",
