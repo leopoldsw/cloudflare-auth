@@ -21,8 +21,8 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm build
       - run: pnpm test
       - run: pnpm test:workers
-      - run: pnpm build
       - run: pnpm package:check
       - run: pnpm version-matrix:check
