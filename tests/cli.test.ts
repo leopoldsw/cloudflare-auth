@@ -960,7 +960,7 @@ describe("CLI MVP", () => {
 
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("Wrangler is unavailable");
-    expect(errors.join("\n")).toContain("install wrangler 4.90.1");
+    expect(errors.join("\n")).toContain("install wrangler 4.110.0");
   });
 
   it("doctor reports missing Workers compatibility settings", async () => {
