@@ -8,9 +8,31 @@ token matrix is in [Cloudflare API Permissions](cloudflare-permissions.md).
 Use the supported toolchain from [Toolchain](toolchain.md) when deploying
 release candidates or reproducing support reports.
 
-## Fresh Production Deployment
+## One-Command Production Setup
 
 From the generated application directory:
+
+```bash
+npx --package @cf-auth/cli@latest cf-auth setup --env production
+```
+
+`setup` runs the entire sequence below — provision, remote migrations,
+missing-secret creation, doctor, deploy, and deployed-endpoint verification —
+as one idempotent, non-interactive command. The first failed step stops the
+run and prints exactly one `Next action:` line;
+`setup --report --env production` emits redaction-safe JSON matching
+`schemas/setup-report.schema.json` where every failed step carries an
+executable `fix`. Automation should follow the convergence loop in
+[Automation Contract](automation.md); the Cloudflare steps that stay manual
+are the numbered runbook in [Manual Cloudflare Setup](manual-steps.md). Pass
+`--origin <https-origin>` when `AUTH_PUBLIC_ORIGIN` is not configured yet,
+and preview everything with `setup --dry-run --env production` in unfamiliar
+accounts.
+
+## Step-By-Step Escape Hatch
+
+The granular sequence behind `setup`, for operators who want to run or debug
+each stage individually. From the generated application directory:
 
 ```bash
 # 1. Ensure the selected D1 database exists and patch its real ID.

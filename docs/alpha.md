@@ -55,12 +55,20 @@ CF_AUTH_REQUIRE_ALPHA_EVIDENCE=1 pnpm verify:alpha-evidence
 Run from the generated app:
 
 ```bash
+npx --package @cf-auth/cli@alpha cf-auth setup --report --env production --output setup-report.json
+```
+
+`setup` provisions D1, applies remote migrations, creates a missing
+`AUTH_SECRET`, runs doctor, deploys, and verifies the deployed endpoints in
+one idempotent command. The equivalent granular sequence remains supported:
+
+```bash
 npx --package @cf-auth/cli@alpha cf-auth doctor --report --env production
 npx --package @cf-auth/cli@alpha cf-auth migrate --remote --env production
 npx --package @cf-auth/cli@alpha cf-auth deploy --env production
 ```
 
-Attach the `doctor --report` JSON to alpha feedback. The report schema is checked in at `schemas/doctor-report.schema.json`; reports omit raw secrets, tokens, cookies, emails, IPs, and user agents.
+Attach the `setup --report` or `doctor --report` JSON to alpha feedback. The report schemas are checked in at `schemas/setup-report.schema.json` and `schemas/doctor-report.schema.json`; reports omit raw secrets, tokens, cookies, emails, IPs, and user agents.
 
 ## Feedback Triage
 

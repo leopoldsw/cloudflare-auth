@@ -20,7 +20,11 @@ npx --package @cf-auth/cli@latest cf-auth migrate --status --remote --env produc
 `provision` is safe to rerun: it discovers an exact-name D1 database before
 creating one and safely updates the selected `AUTH_DB.database_id`. Migration
 discovery follows that binding's `migrations_dir`; custom directories do not
-fall back to a stale top-level `migrations/` folder.
+fall back to a stale top-level `migrations/` folder. When you want the whole
+production path instead of individual migration commands,
+`npx --package @cf-auth/cli@latest cf-auth setup --env production` performs
+provision, remote migrations, missing-secret creation, doctor, deploy, and
+verification in one idempotent command.
 
 Every migration updates `auth_schema_migrations` and `auth_meta.schema_version`. Future table rewrites that need temporary foreign-key deferral must use `PRAGMA defer_foreign_keys = on`.
 

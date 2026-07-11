@@ -38,22 +38,34 @@ Development uses the terminal email adapter by default. Magic-link, verification
 
 ## Deploy To Cloudflare
 
-`wrangler login` works for an interactive deploy. Automation should export
-`CLOUDFLARE_ACCOUNT_ID` and a scoped `CLOUDFLARE_API_TOKEN` using the exact
-permissions in [docs/cloudflare-permissions.md](docs/cloudflare-permissions.md).
+Production is one command. `wrangler login` works interactively; automation
+should export `CLOUDFLARE_ACCOUNT_ID` and a scoped `CLOUDFLARE_API_TOKEN`
+using the exact permissions in
+[docs/cloudflare-permissions.md](docs/cloudflare-permissions.md).
 
 ```bash
-npx --package @cf-auth/cli@latest cf-auth provision --env production
-npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production
-npx --package @cf-auth/cli@latest cf-auth rotate-secret --apply --env production
-npx --package @cf-auth/cli@latest cf-auth doctor --env production
-npx --package @cf-auth/cli@latest cf-auth deploy --env production
+npx --package @cf-auth/cli@latest cf-auth setup --env production
 ```
 
-`provision` discovers an existing exact-name D1 database before creating one
-and patches the selected binding, so the setup is safe to rerun. Use
-`npx --package @cf-auth/cli@latest cf-auth deploy --migrate --env production`
-for later migration-and-deploy cycles.
+`setup` provisions the D1 database (reusing an exact-name match before
+creating one), applies remote migrations, creates `AUTH_SECRET` only if it is
+missing (it never rotates an existing secret), runs `doctor`, deploys the
+Worker, and verifies the deployed `/auth` endpoints. It creates exactly this
+in your Cloudflare account: one Worker, one D1 database wired to the `AUTH_DB`
+binding, and the `AUTH_SECRET` Worker secret. Every step is idempotent, so
+rerunning `setup` is safe; pass `--origin https://your-domain` the first time
+if no public origin is configured yet.
+
+A few Cloudflare steps stay manual by design — API token creation, first-time
+workers.dev subdomain registration, Workers Paid plus email sender/domain DNS
+onboarding, and optional Turnstile or custom domains. Each has an exact
+runbook entry with a completion check in
+[docs/manual-steps.md](docs/manual-steps.md).
+
+Coding agents and CI should use the machine-readable path in
+[docs/automation.md](docs/automation.md): `setup --report` emits JSON where
+every failure carries an executable fix. The granular step-by-step command
+sequence remains documented in [docs/deployment.md](docs/deployment.md).
 
 Run `npx --package @cf-auth/cli@latest cf-auth doctor --report --env production` when you need redaction-safe JSON for support or release records.
 

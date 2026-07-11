@@ -44,8 +44,9 @@ pnpm dev
 Use `--template worker-basic` for a plain Worker. Re-running `init` is
 idempotent: it preserves application source, repairs missing auth
 configuration, and keeps a backup before replacing an existing Wrangler
-configuration. Development email links are printed by the terminal adapter and
-may also be viewed at `/auth/dev/emails`.
+configuration. `init` also writes a self-contained `AGENTS.md` runbook into
+the app (never overwriting an existing one). Development email links are
+printed by the terminal adapter and may also be viewed at `/auth/dev/emails`.
 
 ## Architecture map
 
@@ -86,24 +87,26 @@ Inspect the selected environment, not just the top-level config.
 
 ## Production setup
 
-For automation, export `CLOUDFLARE_ACCOUNT_ID` and a scoped
-`CLOUDFLARE_API_TOKEN`; see `docs/cloudflare-permissions.md`.
+Consumer setup is one command. For automation, export `CLOUDFLARE_ACCOUNT_ID`
+and a scoped `CLOUDFLARE_API_TOKEN`; see `docs/cloudflare-permissions.md`.
 
 ```bash
-npx --package @cf-auth/cli@latest cf-auth provision --env production
-npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production
-npx --package @cf-auth/cli@latest cf-auth rotate-secret --apply --env production
-npx --package @cf-auth/cli@latest cf-auth doctor --env production
-npx --package @cf-auth/cli@latest cf-auth deploy --env production
+npx --package @cf-auth/cli@latest cf-auth setup --env production
 ```
 
-Run `provision --dry-run` and `deploy --dry-run` first in unfamiliar
-accounts. Provisioning discovers an existing exact-name D1 database before
-creating one and safely patches the selected binding, so it can be rerun.
-`deploy --migrate` is the single-command migration-and-deploy path after
-initial resource, schema, and secret provisioning. Migrate a fresh D1 database
-before the first `rotate-secret --apply`: Wrangler secret updates create and
-deploy a Worker version immediately.
+`setup` composes provision, remote migrations, missing-secret creation,
+doctor, deploy, and deployed-endpoint verification. It is idempotent, never
+prompts, and never rotates an existing secret. Automation converges on the
+report loop in `docs/automation.md`: run `setup --report --env <name>`,
+execute each failed step's `fix` verbatim, and hand the human-only steps in
+`docs/manual-steps.md` to an operator. Run `setup --dry-run` first in
+unfamiliar accounts. Scaffolded apps carry their own `AGENTS.md` runbook with
+the same contract.
+
+The granular sequence remains documented in `docs/deployment.md` for
+debugging individual stages. When running it manually, migrate a fresh D1
+database before the first `rotate-secret --apply`: Wrangler secret updates
+create and deploy a Worker version immediately.
 
 Cloudflare Email sender/domain onboarding and its DNS readiness are external
 control-plane steps. The terminal adapter is deliberately rejected in preview

@@ -14,6 +14,12 @@ Cloudflare button evidence is verified, and the package names are confirmed.
 - one opt-in Cloudflare account fixture passes the production path:
 
 ```bash
+npx --package @cf-auth/cli@beta cf-auth setup --env production
+```
+
+or its granular equivalent:
+
+```bash
 npx --package @cf-auth/cli@beta cf-auth doctor --env production
 npx --package @cf-auth/cli@beta cf-auth migrate --remote --env production
 npx --package @cf-auth/cli@beta cf-auth deploy --env production

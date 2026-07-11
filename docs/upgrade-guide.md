@@ -16,6 +16,10 @@ npx --package @cf-auth/cli@latest cf-auth migrate --status --remote --env produc
 npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production
 ```
 
+`npx --package @cf-auth/cli@latest cf-auth setup --env production` is also
+safe to rerun on upgrades: it is idempotent, applies pending migrations,
+verifies the schema, redeploys, and never rotates an existing secret.
+
 Upgrade tests for 1.0 must prove every beta schema version migrates to the 1.0 schema while preserving:
 
 - users

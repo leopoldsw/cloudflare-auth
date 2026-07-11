@@ -73,7 +73,9 @@ Generated Wrangler config separates local development from a named production
 environment. Named environment vars and bindings are repeated because Wrangler
 does not inherit them. `cf-auth provision` owns deterministic D1 discovery and
 creation; Wrangler remains the interface for migrations, secrets, local
-development, and deploys.
+development, and deploys. `cf-auth setup` composes provision, remote
+migrations, missing-secret creation, doctor, deploy, and deployed-endpoint
+verification into one idempotent command.
 
 The only expected dashboard work is Cloudflare Email sender/domain onboarding
 and its DNS readiness. A Workers route/custom domain and its DNS records are

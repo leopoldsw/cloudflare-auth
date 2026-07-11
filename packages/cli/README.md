@@ -1,10 +1,20 @@
 # @cf-auth/cli
 
-CLI implementation for Cloudflare Auth. It provides project scaffolding,
-production D1 provisioning, migrations, diagnostics, deploy gates, atomic secret
-rotation, cleanup, and recovery helpers.
+CLI implementation for Cloudflare Auth. It provides project scaffolding, a
+one-command production setup, D1 provisioning, migrations, diagnostics, deploy
+gates, atomic secret rotation, cleanup, and recovery helpers.
 
 Common production flow:
+
+```bash
+npx --package @cf-auth/cli@latest cf-auth setup --env production
+```
+
+`setup` composes the granular commands below — provision, remote migrations,
+missing-secret creation (never rotating an existing secret), doctor, deploy,
+and deployed-endpoint verification — into one idempotent, non-interactive
+command with a machine-readable `--report` mode. Each stage remains available
+individually:
 
 ```bash
 npx --package @cf-auth/cli@latest cf-auth provision --env production
