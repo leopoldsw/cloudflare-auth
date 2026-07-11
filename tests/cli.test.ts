@@ -3887,8 +3887,721 @@ export default app;
   });
 });
 
+describe("CLI setup", () => {
+  it("provisions, secures, migrates, checks, deploys, and verifies in order", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner, state } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const output: string[] = [];
+    const code = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(0);
+    const text = output.join("\n");
+    expect(text).toContain("Setup complete for environment production.");
+    expect(text).toContain("draft Worker");
+    const createIndex = callIndex(state.calls, "wrangler d1 create app-auth");
+    const bulkIndex = callIndex(state.calls, "wrangler secret bulk");
+    const applyIndex = callIndex(
+      state.calls,
+      "wrangler d1 migrations apply app-auth --remote --env production",
+    );
+    const deployIndex = callIndex(state.calls, "wrangler deploy");
+    expect(createIndex).toBeGreaterThan(-1);
+    expect(applyIndex).toBeGreaterThan(createIndex);
+    expect(bulkIndex).toBeGreaterThan(applyIndex);
+    expect(deployIndex).toBeGreaterThan(bulkIndex);
+    expect(
+      state.calls.filter((call) => call === "wrangler --version"),
+    ).toHaveLength(2);
+    expect(state.bulkInputs).toHaveLength(1);
+    const bulkPayload = JSON.parse(state.bulkInputs[0] ?? "{}") as Record<
+      string,
+      unknown
+    >;
+    expect(String(bulkPayload.AUTH_SECRET)).toMatch(/^k1\./);
+    expect("AUTH_SECRET_PREVIOUS" in bulkPayload).toBe(false);
+    expect(http.calls[0]).toBe("GET https://my-app.acct.workers.dev/auth/user");
+    expect(http.calls).toContain(
+      "POST https://my-app.acct.workers.dev/auth/signup",
+    );
+    expect(http.calls).toContain(
+      "POST https://my-app.acct.workers.dev/auth/logout",
+    );
+    const executeIndexes = state.calls.flatMap((call, index) =>
+      call.startsWith("wrangler d1 execute app-auth --remote --env production")
+        ? [index]
+        : [],
+    );
+    expect(executeIndexes.at(-1)).toBeGreaterThan(deployIndex);
+  });
+
+  it("never rotates an existing remote AUTH_SECRET", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd, { databaseId: "d1-uuid-1" });
+    const { runner, state } = setupRunner({ created: true, secretSet: true });
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const output: string[] = [];
+    const code = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain(
+      "left unchanged (setup never rotates an existing secret)",
+    );
+    expect(callIndex(state.calls, "wrangler secret bulk")).toBe(-1);
+    expect(callIndex(state.calls, "wrangler d1 create")).toBe(-1);
+  });
+
+  it("stops before deploy when doctor fails and prints one next action", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd, { compatibilityFlags: [] });
+    const { runner, state } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const errors: string[] = [];
+    const output: string[] = [];
+    const code = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      stderr: (line) => errors.push(line),
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(1);
+    expect(callIndex(state.calls, "wrangler deploy")).toBe(-1);
+    expect(http.calls).toEqual([]);
+    const nextActions = errors.filter((line) =>
+      line.startsWith("Next action:"),
+    );
+    expect(nextActions).toHaveLength(1);
+    expect(nextActions[0]).toContain("nodejs_compat");
+    expect(output.join("\n")).toContain("- deploy: skipped");
+    expect(output.join("\n")).toContain("- verify: skipped");
+  });
+
+  it("fails fast before any remote mutation when the public origin is a placeholder", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const { runner, state } = setupRunner();
+    const errors: string[] = [];
+    const code = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stderr: (line) => errors.push(line),
+      runCommand: runner,
+      fetchImpl: setupFetch("https://example.com").fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(1);
+    expect(callIndex(state.calls, "wrangler d1 list")).toBe(-1);
+    expect(callIndex(state.calls, "wrangler secret")).toBe(-1);
+    expect(errors.join("\n")).toContain("--origin");
+  });
+
+  it("patches AUTH_PUBLIC_ORIGIN with --origin, writes a backup, and stays idempotent", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd, { origin: "https://example.com" });
+    const original = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const { runner } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const firstCode = await runCli(
+      [
+        "setup",
+        "--env",
+        "production",
+        "--origin",
+        "https://my-app.acct.workers.dev",
+      ],
+      {
+        cwd,
+        stdout: () => {},
+        runCommand: runner,
+        fetchImpl: http.fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+    expect(firstCode).toBe(0);
+    const backup = await readFile(
+      join(cwd, "wrangler.jsonc.cf-auth-backup"),
+      "utf8",
+    );
+    expect(backup).toBe(original);
+    const afterFirst = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    expect(afterFirst).toContain("https://my-app.acct.workers.dev");
+
+    const output: string[] = [];
+    const secondCode = await runCli(
+      [
+        "setup",
+        "--env",
+        "production",
+        "--origin",
+        "https://my-app.acct.workers.dev",
+      ],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: runner,
+        fetchImpl: http.fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+    expect(secondCode).toBe(0);
+    expect(output.join("\n")).toContain(
+      "vars.AUTH_PUBLIC_ORIGIN already set for env.production",
+    );
+    const afterSecond = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    expect(afterSecond).toBe(afterFirst);
+    await expect(
+      readFile(join(cwd, "wrangler.jsonc.cf-auth-backup"), "utf8"),
+    ).resolves.toBe(original);
+  });
+
+  it("plans every step in dry-run mode without touching Wrangler or the network", async () => {
+    const cwd = await tempDir();
+    await writeWrangler(cwd);
+    const { runner, state } = setupRunner();
+    const http = setupFetch("https://example.com");
+    const output: string[] = [];
+    const code = await runCli(["setup", "--dry-run", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(0);
+    expect(state.calls).toEqual([]);
+    expect(http.calls).toEqual([]);
+    const text = output.join("\n");
+    expect(text).toContain(
+      "Dry run only. Would run setup for environment production",
+    );
+    expect(text).toContain("wrangler secret bulk --env production");
+    expect(text).toContain(
+      "wrangler d1 migrations apply app-auth --remote --env production",
+    );
+    expect(text).toContain("cf-auth doctor --env production");
+    expect(text).toContain("wrangler deploy --env production");
+  });
+
+  it("emits a setup report that matches the checked-in schema and embeds the doctor report", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const schema = JSON.parse(
+      await readFile("schemas/setup-report.schema.json", "utf8"),
+    ) as JsonSchema;
+    const doctorSchema = JSON.parse(
+      await readFile("schemas/doctor-report.schema.json", "utf8"),
+    ) as JsonSchema;
+    const { runner } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const output: string[] = [];
+    const code = await runCli(["setup", "--report", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(0);
+    const report = JSON.parse(output.join("\n")) as {
+      $schema: string;
+      ok: boolean;
+      steps: Array<{ id: string; status: string }>;
+      doctor?: Record<string, unknown>;
+    };
+    expect(report.$schema).toBe(schema.$id);
+    expect(validateJsonSchema(report, schema)).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(report.steps.map((step) => step.id)).toEqual([
+      "preflight",
+      "origin",
+      "provision",
+      "migrate",
+      "secret",
+      "doctor",
+      "deploy",
+      "verify",
+    ]);
+    expect(report.doctor).toBeDefined();
+    expect(validateJsonSchema(report.doctor, doctorSchema)).toEqual([]);
+    expect(JSON.stringify(report)).not.toMatch(
+      /AUTH_SECRET=|person@example\.com|setup-verify-/,
+    );
+  });
+
+  it("reports every failed step with an executable fix and a single nextAction", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd, { compatibilityFlags: [] });
+    const { runner } = setupRunner();
+    const output: string[] = [];
+    const code = await runCli(["setup", "--report", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      runCommand: runner,
+      fetchImpl: setupFetch("https://my-app.acct.workers.dev").fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(1);
+    const report = JSON.parse(output.join("\n")) as {
+      ok: boolean;
+      nextAction?: string;
+      steps: Array<{ id: string; status: string; fix?: string }>;
+    };
+    expect(report.ok).toBe(false);
+    const failures = report.steps.filter((step) => step.status === "fail");
+    expect(failures.length).toBeGreaterThan(0);
+    for (const failure of failures) {
+      expect(failure.fix).toBeTruthy();
+    }
+    expect(report.nextAction).toBe(failures[0]?.fix);
+    expect(report.steps.find((step) => step.id === "deploy")?.status).toBe(
+      "skipped",
+    );
+    expect(report.steps.find((step) => step.id === "verify")?.status).toBe(
+      "skipped",
+    );
+  });
+
+  it("redacts sensitive environment names in setup report JSON", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner } = setupRunner();
+    const output: string[] = [];
+    const code = await runCli(
+      ["setup", "--report", "--env", "person@example.com"],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: runner,
+        fetchImpl: setupFetch("https://my-app.acct.workers.dev").fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+
+    expect(code).toBe(1);
+    const reportText = output.join("\n");
+    const report = JSON.parse(reportText) as { environment: string };
+    expect(report.environment).toBe("[REDACTED_EMAIL]");
+    expect(reportText).not.toContain("person@example.com");
+  });
+
+  it("writes setup report JSON to an output file with strict permissions", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const output: string[] = [];
+    const code = await runCli(
+      [
+        "setup",
+        "--report",
+        "--env",
+        "production",
+        "--output",
+        "setup-report.json",
+      ],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: runner,
+        fetchImpl: http.fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("Wrote setup report");
+    const report = JSON.parse(
+      await readFile(join(cwd, "setup-report.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(report.ok).toBe(true);
+    if (process.platform !== "win32") {
+      expect((await stat(join(cwd, "setup-report.json"))).mode & 0o777).toBe(
+        0o600,
+      );
+    }
+
+    const outside = join(cwd, "outside-report.json");
+    await writeFile(outside, "do not replace\n");
+    await symlink(outside, join(cwd, "report-link.json"));
+    const errors: string[] = [];
+    const symlinkCode = await runCli(
+      [
+        "setup",
+        "--report",
+        "--env",
+        "production",
+        "--output",
+        "report-link.json",
+      ],
+      {
+        cwd,
+        stderr: (line) => errors.push(line),
+        runCommand: runner,
+        fetchImpl: http.fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+    expect(symlinkCode).toBe(1);
+    expect(errors.join("\n")).toContain("symbolic links are not allowed");
+    await expect(readFile(outside, "utf8")).resolves.toBe("do not replace\n");
+  });
+
+  it("is a no-op on rerun after a successful setup", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner, state } = setupRunner();
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const io = {
+      cwd,
+      stdout: () => {},
+      runCommand: runner,
+      fetchImpl: http.fetchImpl,
+      sleepMs: async () => {},
+    };
+    expect(await runCli(["setup", "--env", "production"], io)).toBe(0);
+    const configAfterFirst = await readFile(
+      join(cwd, "wrangler.jsonc"),
+      "utf8",
+    );
+    const callsAfterFirst = state.calls.length;
+
+    expect(await runCli(["setup", "--env", "production"], io)).toBe(0);
+    const secondRunCalls = state.calls.slice(callsAfterFirst);
+    expect(
+      secondRunCalls.filter((call) => call.startsWith("wrangler d1 create")),
+    ).toEqual([]);
+    expect(
+      secondRunCalls.filter((call) => call.startsWith("wrangler secret bulk")),
+    ).toEqual([]);
+    await expect(readFile(join(cwd, "wrangler.jsonc"), "utf8")).resolves.toBe(
+      configAfterFirst,
+    );
+  });
+
+  it("maps a missing workers.dev subdomain to the dashboard onboarding fix", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner } = setupRunner({
+      deploy: {
+        status: 1,
+        stdout: "",
+        stderr:
+          "You can either deploy your worker to one or more routes by specifying them in your wrangler.jsonc file, or register a workers.dev subdomain here:\nhttps://dash.cloudflare.com/acct_prod/workers/onboarding",
+      },
+    });
+    const errors: string[] = [];
+    const output: string[] = [];
+    const code = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stdout: (line) => output.push(line),
+      stderr: (line) => errors.push(line),
+      runCommand: runner,
+      fetchImpl: setupFetch("https://my-app.acct.workers.dev").fetchImpl,
+      sleepMs: async () => {},
+    });
+
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "https://dash.cloudflare.com/acct_prod/workers/onboarding",
+    );
+    expect(output.join("\n")).toContain("- verify: skipped");
+  });
+
+  it("warns when the deployed workers.dev origin disagrees with a workers.dev AUTH_PUBLIC_ORIGIN", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const { runner } = setupRunner({
+      deployUrl: "https://my-app.other.workers.dev",
+    });
+    const output: string[] = [];
+    const code = await runCli(
+      ["setup", "--report", "--env", "production", "--skip-verify"],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: runner,
+        fetchImpl: setupFetch("https://my-app.acct.workers.dev").fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+
+    expect(code).toBe(0);
+    const report = JSON.parse(output.join("\n")) as {
+      steps: Array<{ id: string; status: string; fix?: string }>;
+    };
+    const warning = report.steps.find(
+      (step) => step.id === "origin_verification",
+    );
+    expect(warning?.status).toBe("warn");
+    expect(warning?.fix).toContain("https://my-app.other.workers.dev");
+  });
+
+  it("fails verification with an actionable fix and honors --skip-verify", async () => {
+    const cwd = await tempDir();
+    await writeSetupWrangler(cwd);
+    const failing = setupRunner();
+    const brokenHttp = setupFetch("https://my-app.acct.workers.dev", {
+      failSignup: true,
+    });
+    const errors: string[] = [];
+    const failingCode = await runCli(["setup", "--env", "production"], {
+      cwd,
+      stdout: () => {},
+      stderr: (line) => errors.push(line),
+      runCommand: failing.runner,
+      fetchImpl: brokenHttp.fetchImpl,
+      sleepMs: async () => {},
+    });
+    expect(failingCode).toBe(1);
+    expect(errors.join("\n")).toContain("serves this Worker");
+
+    const skipped = setupRunner({ created: true, secretSet: true });
+    const http = setupFetch("https://my-app.acct.workers.dev");
+    const output: string[] = [];
+    const skippedCode = await runCli(
+      ["setup", "--env", "production", "--skip-verify"],
+      {
+        cwd,
+        stdout: (line) => output.push(line),
+        runCommand: skipped.runner,
+        fetchImpl: http.fetchImpl,
+        sleepMs: async () => {},
+      },
+    );
+    expect(skippedCode).toBe(0);
+    expect(http.calls).toEqual([]);
+    expect(output.join("\n")).toContain("skipped by --skip-verify");
+  });
+
+  it("emits an AGENTS.md runbook matching every checked-in template copy", async () => {
+    const cwd = await tempDir();
+    const code = await runCli(["init", "my-app", "--yes"], {
+      cwd,
+      stdout: () => {},
+    });
+    expect(code).toBe(0);
+    const generated = await readFile(join(cwd, "my-app", "AGENTS.md"), "utf8");
+    expect(generated).toContain("cf-auth setup --env production");
+    for (const template of [
+      "hono-basic",
+      "worker-basic",
+      "react-vite-worker",
+    ]) {
+      await expect(
+        readFile(join("templates", template, "AGENTS.md"), "utf8"),
+      ).resolves.toBe(generated);
+    }
+  });
+
+  it("preserves an existing AGENTS.md and lists the runbook in init dry-run", async () => {
+    const cwd = await tempDir();
+    await writeFile(join(cwd, "AGENTS.md"), "# custom agent guide\n");
+    const code = await runCli(["init", "--yes"], { cwd, stdout: () => {} });
+    expect(code).toBe(0);
+    await expect(readFile(join(cwd, "AGENTS.md"), "utf8")).resolves.toBe(
+      "# custom agent guide\n",
+    );
+
+    const dryRun: string[] = [];
+    const dryRunCode = await runCli(["init", "--dry-run"], {
+      cwd: await tempDir(),
+      stdout: (line) => dryRun.push(line),
+    });
+    expect(dryRunCode).toBe(0);
+    expect(dryRun.join("\n")).toContain("AGENTS.md");
+  });
+});
+
 async function tempDir() {
   return mkdtemp(join(tmpdir(), "cf-auth-cli-"));
+}
+
+async function writeSetupWrangler(
+  cwd: string,
+  options: {
+    origin?: string;
+    databaseId?: string;
+    compatibilityFlags?: string[];
+  } = {},
+) {
+  await mkdir(join(cwd, "migrations"), { recursive: true });
+  await writeFile(join(cwd, "migrations", "0001_initial.sql"), "-- test\n");
+  await writeFile(join(cwd, "migrations", "0002_indexes.sql"), "-- test\n");
+  await writeFile(
+    join(cwd, "wrangler.jsonc"),
+    JSON.stringify(
+      {
+        account_id: "acct_prod",
+        compatibility_date: "2026-05-15",
+        compatibility_flags: options.compatibilityFlags ?? ["nodejs_compat"],
+        vars: {
+          AUTH_ENV: "development",
+          AUTH_PUBLIC_ORIGIN: "http://localhost:8787",
+        },
+        d1_databases: [
+          {
+            binding: "AUTH_DB",
+            database_name: "app-auth-dev",
+            database_id: "local-id",
+          },
+        ],
+        env: {
+          production: {
+            vars: {
+              AUTH_ENV: "production",
+              AUTH_PUBLIC_ORIGIN:
+                options.origin ?? "https://my-app.acct.workers.dev",
+            },
+            d1_databases: [
+              {
+                binding: "AUTH_DB",
+                database_name: "app-auth",
+                database_id: options.databaseId ?? "REPLACE_WITH_DATABASE_ID",
+              },
+            ],
+            send_email: [{ name: "AUTH_EMAIL", remote: true }],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function callIndex(calls: string[], prefix: string): number {
+  return calls.findIndex((call) => call.startsWith(prefix));
+}
+
+function setupRunner(
+  options: {
+    created?: boolean;
+    secretSet?: boolean;
+    deploy?: { status: number; stdout: string; stderr: string };
+    deployUrl?: string;
+  } = {},
+) {
+  const state = {
+    calls: [] as string[],
+    bulkInputs: [] as string[],
+    created: options.created ?? false,
+    secretSet: options.secretSet ?? false,
+  };
+  const runner = (
+    command: string,
+    args: string[],
+    runOptions: { cwd: string; input?: string },
+  ) => {
+    state.calls.push([command, ...args].join(" "));
+    const ok = (stdout: string) => ({ status: 0, stdout, stderr: "" });
+    if (args[0] === "--version") return ok("4.110.0\n");
+    if (args[0] === "whoami") return ok(healthyWhoamiJson());
+    if (args[0] === "d1" && args[1] === "list") {
+      return ok(
+        JSON.stringify(
+          state.created ? [{ name: "app-auth", uuid: "d1-uuid-1" }] : [],
+        ),
+      );
+    }
+    if (args[0] === "d1" && args[1] === "create") {
+      state.created = true;
+      return ok("");
+    }
+    if (args[0] === "secret" && args[1] === "list") {
+      if (state.secretSet) {
+        return ok(JSON.stringify([{ name: "AUTH_SECRET" }]));
+      }
+      return {
+        status: 1,
+        stdout: "",
+        stderr: 'Worker "my-app" not found. [code: 10007]',
+      };
+    }
+    if (args[0] === "secret" && args[1] === "bulk") {
+      state.secretSet = true;
+      state.bulkInputs.push(runOptions.input ?? "");
+      return ok("");
+    }
+    if (args[0] === "d1" && args[1] === "migrations") return ok("");
+    if (args[0] === "d1" && args[1] === "execute") {
+      return ok(migrationStateJson());
+    }
+    if (args[0] === "deploy") {
+      if (options.deploy) return options.deploy;
+      return ok(
+        `Deployed my-app triggers\n  ${options.deployUrl ?? "https://my-app.acct.workers.dev"}\n`,
+      );
+    }
+    return ok("");
+  };
+  return { runner, state };
+}
+
+function setupFetch(origin: string, options: { failSignup?: boolean } = {}) {
+  const calls: string[] = [];
+  const sessionCookie =
+    "__Host-cfauth-session=token123; Secure; HttpOnly; Path=/; Max-Age=604800";
+  const clearedCookie =
+    "__Host-cfauth-session=; Secure; HttpOnly; Path=/; Max-Age=0";
+  let email: string | undefined;
+  let loggedOut = false;
+  const fetchImpl = (async (
+    input: Parameters<typeof globalThis.fetch>[0],
+    init?: Parameters<typeof globalThis.fetch>[1],
+  ) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url}`);
+    if (method === "POST" && url === `${origin}/auth/signup`) {
+      if (options.failSignup) return new Response("not found", { status: 404 });
+      email = (JSON.parse(String(init?.body)) as { email: string }).email;
+      loggedOut = false;
+      return new Response(JSON.stringify({ user: { email } }), {
+        status: 200,
+        headers: { "Set-Cookie": sessionCookie },
+      });
+    }
+    if (method === "POST" && url === `${origin}/auth/login`) {
+      return new Response(JSON.stringify({ user: { email } }), {
+        status: 200,
+        headers: { "Set-Cookie": sessionCookie },
+      });
+    }
+    if (method === "POST" && url === `${origin}/auth/logout`) {
+      loggedOut = true;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Set-Cookie": clearedCookie },
+      });
+    }
+    if (url === `${origin}/auth/user`) {
+      const cookie = (init?.headers as Record<string, string> | undefined)
+        ?.Cookie;
+      const user = cookie && !loggedOut && email ? { email } : null;
+      return new Response(JSON.stringify({ user }), { status: 200 });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof globalThis.fetch;
+  return { fetchImpl, calls };
 }
 
 async function writeWrangler(cwd: string) {

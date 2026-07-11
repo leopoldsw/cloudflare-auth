@@ -31,22 +31,21 @@ await writeSmokePackageJson(appDir, config.packageTag);
 run("pnpm", ["--dir", appDir, "install", "--no-frozen-lockfile"]);
 run("pnpm", ["--dir", appDir, "build"]);
 
-const firstDoctor = runCfAuth(appDir, ["doctor", "--env", "production"], {
-  allowFailure: true,
-});
-if (
-  firstDoctor.status !== 0 &&
-  !isAllowedPreMigrationDoctorFailure(firstDoctor)
-) {
-  printCommandOutput(firstDoctor);
-  throw new Error(
-    "Initial production doctor failed for reasons other than pending or absent D1 migrations.",
-  );
-}
+runCfAuth(appDir, [
+  "setup",
+  "--env",
+  "production",
+  "--report",
+  "--output",
+  "setup-report.json",
+]);
+const setupReport = await readJsonObject(
+  join(appDir, "setup-report.json"),
+  "production smoke setup report",
+);
+assertSetupReport(setupReport);
 
-runCfAuth(appDir, ["migrate", "--remote", "--env", "production"]);
-runCfAuth(appDir, ["doctor", "--env", "production"]);
-runCfAuth(appDir, ["deploy", "--env", "production"]);
+runCfAuth(appDir, ["setup", "--env", "production", "--skip-verify"]);
 
 await exerciseDeployedAuth(config.origin);
 
@@ -319,12 +318,30 @@ function printCommandOutput(result) {
   process.stderr.write(result.stderr ?? "");
 }
 
-function isAllowedPreMigrationDoctorFailure(result) {
-  const output = `${result.stdout}\n${result.stderr}`;
-  return (
-    /D1 .*migration state could not be read/u.test(output) ||
-    /D1 migration \d+ has not been applied remotely/u.test(output)
-  );
+function assertSetupReport(report) {
+  if (report?.ok !== true) {
+    throw new Error("production smoke setup report did not reach ok: true");
+  }
+  const steps = Array.isArray(report.steps) ? report.steps : [];
+  const statusById = new Map(steps.map((step) => [step.id, step.status]));
+  const requiredSteps = [
+    "preflight",
+    "origin",
+    "provision",
+    "secret",
+    "migrate",
+    "doctor",
+    "deploy",
+    "verify",
+  ];
+  for (const id of requiredSteps) {
+    const status = statusById.get(id);
+    if (status !== "pass" && status !== "warn") {
+      throw new Error(
+        `production smoke setup step ${id} was ${status ?? "missing"}; expected pass`,
+      );
+    }
+  }
 }
 
 async function exerciseDeployedAuth(origin) {

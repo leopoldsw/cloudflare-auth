@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cf-auth.dev/schemas/setup-report.v1.json",
+  "title": "Cloudflare Auth setup report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "ok",
+    "generatedAt",
+    "environment",
+    "summary",
+    "steps",
+    "redaction"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://cf-auth.dev/schemas/setup-report.v1.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "fail", "warn", "skipped"],
+      "properties": {
+        "pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "message"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "status": {
+            "enum": ["pass", "fail", "warn", "skipped"]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fix": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "nextAction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "doctor": {
+      "type": "object"
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rawSecrets",
+        "rawTokens",
+        "rawCookies",
+        "rawEmails",
+        "rawIps",
+        "rawUserAgents"
+      ],
+      "properties": {
+        "rawSecrets": {
+          "const": "omitted"
+        },
+        "rawTokens": {
+          "const": "omitted"
+        },
+        "rawCookies": {
+          "const": "omitted"
+        },
+        "rawEmails": {
+          "const": "omitted"
+        },
+        "rawIps": {
+          "const": "omitted"
+        },
+        "rawUserAgents": {
+          "const": "omitted"
+        }
+      }
+    }
+  }
+}

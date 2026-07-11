@@ -74,6 +74,43 @@ root config. Other remote commands require an explicit selection. This avoids
 silently mutating a different account when Wrangler credentials can access
 multiple accounts.
 
+## Setup
+
+```bash
+npx --package @cf-auth/cli@latest cf-auth setup --env production
+npx --package @cf-auth/cli@latest cf-auth setup --report --env production
+npx --package @cf-auth/cli@latest cf-auth setup --report --env production --output setup-report.json
+npx --package @cf-auth/cli@latest cf-auth setup --dry-run --env production
+npx --package @cf-auth/cli@latest cf-auth setup --env production --origin https://app.example.com
+npx --package @cf-auth/cli@latest cf-auth setup --env production --skip-verify
+```
+
+`setup` is the one-command production path. In an initialized app it runs, in
+order: preflight (Wrangler availability, config and environment selection,
+Cloudflare account access), public-origin validation, `provision`, remote
+migrations with schema verification, remote `AUTH_SECRET` creation only when
+the secret is missing (it never rotates an existing secret), `doctor`,
+`wrangler deploy`, and an HTTP verification of the deployed `/auth` signup,
+login, and logout flows using a throwaway user that is disabled afterwards.
+Every step is idempotent, non-interactive, and rerunnable; the first failed
+step stops the run, marks later steps skipped, and prints exactly one
+`Next action:` line.
+
+`setup --report` emits redaction-safe JSON matching
+`schemas/setup-report.schema.json`; each failed step carries an executable
+`fix` string and the report embeds the full doctor report when the doctor step
+ran. Reports written with `--output` use mode `0600`, reject symbolic-link
+targets, and are atomically replaced. `--origin` validates an exact `https`
+origin and patches `vars.AUTH_PUBLIC_ORIGIN` for the selected environment
+after writing a sibling `.cf-auth-backup`. `--location` and `--jurisdiction`
+pass through to first-time D1 creation. `--skip-verify` skips the deployed
+endpoint verification. `--dry-run` prints the full planned step sequence
+without calling Wrangler, changing files, or making network requests.
+
+The report-driven convergence loop for coding agents and CI is specified in
+[Automation Contract](automation.md); the granular command sequence remains
+available in [Deployment](deployment.md).
+
 ## Migrations
 
 ```bash

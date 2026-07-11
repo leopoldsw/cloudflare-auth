@@ -38,6 +38,8 @@ export interface CliIO {
   stderr?: (line: string) => void;
   runCommand?: CommandRunner;
   benchmarkPasswordProfile?: PasswordBenchmarkRunner;
+  fetchImpl?: typeof globalThis.fetch;
+  sleepMs?: (ms: number) => Promise<void>;
 }
 
 interface ParsedArgs {
@@ -96,6 +98,33 @@ interface DoctorReport {
   };
 }
 
+type SetupStepStatus = "pass" | "fail" | "warn" | "skipped";
+
+interface SetupStep {
+  id: string;
+  status: SetupStepStatus;
+  message: string;
+  fix?: string;
+}
+
+interface SetupReport {
+  $schema: string;
+  schemaVersion: 1;
+  ok: boolean;
+  generatedAt: string;
+  environment: string;
+  summary: {
+    pass: number;
+    fail: number;
+    warn: number;
+    skipped: number;
+  };
+  steps: SetupStep[];
+  nextAction?: string;
+  doctor?: DoctorReport;
+  redaction: DoctorReport["redaction"];
+}
+
 type PasswordBenchmarkRunner = (
   profile: PasswordHashProfileName,
 ) => Promise<PasswordBenchmarkResult<PasswordHashProfileName>>;
@@ -119,12 +148,33 @@ export async function runCli(
       case "--help":
       case "-h":
         out(
-          "cf-auth <init|provision|migrate|doctor|deploy|generate|clean|rotate-secret|users|sessions>",
+          "cf-auth <init|setup|provision|migrate|doctor|deploy|generate|clean|rotate-secret|users|sessions>",
         );
         return 0;
       case "init":
         await commandInit(parsed, cwd, out);
         return 0;
+      case "setup": {
+        const result = await commandSetup(parsed, cwd, out, err, runner, {
+          passwordBenchmark,
+          fetchImpl: io.fetchImpl ?? globalThis.fetch,
+          sleepMs:
+            io.sleepMs ??
+            ((ms: number) =>
+              new Promise((resolveSleep) => setTimeout(resolveSleep, ms))),
+        });
+        if (parsed.flags.report) {
+          const reportJson = JSON.stringify(result.report, null, 2) + "\n";
+          if (typeof parsed.flags.output === "string") {
+            const outputPath = resolve(cwd, parsed.flags.output);
+            await safeAtomicWriteFile(outputPath, reportJson, { mode: 0o600 });
+            out(`Wrote setup report to ${outputPath}`);
+          } else {
+            out(reportJson.trimEnd());
+          }
+        }
+        return result.ok ? 0 : 1;
+      }
       case "provision":
         out(await commandProvision(parsed, cwd, runner));
         return 0;
@@ -190,7 +240,7 @@ async function commandInit(
   const workerName = workerNameFromTarget(target);
   if (parsed.flags["dry-run"]) {
     out(
-      `Would write ${template} package.json, pnpm-workspace.yaml, tsconfig.json, auth.config.ts, wrangler.jsonc, migrations, .gitignore, .dev.vars, .dev.vars.example, and route mount snippets.`,
+      `Would write ${template} package.json, pnpm-workspace.yaml, tsconfig.json, auth.config.ts, wrangler.jsonc, migrations, AGENTS.md, .gitignore, .dev.vars, .dev.vars.example, and route mount snippets.`,
     );
     out(templateMountSnippet(template));
     return;
@@ -233,6 +283,7 @@ async function commandInit(
     },
   );
   await writeIfMissing(join(target, ".dev.vars.example"), devVarsTemplate());
+  await writeIfMissing(join(target, "AGENTS.md"), agentsRunbookTemplate());
   await writeIfMissing(
     join(target, "migrations", "0001_initial.sql"),
     initialMigrationSql(),
@@ -424,6 +475,17 @@ function optionalChoiceFlag(
     throw new Error(`${name} must be one of: ${[...choices].join(", ")}.`);
   }
   return value;
+}
+
+function optionalStringFlag(
+  value: string | boolean | undefined,
+  name: string,
+): string | undefined {
+  if (value === undefined || value === false) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${name} requires a value.`);
+  }
+  return value.trim();
 }
 
 function runD1List(
@@ -1419,6 +1481,9 @@ async function commandDeploy(
   cwd: string,
   runner: CommandRunner,
   passwordBenchmark: PasswordBenchmarkRunner,
+  options: {
+    doctor?: { ok: boolean; lines: string[]; report: DoctorReport };
+  } = {},
 ): Promise<string> {
   const envName = parsed.flags.env as string | undefined;
   const config = await readWrangler(cwd);
@@ -1433,9 +1498,11 @@ async function commandDeploy(
       "Deploy without --env requires top-level vars.AUTH_ENV=production.",
     );
   }
-  const doctor = await commandDoctor(parsed, cwd, runner, passwordBenchmark, {
-    allowPendingMigrations: Boolean(parsed.flags.migrate),
-  });
+  const doctor =
+    options.doctor ??
+    (await commandDoctor(parsed, cwd, runner, passwordBenchmark, {
+      allowPendingMigrations: Boolean(parsed.flags.migrate),
+    }));
   if (!doctor.ok) {
     throw new Error(`doctor failed before deploy:\n${doctor.lines.join("\n")}`);
   }
@@ -1552,6 +1619,773 @@ function deploymentSummary(): string {
     "- /auth/email/verify/request",
     "Cloudflare Email/DNS: verify sender and domain readiness in docs/cloudflare-email.md.",
   ].join("\n");
+}
+
+const setupCliCommand = "npx --package @cf-auth/cli@latest cf-auth";
+
+interface SetupIO {
+  passwordBenchmark: PasswordBenchmarkRunner;
+  fetchImpl: typeof globalThis.fetch;
+  sleepMs: (ms: number) => Promise<void>;
+}
+
+async function commandSetup(
+  parsed: ParsedArgs,
+  cwd: string,
+  out: (line: string) => void,
+  err: (line: string) => void,
+  runner: CommandRunner,
+  io: SetupIO,
+): Promise<{ ok: boolean; report: SetupReport }> {
+  const envName = requiredStringFlag(parsed.flags.env, "setup requires --env");
+  const originFlag = optionalStringFlag(parsed.flags.origin, "--origin");
+  optionalStringFlag(parsed.flags.output, "--output");
+  const location = optionalChoiceFlag(
+    parsed.flags.location,
+    "--location",
+    d1LocationChoices,
+  );
+  const jurisdiction = optionalChoiceFlag(
+    parsed.flags.jurisdiction,
+    "--jurisdiction",
+    d1JurisdictionChoices,
+  );
+  if (location && jurisdiction) {
+    throw new Error(
+      "setup accepts either --location or --jurisdiction, not both.",
+    );
+  }
+  if (originFlag) validateSetupOrigin(originFlag);
+  const rerunCommand = `${setupCliCommand} setup --env ${envName}`;
+
+  if (parsed.flags["dry-run"]) {
+    return setupDryRun(parsed, cwd, runner, envName, originFlag, out);
+  }
+
+  const steps: SetupStep[] = [];
+  const reportMode = Boolean(parsed.flags.report);
+  let doctorResult:
+    { ok: boolean; lines: string[]; report: DoctorReport } | undefined;
+  let resolvedOrigin: string | undefined;
+  let deployOutput: string | undefined;
+
+  const record = (step: SetupStep): void => {
+    if (step.status === "fail" && !step.fix) {
+      step.fix = `rerun ${rerunCommand}`;
+    }
+    steps.push(step);
+    if (reportMode) return;
+    const icon =
+      step.status === "pass"
+        ? "✓"
+        : step.status === "warn"
+          ? "!"
+          : step.status === "skipped"
+            ? "-"
+            : "✗";
+    out(`${icon} ${step.id}: ${redactCliOutput(step.message)}`);
+    if (step.fix && step.status === "fail") {
+      out(`  Fix: ${redactCliOutput(step.fix)}`);
+    }
+  };
+  const failed = (): boolean => steps.some((step) => step.status === "fail");
+  const runStep = async (
+    id: string,
+    action: () => Promise<SetupStep> | SetupStep,
+    fallbackFix: string | ((message: string) => string),
+  ): Promise<void> => {
+    if (failed()) {
+      record({
+        id,
+        status: "skipped",
+        message: "skipped after an earlier failure",
+      });
+      return;
+    }
+    try {
+      record(await action());
+    } catch (error) {
+      const message = redactCliOutput(
+        error instanceof Error ? error.message : String(error),
+      );
+      record({
+        id,
+        status: "fail",
+        message,
+        fix:
+          typeof fallbackFix === "function"
+            ? fallbackFix(message)
+            : fallbackFix,
+      });
+    }
+  };
+
+  await runStep(
+    "preflight",
+    async () => {
+      const wranglerCheck = checkWranglerVersion(cwd, runner);
+      if (wranglerCheck.status === "fail") {
+        return {
+          id: "preflight",
+          status: "fail",
+          message: wranglerCheck.message,
+          fix:
+            wranglerCheck.fix ?? `install wrangler ${supportedWranglerVersion}`,
+        };
+      }
+      let config: WranglerConfig;
+      try {
+        config = await readWrangler(cwd);
+      } catch (error) {
+        const failure = wranglerConfigReadFailure(error);
+        return {
+          id: "preflight",
+          status: "fail",
+          message: failure.message,
+          fix: failure.fix,
+        };
+      }
+      const selected = selectWranglerEnvironment(config, envName);
+      if (!selected.ok) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message: selected.message,
+          fix: selected.fix,
+        };
+      }
+      try {
+        assertRemoteAuthEnvironment(config, envName, "Setup");
+      } catch (error) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message: error instanceof Error ? error.message : String(error),
+          fix: `set env.${envName} vars.AUTH_ENV to preview or production in ${basename(wranglerPath(cwd))}`,
+        };
+      }
+      const whoami = runner("wrangler", ["whoami", "--json"], { cwd });
+      if (whoami.status !== 0) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message: "Cloudflare login could not be verified",
+          fix: "run wrangler login or export CLOUDFLARE_API_TOKEN with the scopes in docs/cloudflare-permissions.md",
+        };
+      }
+      const account = parseWhoamiResult(whoami.stdout);
+      if (!account.ok) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message: account.check.message,
+          fix:
+            account.check.fix ?? "run wrangler whoami --json and rerun setup",
+        };
+      }
+      const configured = configuredAccountId(config, envName);
+      if (
+        configured &&
+        !account.accounts.some((item) => item.id === configured)
+      ) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message:
+            "Configured account_id is not available to the authenticated Wrangler user",
+          fix: "set CLOUDFLARE_ACCOUNT_ID or account_id to a Cloudflare account the token can access",
+        };
+      }
+      if (!configured && account.accounts.length !== 1) {
+        return {
+          id: "preflight",
+          status: "fail",
+          message:
+            "Setup requires account_id when Wrangler can access multiple Cloudflare accounts",
+          fix: `set CLOUDFLARE_ACCOUNT_ID or account_id in ${basename(wranglerPath(cwd))}, then rerun ${rerunCommand}`,
+        };
+      }
+      const versionNote =
+        wranglerCheck.status === "warn" ? `; ${wranglerCheck.message}` : "";
+      return {
+        id: "preflight",
+        status: wranglerCheck.status === "warn" ? "warn" : "pass",
+        message: `Wrangler available and Cloudflare account access verified${versionNote}`,
+      };
+    },
+    (message) =>
+      `resolve the reported preflight issue (${message}), then rerun ${rerunCommand}`,
+  );
+
+  await runStep(
+    "origin",
+    async () => {
+      if (originFlag) {
+        const patched = await patchAuthPublicOrigin(cwd, envName, originFlag);
+        resolvedOrigin = originFlag;
+        const backupNote = patched.backupPath
+          ? patched.backupCreated
+            ? `; backup written to ${patched.backupPath}`
+            : `; existing backup preserved at ${patched.backupPath}`
+          : "";
+        return {
+          id: "origin",
+          status: "pass",
+          message: patched.changed
+            ? `Set vars.AUTH_PUBLIC_ORIGIN for env.${envName} in ${basename(wranglerPath(cwd))}${backupNote}`
+            : `vars.AUTH_PUBLIC_ORIGIN already set for env.${envName}`,
+        };
+      }
+      const config = await readWrangler(cwd);
+      const selected = selectWranglerEnvironment(config, envName);
+      const origin = selected.ok
+        ? stringRecord(selected.config.vars).AUTH_PUBLIC_ORIGIN
+        : undefined;
+      if (
+        !origin ||
+        isPlaceholderPublicOrigin(origin) ||
+        !isExactHttpsOrigin(origin)
+      ) {
+        return {
+          id: "origin",
+          status: "fail",
+          message: `vars.AUTH_PUBLIC_ORIGIN for env.${envName} is missing, a placeholder, or not an exact https origin`,
+          fix: `rerun ${rerunCommand} --origin <https-origin> (a workers.dev origin looks like https://<worker-name>.<subdomain>.workers.dev; see docs/manual-steps.md)`,
+        };
+      }
+      resolvedOrigin = origin;
+      return {
+        id: "origin",
+        status: "pass",
+        message: `AUTH_PUBLIC_ORIGIN configured (${origin})`,
+      };
+    },
+    (message) =>
+      `resolve the public-origin issue (${message}), then rerun ${rerunCommand}`,
+  );
+
+  await runStep(
+    "provision",
+    async () => {
+      const message = await commandProvision(parsed, cwd, runner);
+      return { id: "provision", status: "pass", message };
+    },
+    (message) =>
+      /multiple Cloudflare accounts/u.test(message)
+        ? `set CLOUDFLARE_ACCOUNT_ID or account_id in ${basename(wranglerPath(cwd))}, then rerun ${rerunCommand}`
+        : `resolve the reported provisioning issue, then rerun ${rerunCommand}`,
+  );
+
+  await runStep(
+    "migrate",
+    async () => {
+      await commandMigrate(
+        {
+          command: "migrate",
+          positionals: [],
+          flags: { remote: true, env: envName },
+        },
+        cwd,
+        runner,
+      );
+      return {
+        id: "migrate",
+        status: "pass",
+        message: "Remote D1 migrations applied and verified",
+      };
+    },
+    `${setupCliCommand} migrate --remote --env ${envName}`,
+  );
+
+  await runStep(
+    "secret",
+    () => {
+      const probe = probeRemoteSecretName("AUTH_SECRET", envName, cwd, runner);
+      if (probe === "present") {
+        return {
+          id: "secret",
+          status: "pass",
+          message:
+            "Remote AUTH_SECRET already configured; left unchanged (setup never rotates an existing secret)",
+        };
+      }
+      if (probe === "unavailable") {
+        return {
+          id: "secret",
+          status: "fail",
+          message: "Remote AUTH_SECRET could not be verified",
+          fix: `run wrangler login or use an API token with Workers Scripts:Edit, then rerun ${rerunCommand}`,
+        };
+      }
+      const kid =
+        typeof parsed.flags.kid === "string" ? parsed.flags.kid : "k1";
+      const secret = generateAuthSecret(kid);
+      runSecretBulk(envName, cwd, runner, { AUTH_SECRET: secret });
+      return {
+        id: "secret",
+        status: "pass",
+        message:
+          probe === "worker-missing"
+            ? "Created remote AUTH_SECRET; Wrangler created a draft Worker to hold it before the first deploy"
+            : "Created remote AUTH_SECRET",
+      };
+    },
+    `resolve the secret failure, then rerun ${rerunCommand}`,
+  );
+
+  await runStep(
+    "doctor",
+    async () => {
+      const doctor = await commandDoctor(
+        parsed,
+        cwd,
+        runner,
+        io.passwordBenchmark,
+        {},
+      );
+      doctorResult = doctor;
+      if (doctor.ok) {
+        return {
+          id: "doctor",
+          status: "pass",
+          message: `doctor checks passed for --env ${envName}`,
+        };
+      }
+      const firstFail = doctor.report.checks.find(
+        (check) => check.status === "fail",
+      );
+      return {
+        id: "doctor",
+        status: "fail",
+        message: firstFail
+          ? `doctor: ${firstFail.message}`
+          : "doctor checks failed",
+        fix: firstFail?.fix ?? `${setupCliCommand} doctor --env ${envName}`,
+      };
+    },
+    `${setupCliCommand} doctor --env ${envName}`,
+  );
+
+  await runStep(
+    "deploy",
+    async () => {
+      if (!doctorResult) {
+        throw new Error("doctor step did not run before deploy");
+      }
+      try {
+        deployOutput = await commandDeploy(
+          { command: "deploy", positionals: [], flags: { env: envName } },
+          cwd,
+          runner,
+          io.passwordBenchmark,
+          { doctor: doctorResult },
+        );
+        return {
+          id: "deploy",
+          status: "pass",
+          message: `Deployed with wrangler --env ${envName}`,
+        };
+      } catch (error) {
+        const message = redactCliOutput(
+          error instanceof Error ? error.message : String(error),
+        );
+        if (/register a workers\.dev subdomain/iu.test(message)) {
+          const accountId = await setupAccountIdForFix(cwd, envName);
+          return {
+            id: "deploy",
+            status: "fail",
+            message,
+            fix: `register a workers.dev subdomain at https://dash.cloudflare.com/${accountId}/workers/onboarding (a one-time manual step; see docs/manual-steps.md), then rerun ${rerunCommand}`,
+          };
+        }
+        return {
+          id: "deploy",
+          status: "fail",
+          message,
+          fix: `resolve the wrangler deploy failure, then rerun ${rerunCommand}`,
+        };
+      }
+    },
+    `resolve the wrangler deploy failure, then rerun ${rerunCommand}`,
+  );
+
+  if (
+    !failed() &&
+    deployOutput &&
+    resolvedOrigin &&
+    resolvedOrigin.endsWith(".workers.dev")
+  ) {
+    const deployedUrl = deployOutput.match(
+      /https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.workers\.dev/iu,
+    )?.[0];
+    const deployedOrigin = deployedUrl
+      ? parseOriginOrUndefined(deployedUrl)
+      : undefined;
+    if (deployedOrigin && deployedOrigin !== resolvedOrigin) {
+      record({
+        id: "origin_verification",
+        status: "warn",
+        message: `Deployed workers.dev origin ${deployedOrigin} does not match AUTH_PUBLIC_ORIGIN ${resolvedOrigin}`,
+        fix: `if the workers.dev URL is the intended public origin, rerun ${rerunCommand} --origin ${deployedOrigin}`,
+      });
+    }
+  }
+
+  await runStep(
+    "verify",
+    async () => {
+      if (parsed.flags["skip-verify"]) {
+        return {
+          id: "verify",
+          status: "skipped",
+          message: "skipped by --skip-verify",
+        };
+      }
+      if (!resolvedOrigin) {
+        throw new Error("verify requires a resolved AUTH_PUBLIC_ORIGIN");
+      }
+      const cleanupNote = await verifyDeployedAuth(
+        resolvedOrigin,
+        cwd,
+        envName,
+        runner,
+        io,
+      );
+      return {
+        id: "verify",
+        status: "pass",
+        message: `signup, login, and logout verified at ${resolvedOrigin}; ${cleanupNote}`,
+      };
+    },
+    () =>
+      `confirm ${resolvedOrigin ?? "AUTH_PUBLIC_ORIGIN"} serves this Worker (route, custom domain, DNS), inspect wrangler tail --env ${envName}, then rerun ${rerunCommand}`,
+  );
+
+  const report = buildSetupReport(steps, envName, doctorResult?.report);
+  if (!reportMode) {
+    if (report.ok) {
+      out(`Setup complete for environment ${envName}.`);
+      out(deploymentSummary());
+    } else if (report.nextAction) {
+      err(`Next action: ${report.nextAction}`);
+    }
+  }
+  return { ok: report.ok, report };
+}
+
+async function setupDryRun(
+  parsed: ParsedArgs,
+  cwd: string,
+  runner: CommandRunner,
+  envName: string,
+  originFlag: string | undefined,
+  out: (line: string) => void,
+): Promise<{ ok: boolean; report: SetupReport }> {
+  const config = await readWrangler(cwd);
+  const database = selectD1ForProvisioning(config, envName);
+  const provisionPlan = await commandProvision(parsed, cwd, runner);
+  const migrateApply = await buildMigrateCommand(
+    {
+      command: "migrate",
+      positionals: [],
+      flags: { remote: true, "dry-run": true, env: envName },
+    },
+    cwd,
+  );
+  const migrationVerify = buildD1ExecuteCommand(
+    { databaseName: database.database_name, remote: true, envName },
+    migrationStateSql(),
+    true,
+  );
+  const migrationStatus = await buildMigrateCommand(
+    {
+      command: "migrate",
+      positionals: [],
+      flags: { status: true, remote: true, "dry-run": true, env: envName },
+    },
+    cwd,
+  );
+  const planned: SetupStep[] = [
+    {
+      id: "preflight",
+      status: "skipped",
+      message: `Would check wrangler availability, ${basename(wranglerPath(cwd))}, env.${envName}, and Cloudflare account access.`,
+    },
+    {
+      id: "origin",
+      status: "skipped",
+      message: originFlag
+        ? `Would set vars.AUTH_PUBLIC_ORIGIN=${originFlag} for env.${envName} with a ${basename(wranglerPath(cwd))} backup.`
+        : `Would require vars.AUTH_PUBLIC_ORIGIN for env.${envName} to be an exact https origin.`,
+    },
+    { id: "provision", status: "skipped", message: provisionPlan },
+    {
+      id: "migrate",
+      status: "skipped",
+      message: [
+        displayCommand(migrateApply.command, migrateApply.args),
+        displayCommandForVerbose(migrationVerify.command, migrationVerify.args),
+      ].join("\n"),
+    },
+    {
+      id: "secret",
+      status: "skipped",
+      message: `If AUTH_SECRET is missing remotely: wrangler secret bulk --env ${envName} (secret JSON via stdin; values are not printed).`,
+    },
+    {
+      id: "doctor",
+      status: "skipped",
+      message: `cf-auth doctor --env ${envName}`,
+    },
+    {
+      id: "deploy",
+      status: "skipped",
+      message: [
+        displayCommand(migrationStatus.command, migrationStatus.args),
+        displayCommand("wrangler", ["deploy", "--env", envName]),
+      ].join("\n"),
+    },
+    {
+      id: "verify",
+      status: "skipped",
+      message: parsed.flags["skip-verify"]
+        ? "Would skip deployed endpoint verification (--skip-verify)."
+        : "Would verify deployed /auth signup, login, and logout at the configured AUTH_PUBLIC_ORIGIN and disable the throwaway verification user.",
+    },
+  ];
+  if (!parsed.flags.report) {
+    out(
+      `Dry run only. Would run setup for environment ${envName} without changing Cloudflare state.`,
+    );
+    for (const step of planned) out(step.message);
+  }
+  return { ok: true, report: buildSetupReport(planned, envName) };
+}
+
+function buildSetupReport(
+  steps: SetupStep[],
+  envName: string,
+  doctor?: DoctorReport,
+): SetupReport {
+  const reportSteps = steps.map((step) => ({
+    ...step,
+    message: redactCliOutput(step.message),
+    ...(step.fix ? { fix: redactCliOutput(step.fix) } : {}),
+  }));
+  const summary = {
+    pass: reportSteps.filter((step) => step.status === "pass").length,
+    fail: reportSteps.filter((step) => step.status === "fail").length,
+    warn: reportSteps.filter((step) => step.status === "warn").length,
+    skipped: reportSteps.filter((step) => step.status === "skipped").length,
+  };
+  const firstFail = reportSteps.find((step) => step.status === "fail");
+  return {
+    $schema: "https://cf-auth.dev/schemas/setup-report.v1.json",
+    schemaVersion: 1,
+    ok: summary.fail === 0,
+    generatedAt: new Date().toISOString(),
+    environment: redactCliOutput(envName),
+    summary,
+    steps: reportSteps,
+    ...(firstFail?.fix ? { nextAction: firstFail.fix } : {}),
+    ...(doctor ? { doctor } : {}),
+    redaction: {
+      rawSecrets: "omitted",
+      rawTokens: "omitted",
+      rawCookies: "omitted",
+      rawEmails: "omitted",
+      rawIps: "omitted",
+      rawUserAgents: "omitted",
+    },
+  };
+}
+
+async function setupAccountIdForFix(
+  cwd: string,
+  envName: string,
+): Promise<string> {
+  try {
+    const config = await readWrangler(cwd);
+    return configuredAccountId(config, envName) ?? "<account-id>";
+  } catch {
+    return "<account-id>";
+  }
+}
+
+function parseOriginOrUndefined(value: string): string | undefined {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+async function verifyDeployedAuth(
+  origin: string,
+  cwd: string,
+  envName: string,
+  runner: CommandRunner,
+  io: SetupIO,
+): Promise<string> {
+  const email = `setup-verify-${Date.now()}-${randomBytes(4).toString("hex")}@example.com`;
+  const password = base64urlEncode(randomBytes(18));
+  await waitForDeployedAuth(origin, io);
+  const signup = await setupJsonPost(io, `${origin}/auth/signup`, {
+    email,
+    password,
+  });
+  if (signup.status !== 200) {
+    throw new Error(
+      `deployed signup failed with HTTP ${signup.status}; confirm ${origin} serves this Worker`,
+    );
+  }
+  assertSetupSessionCookie(signup.headers.get("Set-Cookie") ?? "", "signup");
+  const login = await setupJsonPost(io, `${origin}/auth/login`, {
+    identifier: email,
+    password,
+  });
+  if (login.status !== 200) {
+    throw new Error(`deployed login failed with HTTP ${login.status}`);
+  }
+  const loginCookie = login.headers.get("Set-Cookie") ?? "";
+  assertSetupSessionCookie(loginCookie, "login");
+  const cookie = loginCookie.split(";")[0] ?? "";
+  const user = await io.fetchImpl(`${origin}/auth/user`, {
+    headers: { Cookie: cookie },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (user.status !== 200) {
+    throw new Error(`deployed user endpoint failed with HTTP ${user.status}`);
+  }
+  const body: unknown = await user.json();
+  const userEmail =
+    isRecord(body) && isRecord(body.user) ? body.user.email : undefined;
+  if (userEmail !== email) {
+    throw new Error(
+      "deployed user endpoint did not return the verification user",
+    );
+  }
+  const logout = await io.fetchImpl(`${origin}/auth/logout`, {
+    method: "POST",
+    headers: { Cookie: cookie, Origin: origin },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (logout.status !== 200) {
+    throw new Error(`deployed logout failed with HTTP ${logout.status}`);
+  }
+  assertSetupSessionCookie(logout.headers.get("Set-Cookie") ?? "", "logout", {
+    cleared: true,
+  });
+  const after = await io.fetchImpl(`${origin}/auth/user`, {
+    headers: { Cookie: cookie },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (after.status !== 200) {
+    throw new Error(
+      `deployed user endpoint after logout failed with HTTP ${after.status}`,
+    );
+  }
+  const afterBody: unknown = await after.json();
+  if (!isRecord(afterBody) || afterBody.user !== null) {
+    throw new Error(
+      "deployed user endpoint still returned a user after logout",
+    );
+  }
+  return disableVerificationUser(email, cwd, envName, runner);
+}
+
+async function waitForDeployedAuth(origin: string, io: SetupIO): Promise<void> {
+  let lastFailure = "no response";
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (attempt > 0) await io.sleepMs(5000);
+    try {
+      const response = await io.fetchImpl(`${origin}/auth/user`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.status === 200) return;
+      lastFailure = `HTTP ${response.status}`;
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(
+    `deployed /auth/user did not become ready at ${origin} (${lastFailure})`,
+  );
+}
+
+function setupJsonPost(
+  io: SetupIO,
+  url: string,
+  body: Record<string, string>,
+): ReturnType<typeof globalThis.fetch> {
+  return io.fetchImpl(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: new URL(url).origin,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
+function assertSetupSessionCookie(
+  setCookie: string,
+  context: string,
+  options: { cleared?: boolean } = {},
+): void {
+  if (!setCookie.includes("__Host-cfauth-session=")) {
+    throw new Error(
+      `${context} did not set a host-only Cloudflare Auth session cookie`,
+    );
+  }
+  if (!/;\s*Secure(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing Secure`);
+  }
+  if (!/;\s*HttpOnly(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing HttpOnly`);
+  }
+  if (!/;\s*Path=\/(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie missing Path=/`);
+  }
+  if (/;\s*Domain=/iu.test(setCookie)) {
+    throw new Error(`${context} session cookie must not set Domain`);
+  }
+  if (options.cleared && !/;\s*Max-Age=0(?:;|$)/iu.test(setCookie)) {
+    throw new Error(`${context} did not clear the session cookie`);
+  }
+}
+
+async function disableVerificationUser(
+  email: string,
+  cwd: string,
+  envName: string,
+  runner: CommandRunner,
+): Promise<string> {
+  try {
+    const config = await readWrangler(cwd);
+    const database = selectD1(config, envName, { remote: true });
+    const context: D1CommandContext = {
+      databaseName: database.database_name,
+      remote: true,
+      envName,
+    };
+    const now = d1NowMillisecondsSql();
+    const target = userWhereClause(email);
+    const sql = [
+      `UPDATE users SET disabled_at = ${now}, updated_at = ${now} WHERE ${target}`,
+      `UPDATE sessions SET revoked_at = ${now} WHERE user_id IN (SELECT id FROM users WHERE ${target}) AND revoked_at IS NULL`,
+    ].join("; ");
+    runRedactedD1Command(
+      buildD1ExecuteCommand(context, sql),
+      "wrangler d1 execute <redacted verification cleanup SQL>",
+      cwd,
+      runner,
+    );
+    return "throwaway verification user disabled";
+  } catch {
+    return `warning: the throwaway verification user could not be disabled; disable the newest setup-verify-* user with ${setupCliCommand} users disable <email> --remote --env ${envName}`;
+  }
 }
 
 function runCommand(
@@ -1707,6 +2541,32 @@ function parseSecretNames(
   } catch {
     return { ok: false };
   }
+}
+
+type RemoteSecretProbe =
+  "present" | "missing" | "worker-missing" | "unavailable";
+
+function probeRemoteSecretName(
+  name: string,
+  envName: string | undefined,
+  cwd: string,
+  runner: CommandRunner,
+): RemoteSecretProbe {
+  const args = [
+    "secret",
+    "list",
+    "--format",
+    "json",
+    ...(envName ? ["--env", envName] : []),
+  ];
+  const result = runner("wrangler", args, { cwd });
+  if (result.status !== 0) {
+    const detail = `${result.stderr}\n${result.stdout}`;
+    return /\bnot found\b/iu.test(detail) ? "worker-missing" : "unavailable";
+  }
+  const names = parseSecretNames(result.stdout);
+  if (!names.ok) return "unavailable";
+  return names.names.has(name) ? "present" : "missing";
 }
 
 function checkCookieConfig(vars: Record<string, string>): DoctorCheck | null {
@@ -3100,8 +3960,7 @@ async function commandRotateSecret(
   runner: CommandRunner,
 ): Promise<string> {
   const kid = typeof parsed.flags.kid === "string" ? parsed.flags.kid : "k1";
-  const secret = `${kid}.${base64urlEncode(randomBytes(32))}`;
-  validateRotatedSecrets(secret);
+  const secret = generateAuthSecret(kid);
   if (parsed.flags.apply) {
     const envName = parsed.flags.env as string | undefined;
     const config = await readWrangler(cwd);
@@ -3120,16 +3979,12 @@ async function commandRotateSecret(
       runner,
       "rotate-secret --apply",
     );
-    const command = {
-      command: "wrangler",
-      args: ["secret", "bulk", ...(envName ? ["--env", envName] : [])],
-    };
-    const input =
-      JSON.stringify({
+    const lines = [
+      runSecretBulk(envName, cwd, runner, {
         AUTH_SECRET: secret,
         AUTH_SECRET_PREVIOUS: previous,
-      }) + "\n";
-    const lines = [runCheckedCommand(command, cwd, runner, input)];
+      }),
+    ];
     lines.push(
       previous
         ? "Remote AUTH_SECRET and AUTH_SECRET_PREVIOUS updated atomically."
@@ -3150,6 +4005,30 @@ async function commandRotateSecret(
 
 function validateRotatedSecrets(current: string, previous?: string): void {
   parseAuthKeyRing(current, previous);
+}
+
+function generateAuthSecret(kid = "k1"): string {
+  const secret = `${kid}.${base64urlEncode(randomBytes(32))}`;
+  validateRotatedSecrets(secret);
+  return secret;
+}
+
+function runSecretBulk(
+  envName: string | undefined,
+  cwd: string,
+  runner: CommandRunner,
+  payload: Record<string, string | null>,
+): string {
+  const command = {
+    command: "wrangler",
+    args: ["secret", "bulk", ...(envName ? ["--env", envName] : [])],
+  };
+  return runCheckedCommand(
+    command,
+    cwd,
+    runner,
+    JSON.stringify(payload) + "\n",
+  );
 }
 
 async function resolvePreviousSecret(
@@ -3916,6 +4795,50 @@ async function writeConfigBackup(
   return { path: backupPath, created };
 }
 
+function isExactHttpsOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.origin === value;
+  } catch {
+    return false;
+  }
+}
+
+function isPlaceholderPublicOrigin(value: string): boolean {
+  return value === "https://example.com";
+}
+
+function validateSetupOrigin(value: string): string {
+  if (!isExactHttpsOrigin(value) || isPlaceholderPublicOrigin(value)) {
+    throw new Error(
+      "--origin must be an exact https origin such as https://app.example.com.",
+    );
+  }
+  return value;
+}
+
+async function patchAuthPublicOrigin(
+  cwd: string,
+  envName: string,
+  origin: string,
+): Promise<{ changed: boolean; backupPath?: string; backupCreated?: boolean }> {
+  const path = wranglerPath(cwd);
+  const config = await readWrangler(cwd);
+  const selected = selectWranglerEnvironment(config, envName);
+  if (!selected.ok) throw new Error(selected.message);
+  const target = selected.config;
+  if (!isRecord(target.vars)) target.vars = {};
+  if (target.vars.AUTH_PUBLIC_ORIGIN === origin) return { changed: false };
+  target.vars.AUTH_PUBLIC_ORIGIN = origin;
+  const backup = await writeConfigBackup(path);
+  await safeAtomicWriteFile(path, JSON.stringify(config, null, 2) + "\n");
+  return {
+    changed: true,
+    backupPath: backup.path,
+    backupCreated: backup.created,
+  };
+}
+
 function ensureWranglerSchema(config: WranglerConfig): boolean {
   if (config.$schema) return false;
   config.$schema = wranglerSchemaPath;
@@ -4534,6 +5457,126 @@ function devVarsTemplate(
   return `AUTH_ENV=development
 AUTH_PUBLIC_ORIGIN=http://localhost:8787
 AUTH_SECRET=${secret}
+`;
+}
+
+function agentsRunbookTemplate(): string {
+  return `# Agent Runbook — Cloudflare Auth
+
+This application embeds Cloudflare Auth: self-deployed email/password,
+magic-link, email-verification, and password-reset flows served by this
+Worker at \`/auth\`, with users, sessions, and tokens stored in the \`AUTH_DB\`
+D1 database. This file is the operating contract for coding agents and
+automation working in this repository.
+
+## Local development
+
+\`\`\`bash
+npx --package @cf-auth/cli@latest cf-auth migrate --local
+npm run dev
+\`\`\`
+
+Expected: auth routes respond under \`/auth\`, and magic-link, verification,
+and reset emails are printed to the terminal in development.
+
+## Production is one command
+
+Use \`wrangler login\`, or export both values for non-interactive automation:
+
+\`\`\`bash
+export CLOUDFLARE_ACCOUNT_ID="<account-id>"
+export CLOUDFLARE_API_TOKEN="<scoped-api-token>"
+npx --package @cf-auth/cli@latest cf-auth setup --env production
+\`\`\`
+
+\`setup\` runs in order: provision the D1 database, apply remote migrations,
+create \`AUTH_SECRET\` only if it is missing (it never rotates an existing
+secret), run \`doctor\` checks, deploy the Worker, and verify the deployed
+\`/auth\` endpoints. Every step is idempotent; rerunning \`setup\` is safe.
+
+If \`AUTH_PUBLIC_ORIGIN\` is not configured yet, pass it explicitly:
+
+\`\`\`bash
+npx --package @cf-auth/cli@latest cf-auth setup --env production --origin https://app.example.com
+\`\`\`
+
+## Convergence loop for automation
+
+\`\`\`bash
+npx --package @cf-auth/cli@latest cf-auth setup --report --env production
+\`\`\`
+
+- Parse the JSON report (\`schemas/setup-report.schema.json\` in the
+  Cloudflare Auth repository). \`ok: true\` means setup is complete.
+- Otherwise execute each failed step's \`fix\` string exactly as printed.
+- If a failure points at a manual step, stop and hand the exact step to a
+  human operator. Never automate the Cloudflare dashboard.
+- Rerun the report command. Stop after 5 iterations, or when two consecutive
+  runs report the same failures, and summarize what remains.
+
+## API token scopes
+
+Minimum permissions for the standard \`workers.dev\` deployment path:
+
+- Account → Account Settings: Read
+- Account → Workers Scripts: Edit
+- Account → D1: Edit
+- User → User Details: Read
+- User → Memberships: Read
+
+Optional: Zone → Workers Routes: Edit and Zone → DNS: Edit for custom
+domains; Account → Email Sending: Edit for email automation.
+
+## Human-only steps
+
+Stop and hand these to a human operator; they cannot be automated:
+
+1. Create the scoped API token above (dashboard: My Profile → API Tokens).
+   Done when \`wrangler whoami\` lists the target account.
+2. Register a workers.dev subdomain once per account (the first deploy fails
+   with a dashboard onboarding URL). Done when rerunning setup deploys.
+3. Enable Workers Paid and Cloudflare Email Sending, verify the sender
+   domain, and publish its DNS records. Done when production email checks
+   pass in \`doctor\` and a reset email arrives.
+4. Create a Turnstile widget and store \`TURNSTILE_SECRET_KEY\` (only when
+   Turnstile is enabled). Done when the remote Turnstile secret check passes.
+5. Choose the exact public origin (workers.dev or a custom domain) and keep
+   \`AUTH_PUBLIC_ORIGIN\` matching the origin that serves this Worker.
+
+## Verify a deployment
+
+\`\`\`bash
+npx --package @cf-auth/cli@latest cf-auth doctor --env production
+\`\`\`
+
+\`doctor\` must exit 0. \`setup\` already exercises signup, login, and logout
+against the deployed origin unless \`--skip-verify\` is passed.
+
+## Common failures
+
+- D1 binding or database_id missing: rerun
+  \`npx --package @cf-auth/cli@latest cf-auth setup --env production\`.
+- AUTH_SECRET missing remotely: rerun setup; it creates missing secrets
+  without rotating existing ones.
+- Migrations not applied remotely:
+  \`npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production\`.
+- Multiple Cloudflare accounts: set \`CLOUDFLARE_ACCOUNT_ID\` or \`account_id\`
+  in \`wrangler.jsonc\`.
+- Terminal email rejected in production: configure the Cloudflare Email
+  binding or a custom email adapter.
+- Cookie not set in production: confirm \`AUTH_PUBLIC_ORIGIN\` is the exact
+  https origin that serves this Worker.
+
+## Do not
+
+- Do not print, log, or commit secrets, tokens, cookies, or \`.dev.vars\`.
+- Do not run \`rotate-secret --apply\` without \`--previous-from-env\` or
+  \`--previous-from-stdin\` on a live deployment; it invalidates sessions and
+  deploys immediately.
+- Do not automate the Cloudflare dashboard; hand manual steps to a human.
+- Do not edit existing files in \`migrations/\`; the schema is append-only.
+- In an unfamiliar account, run setup with \`--dry-run\` first and review the
+  plan.
 `;
 }
 
