@@ -32,7 +32,9 @@ describe("Hono adapter and browser client", () => {
     const { db, config, env } = await fixture();
     const app = new Hono();
     app.route(config.basePath, createAuthRoutes(config));
-    app.get("/api/me", requireUser(), (c) => c.json({ user: getAuthUser(c) }));
+    app.get("/api/me", requireUser(config), (c) =>
+      c.json({ user: getAuthUser(c) }),
+    );
 
     const signup = await app.request(
       `${origin}/auth/signup`,
@@ -90,11 +92,84 @@ describe("Hono adapter and browser client", () => {
     expect(authorizedBody.user).not.toHaveProperty("normalized_email");
   });
 
+  it("binds Hono middleware to its explicit auth configuration", async () => {
+    const dbA = createSqliteD1Database();
+    const dbB = createSqliteD1Database();
+    await Promise.all([applyRootD1Migrations(dbA), applyRootD1Migrations(dbB)]);
+    const configA = defineAuthConfig({
+      appName: "Hono A",
+      basePath: "/auth-a",
+      database: { binding: "AUTH_DB_A" },
+      session: { cookieName: "session-a" },
+      email: createMockEmailAdapter(),
+      passwordHashing: {
+        profile: "development-fast",
+        maxConcurrentHashesPerIsolate: 1,
+      },
+    });
+    const configB = defineAuthConfig({
+      appName: "Hono B",
+      basePath: "/auth-b",
+      database: { binding: "AUTH_DB_B" },
+      session: { cookieName: "session-b" },
+      email: createMockEmailAdapter(),
+      passwordHashing: {
+        profile: "development-fast",
+        maxConcurrentHashesPerIsolate: 1,
+      },
+    });
+    const env = {
+      AUTH_DB_A: dbA,
+      AUTH_DB_B: dbB,
+      AUTH_SECRET: authSecret,
+      AUTH_ENV: "development",
+      AUTH_PUBLIC_ORIGIN: origin,
+    };
+    const app = new Hono();
+    app.route(configA.basePath, createAuthRoutes(configA));
+    app.route(configB.basePath, createAuthRoutes(configB));
+    app.get("/api/a", requireUser(configA), (c) =>
+      c.json({ user: getAuthUser(c) }),
+    );
+    app.get("/api/b", requireUser(configB), (c) =>
+      c.json({ user: getAuthUser(c) }),
+    );
+
+    const signupA = await app.request(
+      `${origin}/auth-a/signup`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          email: "a@example.com",
+          password: "correct horse battery staple",
+        }),
+      },
+      env,
+    );
+    const cookieA = signupA.headers.get("Set-Cookie") ?? "";
+    expect(cookieA).toContain("session-a=");
+    const authorizedA = await app.request(
+      `${origin}/api/a`,
+      { headers: { Cookie: cookieA } },
+      env,
+    );
+    await expect(authorizedA.json()).resolves.toMatchObject({
+      user: { email: "a@example.com" },
+    });
+    const rejectedByB = await app.request(
+      `${origin}/api/b`,
+      { headers: { Cookie: cookieA } },
+      env,
+    );
+    expect(rejectedByB.status).toBe(401);
+  });
+
   it("supports optional Hono user middleware", async () => {
     const { config, env } = await fixture();
     const app = new Hono();
     app.route(config.basePath, createAuthRoutes(config));
-    app.get("/api/optional", optionalUser(), (c) =>
+    app.get("/api/optional", optionalUser(config), (c) =>
       c.json({ user: getAuthUser(c) }),
     );
 
@@ -199,8 +274,10 @@ describe("Hono adapter and browser client", () => {
     const ctx = { waitUntil() {} } as unknown as ExecutionContext;
     const app = new Hono();
     app.route(config.basePath, createAuthRoutes(config));
-    app.get("/api/me", requireUser(), (c) => c.json({ user: getAuthUser(c) }));
-    app.get("/api/verified", requireVerifiedUser(), (c) =>
+    app.get("/api/me", requireUser(config), (c) =>
+      c.json({ user: getAuthUser(c) }),
+    );
+    app.get("/api/verified", requireVerifiedUser(config), (c) =>
       c.json({ user: getAuthUser(c) }),
     );
     const signup = await app.request(

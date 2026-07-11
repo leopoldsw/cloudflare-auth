@@ -19,8 +19,12 @@ const magicHash2 =
   "hmac-sha256$v=1$kid=k1$purpose=magic_link$hash=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD";
 const resetHash =
   "hmac-sha256$v=1$kid=k1$purpose=password_reset$hash=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+const resetHash2 =
+  "hmac-sha256$v=1$kid=k1$purpose=password_reset$hash=GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG";
 const verifyHash =
   "hmac-sha256$v=1$kid=k1$purpose=email_verification$hash=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const verifyHash2 =
+  "hmac-sha256$v=1$kid=k1$purpose=email_verification$hash=HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
 
 async function migratedDb() {
   const db = createSqliteD1Database();
@@ -518,6 +522,56 @@ describe("D1 migrations and repositories", () => {
         }),
       ]),
     );
+  });
+
+  it("atomically replaces active magic, verification, and reset tokens", async () => {
+    await createUser("usr_replace");
+    const cases = [
+      {
+        type: "magic_link",
+        hashes: [magicHash, magicHash2],
+      },
+      {
+        type: "email_verification",
+        hashes: [verifyHash, verifyHash2],
+      },
+      {
+        type: "password_reset",
+        hashes: [resetHash, resetHash2],
+      },
+    ] as const;
+
+    for (const item of cases) {
+      await Promise.all(
+        item.hashes.map((tokenHash, index) =>
+          repos.verificationTokens.replaceActiveVerificationToken({
+            id: `vtok_replace_${item.type}_${index}`,
+            userId: "usr_replace",
+            type: item.type,
+            tokenHash,
+            createdAt: 200 + index,
+            expiresAt: 1_000,
+            revokedAt: 200 + index,
+            revokedReason: "superseded",
+          }),
+        ),
+      );
+      const rows = await db
+        .prepare(
+          `SELECT revoked_at
+           FROM verification_tokens
+           WHERE user_id = ? AND type = ?`,
+        )
+        .bind("usr_replace", item.type)
+        .all<{ revoked_at: number | null }>();
+      expect(rows.results).toHaveLength(2);
+      expect(
+        rows.results?.filter((row) => row.revoked_at === null),
+      ).toHaveLength(1);
+      expect(
+        rows.results?.filter((row) => row.revoked_at !== null),
+      ).toHaveLength(1);
+    }
   });
 
   it("validates metadata JSON constraints", async () => {

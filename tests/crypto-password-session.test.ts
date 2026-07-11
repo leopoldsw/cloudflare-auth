@@ -147,6 +147,9 @@ describe("crypto, passwords, tokens, and sessions", () => {
       "//evil.example",
       "%2f%2fevil.example",
       "/%2fevil.example",
+      "/a/..//evil.example",
+      "/%2e//evil.example",
+      "/%2e%2e//evil.example",
       "\\evil",
       "%5c%5cevil.example",
       "/%5cevil.example",
@@ -325,6 +328,49 @@ describe("crypto, passwords, tokens, and sessions", () => {
         cookieName: "__Secure-cfauth-session",
       }),
     ).toThrow(AuthCryptoError);
+    expect(
+      resolveSessionCookie({
+        mode: "development",
+        requestOrigin: "http://localhost:8787",
+        cookieName: "custom-session",
+      }),
+    ).toMatchObject({ name: "custom-session", secure: false });
+    expect(() =>
+      resolveSessionCookie({
+        ...base,
+        cookieName: "custom-session",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(() =>
+      resolveSessionCookie({
+        ...base,
+        cookieName: "__Secure-custom-session",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(
+      resolveSessionCookie({
+        ...base,
+        cookieName: "__Host-custom-session",
+      }),
+    ).toMatchObject({ name: "__Host-custom-session", secure: true });
+    expect(() =>
+      resolveSessionCookie({
+        ...base,
+        cookieName: "custom-session",
+        domain: ".example.com",
+      }),
+    ).toThrow(AuthCryptoError);
+    expect(
+      resolveSessionCookie({
+        ...base,
+        cookieName: "__Secure-custom-session",
+        domain: ".example.com",
+      }),
+    ).toMatchObject({
+      name: "__Secure-custom-session",
+      secure: true,
+      domain: ".example.com",
+    });
     expect(() =>
       resolveSessionCookie({
         ...base,

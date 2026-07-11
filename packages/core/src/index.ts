@@ -318,6 +318,12 @@ export interface VerificationTokenRepository {
   createVerificationToken(
     input: CreateVerificationTokenInput,
   ): Promise<VerificationTokenRow>;
+  replaceActiveVerificationToken(
+    input: CreateVerificationTokenInput & {
+      revokedAt: number;
+      revokedReason: string;
+    },
+  ): Promise<VerificationTokenRow>;
   findActiveVerificationTokenByHash(
     tokenHash: string,
     type: VerificationTokenType,
@@ -538,11 +544,12 @@ export function validateRedirectTarget(input: {
     if (!value.startsWith("/") || value.startsWith("//")) {
       throw new AuthCryptoError("unsafe redirect", "unsafe_redirect");
     }
-    return (
-      new URL(value, input.requestOrigin).pathname +
-      new URL(value, input.requestOrigin).search +
-      new URL(value, input.requestOrigin).hash
-    );
+    const relativeUrl = new URL(value, input.requestOrigin);
+    const normalized = `${relativeUrl.pathname}${relativeUrl.search}${relativeUrl.hash}`;
+    if (relativeUrl.pathname.startsWith("//")) {
+      throw new AuthCryptoError("unsafe redirect", "unsafe_redirect");
+    }
+    return normalized;
   }
   let url: URL;
   try {
@@ -1195,6 +1202,21 @@ export function resolveSessionCookie(input: {
           ? "__Secure-cfauth-session"
           : "__Host-cfauth-session";
   assertValidSessionCookieName(name);
+  const customName =
+    input.cookieName !== undefined && input.cookieName !== "auto";
+  if (
+    customName &&
+    secure &&
+    ((!domain && !name.startsWith("__Host-")) ||
+      (domain && !name.startsWith("__Secure-")))
+  ) {
+    throw new AuthCryptoError(
+      domain
+        ? "secure Domain cookies require a __Secure- custom name"
+        : "secure host-only cookies require a __Host- custom name",
+      "invalid_cookie_config",
+    );
+  }
   if (name.startsWith("__Host-") && (!secure || domain)) {
     throw new AuthCryptoError(
       "__Host- cookies require Secure and no Domain",

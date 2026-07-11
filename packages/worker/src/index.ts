@@ -467,6 +467,80 @@ export function createD1Repositories(db: D1Database): AuthRepositories {
           .bind(input.id),
       );
     },
+    async replaceActiveVerificationToken(input) {
+      assertVerificationTokenSubject(input);
+      assertHmacTokenEnvelope(input.tokenHash);
+      const metadataJson = assertValidMetadataJson(input.metadataJson);
+      const revokeStatement = input.userId
+        ? db
+            .prepare(
+              `UPDATE verification_tokens
+               SET revoked_at = ?, revoked_reason = ?
+               WHERE type = ?
+                 AND used_at IS NULL
+                 AND consume_id IS NULL
+                 AND revoked_at IS NULL
+                 AND user_id = ?
+                 AND normalized_email IS NULL`,
+            )
+            .bind(
+              input.revokedAt,
+              input.revokedReason,
+              input.type,
+              input.userId,
+            )
+        : db
+            .prepare(
+              `UPDATE verification_tokens
+               SET revoked_at = ?, revoked_reason = ?
+               WHERE type = ?
+                 AND used_at IS NULL
+                 AND consume_id IS NULL
+                 AND revoked_at IS NULL
+                 AND normalized_email = ?
+                 AND user_id IS NULL`,
+            )
+            .bind(
+              input.revokedAt,
+              input.revokedReason,
+              input.type,
+              input.normalizedEmail,
+            );
+      const results = (await db.batch([
+        revokeStatement,
+        db
+          .prepare(
+            `INSERT INTO verification_tokens (
+              id, user_id, normalized_email, token_hash, type, redirect_to,
+              created_at, expires_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            input.id,
+            input.userId ?? null,
+            input.normalizedEmail ?? null,
+            input.tokenHash,
+            input.type,
+            input.redirectTo ?? null,
+            input.createdAt,
+            input.expiresAt,
+            metadataJson,
+          ),
+        db
+          .prepare("SELECT * FROM verification_tokens WHERE id = ?")
+          .bind(input.id),
+      ])) as unknown as D1Result[];
+      const row = (
+        results[2]?.results as VerificationTokenRow[] | undefined
+      )?.[0];
+      if (changes(results[1]) !== 1 || !row) {
+        throw new AuthRepositoryError(
+          "verification token replacement did not create required state",
+          "token_replace_inconsistent",
+        );
+      }
+      return row;
+    },
     async findActiveVerificationTokenByHash(tokenHash, type, now) {
       assertHmacTokenEnvelope(tokenHash);
       return firstPrimaryDb(db)
@@ -1327,10 +1401,13 @@ export interface AuthConfig extends MinimalAuthConfig {
   turnstile: {
     mode: "disabled" | "optional" | "required";
     endpoints: TurnstileEndpointName[];
+    contextBinding: "strict" | "disabled";
     verify?: (input: {
       token: string;
       request: Request;
       runtime: AuthEmailRuntime;
+      expectedHostname?: string;
+      expectedAction?: TurnstileEndpointName;
     }) => Promise<boolean>;
   };
   email: AuthEmailAdapter;
@@ -1398,9 +1475,19 @@ export function defineAuthConfig(config: AuthConfigInput): AuthConfig {
   const turnstile = {
     mode: "disabled",
     endpoints: [],
+    contextBinding: "strict",
     ...config.turnstile,
   } satisfies AuthConfig["turnstile"];
   assertTurnstileEndpoints(turnstile.endpoints);
+  if (
+    turnstile.contextBinding !== "strict" &&
+    turnstile.contextBinding !== "disabled"
+  ) {
+    throw new AuthCryptoError(
+      "invalid Turnstile context binding",
+      "invalid_turnstile_context_binding",
+    );
+  }
   const passwordHashing = {
     profile: "workers-balanced",
     maxConcurrentHashesPerIsolate: 1,
@@ -2228,6 +2315,7 @@ async function handleSignup(
 ): Promise<Response> {
   if (!runtime.config.signup.enabled)
     return errorResponse("Not found", 404, "not_found");
+  const startedAt = Date.now();
   const rawBody = await parseBody(request, runtime, "json");
   await enforceTurnstile(runtime, "signup", rawBody, request);
   const body = signupSchema.parse(rawBody);
@@ -2272,7 +2360,11 @@ async function handleSignup(
     queueAuthEvent(runtime, request, "signup_failed", {
       metadata: { reason: "create_user_failed" },
     });
-    if (runtime.config.signup.enumerationSafe) return json({ ok: true });
+    if (runtime.config.signup.enumerationSafe) {
+      performDummyTokenWork(runtime, "verify", "email_verification");
+      await applyEnumerationResponseDelay(runtime, startedAt);
+      return json({ ok: true });
+    }
     throw error;
   }
   queueAuthEvent(runtime, request, "signup_success", {
@@ -2283,18 +2375,26 @@ async function handleSignup(
         !runtime.config.signup.enumerationSafe,
     },
   });
-  const verificationEmailSent = runtime.config.emailVerification.enabled
-    ? await sendVerificationEmail(user, runtime, null, request)
-    : true;
+  let verificationEmailSent = true;
+  if (runtime.config.emailVerification.enabled) {
+    const sendTask = sendVerificationEmail(user, runtime, null, request);
+    if (runtime.config.signup.enumerationSafe) {
+      scheduleAuthTask(runtime, sendTask);
+    } else {
+      verificationEmailSent = await sendTask;
+    }
+  }
   if (
     runtime.config.signup.requireEmailVerificationBeforeSession ||
     runtime.config.signup.enumerationSafe
   ) {
-    if (!verificationEmailSent && !runtime.config.signup.enumerationSafe)
+    if (runtime.config.signup.enumerationSafe) {
+      await applyEnumerationResponseDelay(runtime, startedAt);
+      return json({ ok: true });
+    }
+    if (!verificationEmailSent)
       return errorResponse("Email could not be sent", 500, "email_send_failed");
-    return runtime.config.signup.enumerationSafe
-      ? json({ ok: true })
-      : json({ user: publicUser(user) });
+    return json({ user: publicUser(user) });
   }
   return jsonWithSession(
     { user: publicUser(user) },
@@ -2318,11 +2418,20 @@ async function handleLogin(
   await enforceTurnstile(runtime, "password_login", rawBody, request);
   const body = loginSchema.parse(rawBody);
   const isEmail = body.identifier.includes("@");
+  await rateLimitIp(runtime, "password_login", 10, 10 * 60 * 1000, request);
   let user: UserRow | null = null;
-  try {
-    if (isEmail && runtime.config.login.emailPassword) {
-      const normalized = normalizeEmail(body.identifier);
-      await rateLimit(
+  let invalidIdentifier = false;
+  if (isEmail && runtime.config.login.emailPassword) {
+    let normalized: string | null = null;
+    try {
+      normalized = normalizeEmail(body.identifier);
+    } catch (error) {
+      if (!(error instanceof AuthCryptoError && error.code === "invalid_email"))
+        throw error;
+      invalidIdentifier = true;
+    }
+    if (normalized !== null) {
+      await rateLimitSubject(
         runtime,
         "password_login",
         "email",
@@ -2332,12 +2441,23 @@ async function handleLogin(
         request,
       );
       user = await runtime.repos.users.findUserByNormalizedEmail(normalized);
-    } else if (!isEmail && runtime.config.login.usernamePassword) {
-      const normalized = normalizeUsername(
+    }
+  } else if (!isEmail && runtime.config.login.usernamePassword) {
+    let normalized: string | null = null;
+    try {
+      normalized = normalizeUsername(
         body.identifier,
         runtime.config.signup.username,
       );
-      await rateLimit(
+    } catch (error) {
+      if (!(
+        error instanceof AuthCryptoError && error.code === "invalid_username"
+      ))
+        throw error;
+      invalidIdentifier = true;
+    }
+    if (normalized !== null) {
+      await rateLimitSubject(
         runtime,
         "password_login",
         "identifier",
@@ -2348,7 +2468,8 @@ async function handleLogin(
       );
       user = await runtime.repos.users.findUserByNormalizedUsername(normalized);
     }
-  } catch {
+  }
+  if (invalidIdentifier) {
     await passwordSemaphore(runtime).run(() =>
       dummyVerifyPassword(body.password, {
         profile: runtime.config.passwordHashing.profile,
@@ -3055,21 +3176,9 @@ async function createAndSendToken(
   request?: Request,
 ): Promise<boolean> {
   const now = Date.now();
-  if (
-    (userId || normalizedEmail) &&
-    activeTokenPolicy(runtime, type) === "invalidate-previous"
-  ) {
-    await runtime.repos.verificationTokens.revokeActiveVerificationTokens({
-      type,
-      userId,
-      normalizedEmail,
-      revokedAt: now,
-      revokedReason: "superseded",
-    });
-  }
   const token = generateRawAuthToken(rawPurpose, runtime.keyRing.current);
   const tokenHash = hashRawAuthToken(token, runtime.keyRing, type);
-  await runtime.repos.verificationTokens.createVerificationToken({
+  const tokenInput = {
     id: randomId("vtok_"),
     userId,
     normalizedEmail,
@@ -3078,7 +3187,19 @@ async function createAndSendToken(
     redirectTo,
     createdAt: now,
     expiresAt: now + ttlMs,
-  });
+  } satisfies CreateVerificationTokenInput;
+  if (
+    (userId || normalizedEmail) &&
+    activeTokenPolicy(runtime, type) === "invalidate-previous"
+  ) {
+    await runtime.repos.verificationTokens.replaceActiveVerificationToken({
+      ...tokenInput,
+      revokedAt: now,
+      revokedReason: "superseded",
+    });
+  } else {
+    await runtime.repos.verificationTokens.createVerificationToken(tokenInput);
+  }
   const path = emailTokenPagePath(runtime, rawPurpose);
   const url = `${runtime.publicOrigin}${path}?token=${encodeURIComponent(token)}`;
   const input = { to, token, url, redirectTo, expiresAt: now + ttlMs };
@@ -3567,17 +3688,38 @@ async function rateLimit(
   request: Request,
   options: { ipLimit?: number } = {},
 ): Promise<void> {
+  await rateLimitIp(
+    runtime,
+    action,
+    subjectType === "ip" ? limit : (options.ipLimit ?? Math.max(limit, 10)),
+    windowMs,
+    request,
+  );
+  if (subjectType !== "ip") {
+    await rateLimitSubject(
+      runtime,
+      action,
+      subjectType,
+      subject,
+      limit,
+      windowMs,
+      request,
+    );
+  }
+}
+
+async function rateLimitIp(
+  runtime: RuntimeContext,
+  action: string,
+  limit: number,
+  windowMs: number,
+  request: Request,
+): Promise<void> {
   const ipKey = deriveRateLimitKey({
     keyRing: runtime.keyRing,
     action,
     subjectType: "ip",
     subject: canonicalizeIp(clientIp(request)),
-  });
-  const key = deriveRateLimitKey({
-    keyRing: runtime.keyRing,
-    action,
-    subjectType,
-    subject: subjectType === "ip" ? canonicalizeIp(subject) : subject,
   });
   if (runtime.config.rateLimit.edgePrefilter === "optional") {
     const prefilterAllowed = await cloudflareRateLimitPrefilter({
@@ -3598,27 +3740,54 @@ async function rateLimit(
     action,
     key: ipKey,
     windowMs,
-    limit:
-      subjectType === "ip" ? limit : (options.ipLimit ?? Math.max(limit, 10)),
+    limit,
     now: Date.now(),
   });
-  const subjectHit =
-    subjectType === "ip"
-      ? null
-      : await runtime.repos.rateLimits.hitFixedWindow({
-          action,
-          key,
-          windowMs,
-          limit,
-          now: Date.now(),
-        });
-  if (!ipHit.allowed || subjectHit?.allowed === false) {
+  if (!ipHit.allowed) {
     queueAuthEvent(runtime, request, "rate_limit_hit", {
       metadata: {
         action,
         limiter: "d1",
-        ipLimited: !ipHit.allowed,
-        subjectLimited: subjectHit ? !subjectHit.allowed : false,
+        ipLimited: true,
+        subjectLimited: false,
+      },
+    });
+    throw new AuthCryptoError(
+      "Too many attempts. Try again later.",
+      "rate_limited",
+    );
+  }
+}
+
+async function rateLimitSubject(
+  runtime: RuntimeContext,
+  action: string,
+  subjectType: "email" | "identifier",
+  subject: string,
+  limit: number,
+  windowMs: number,
+  request: Request,
+): Promise<void> {
+  const key = deriveRateLimitKey({
+    keyRing: runtime.keyRing,
+    action,
+    subjectType,
+    subject,
+  });
+  const subjectHit = await runtime.repos.rateLimits.hitFixedWindow({
+    action,
+    key,
+    windowMs,
+    limit,
+    now: Date.now(),
+  });
+  if (!subjectHit.allowed) {
+    queueAuthEvent(runtime, request, "rate_limit_hit", {
+      metadata: {
+        action,
+        limiter: "d1",
+        ipLimited: false,
+        subjectLimited: true,
       },
     });
     throw new AuthCryptoError(
@@ -3676,16 +3845,26 @@ async function enforceTurnstile(
       );
     return;
   }
+  const expectedHostname =
+    turnstile.contextBinding === "strict"
+      ? new URL(runtime.publicOrigin).hostname
+      : undefined;
+  const expectedAction =
+    turnstile.contextBinding === "strict" ? endpoint : undefined;
   const ok = turnstile.verify
     ? await turnstile.verify({
         token,
         request,
         runtime: emailRuntime(runtime),
+        ...(expectedHostname ? { expectedHostname } : {}),
+        ...(expectedAction ? { expectedAction } : {}),
       })
     : await verifyTurnstileToken({
         token,
         secret: runtime.env.TURNSTILE_SECRET_KEY ?? "",
         remoteIp: clientIp(request),
+        ...(expectedHostname ? { expectedHostname } : {}),
+        ...(expectedAction ? { expectedAction } : {}),
       });
   if (!ok)
     throw new AuthCryptoError(
@@ -3698,6 +3877,8 @@ export async function verifyTurnstileToken(input: {
   token: string;
   secret: string;
   remoteIp?: string;
+  expectedHostname?: string;
+  expectedAction?: string;
   fetcher?: typeof fetch;
 }): Promise<boolean> {
   if (!input.secret)
@@ -3717,8 +3898,25 @@ export async function verifyTurnstileToken(input: {
       { method: "POST", body },
     );
     if (!response.ok) return false;
-    const payload = (await response.json()) as { success?: boolean };
-    return payload.success === true;
+    const payload = (await response.json()) as {
+      success?: boolean;
+      hostname?: string;
+      action?: string;
+    };
+    if (payload.success !== true) return false;
+    if (
+      input.expectedHostname !== undefined &&
+      payload.hostname !== input.expectedHostname
+    ) {
+      return false;
+    }
+    if (
+      input.expectedAction !== undefined &&
+      payload.action !== input.expectedAction
+    ) {
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }

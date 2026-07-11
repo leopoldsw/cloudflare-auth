@@ -44,6 +44,25 @@ values after migration.
 
 Config changes must be explicit. Do not silently change password hashing parameters, cookie domain behavior, redirect allowlists, request-origin allowlists, or email adapter behavior during an upgrade.
 
+This hardening release has three intentional fail-closed compatibility changes:
+
+- Hono `optionalUser()`, `requireUser()`, and `requireVerifiedUser()` now require
+  the auth config as their first argument. Pass the same config used by the
+  corresponding `createAuthRoutes(config)` mount.
+- A custom secure host-only session-cookie name must start with `__Host-`; a
+  custom secure domain-cookie name must start with `__Secure-`. The default
+  `cookieName: "auto"` already selects the correct prefix.
+- Built-in Turnstile verification now uses `contextBinding: "strict"` by
+  default. Render each widget with the documented endpoint action. Use the
+  explicit `"disabled"` setting only when another deployment-specific control
+  enforces equivalent hostname and action binding.
+
+Applications that provide a custom `AuthRepositories` implementation must also
+implement `verificationTokens.replaceActiveVerificationToken()`. The operation
+must revoke the matching active token set and insert its replacement in one
+atomic database transaction; a sequential revoke-then-insert implementation
+does not preserve the single-active-token policy under concurrent requests.
+
 Cross-subdomain session cookies require `session.domain` to use leading-dot
 parent-domain syntax such as `.example.com`. Plain hostnames such as
 `example.com` must be updated before deploying a release with stricter cookie

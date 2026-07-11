@@ -40,33 +40,34 @@ explicitly.
 
 Sessions and requests:
 
-| Key                                    | Default | Notes                                                                                              |
-| -------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
-| `session.cookieName`                   | `auto`  | Uses safe dev/production names automatically unless explicitly set.                                |
-| `session.maxAgeDays`                   | `30`    | Session cookie and row lifetime.                                                                   |
-| `session.sameSite`                     | `lax`   | `lax` or `strict`; v1 does not support `none`.                                                     |
-| `session.secure`                       | `auto`  | Static value is reserved; runtime derives secure mode from origin.                                 |
-| `session.domain`                       | unset   | Optional leading-dot parent domain for cross-subdomain cookies.                                    |
-| `session.requireVerifiedEmail`         | `false` | Hides sessions from `/auth/user`, `getUser()`, `getSession()`, and `requireUser()` until verified. |
-| `request.maxBodyBytes`                 | `16384` | Positive integer byte limit.                                                                       |
-| `request.requireOriginOnUnsafeMethods` | `true`  | Requires trusted `Origin` for browser mutations outside local development.                         |
-| `request.enumerationMinResponseMs`     | `0`     | Optional minimum response time for magic-link, email-verification, and password-reset requests.    |
-| `request.enumerationJitterMs`          | `0`     | Optional random extra delay added to the enumeration minimum.                                      |
+| Key                                    | Default | Notes                                                                                                                           |
+| -------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `session.cookieName`                   | `auto`  | Uses safe names automatically. Secure custom host-only names require `__Host-`; secure custom domain names require `__Secure-`. |
+| `session.maxAgeDays`                   | `30`    | Session cookie and row lifetime.                                                                                                |
+| `session.sameSite`                     | `lax`   | `lax` or `strict`; v1 does not support `none`.                                                                                  |
+| `session.secure`                       | `auto`  | Static value is reserved; runtime derives secure mode from origin.                                                              |
+| `session.domain`                       | unset   | Optional leading-dot parent domain for cross-subdomain cookies.                                                                 |
+| `session.requireVerifiedEmail`         | `false` | Hides sessions from `/auth/user`, `getUser()`, `getSession()`, and `requireUser()` until verified.                              |
+| `request.maxBodyBytes`                 | `16384` | Positive integer byte limit.                                                                                                    |
+| `request.requireOriginOnUnsafeMethods` | `true`  | Requires trusted `Origin` for browser mutations outside local development.                                                      |
+| `request.enumerationMinResponseMs`     | `0`     | Optional minimum response time for enumeration-safe signup, magic-link, verification, and reset requests.                       |
+| `request.enumerationJitterMs`          | `0`     | Optional random extra delay added to the enumeration minimum.                                                                   |
 
 Security, hashing, and bot checks:
 
-| Key                                             | Default            | Notes                                                                   |
-| ----------------------------------------------- | ------------------ | ----------------------------------------------------------------------- |
-| `security.allowedRequestOrigins`                | `[]`               | Extra exact origins allowed for browser mutations.                      |
-| `security.allowedPreviewRequestOrigins`         | `[]`               | Preview-only request-origin allowlist.                                  |
-| `passwordHashing.profile`                       | `workers-balanced` | `doctor` benchmarks the configured profile locally.                     |
-| `passwordHashing.maxConcurrentHashesPerIsolate` | `1`                | Per-isolate semaphore limit for password hashing.                       |
-| `passwordHashing.queueTimeoutMs`                | `2000`             | Maximum time a hash waits for the semaphore.                            |
-| `turnstile.mode`                                | `disabled`         | `disabled`, `optional`, or `required`.                                  |
-| `turnstile.endpoints`                           | `[]`               | Endpoint names that require or accept Turnstile.                        |
-| `turnstile.verify`                              | built-in verifier  | Optional custom verifier.                                               |
-| `rateLimit.adapter`                             | `d1`               | Authoritative fixed-window limiter; only `d1` is supported in v1.       |
-| `rateLimit.edgePrefilter`                       | `optional`         | `optional` calls `AUTH_RATE_LIMITER` when present; `disabled` skips it. |
+| Key                                             | Default            | Notes                                                                                          |
+| ----------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| `security.allowedRequestOrigins`                | `[]`               | Extra exact origins allowed for browser mutations.                                             |
+| `security.allowedPreviewRequestOrigins`         | `[]`               | Preview-only request-origin allowlist.                                                         |
+| `passwordHashing.profile`                       | `workers-balanced` | `doctor` benchmarks the configured profile locally.                                            |
+| `passwordHashing.maxConcurrentHashesPerIsolate` | `1`                | Per-isolate semaphore limit for password hashing.                                              |
+| `passwordHashing.queueTimeoutMs`                | `2000`             | Maximum time a hash waits for the semaphore.                                                   |
+| `turnstile.mode`                                | `disabled`         | `disabled`, `optional`, or `required`.                                                         |
+| `turnstile.endpoints`                           | `[]`               | Endpoint names that require or accept Turnstile.                                               |
+| `turnstile.contextBinding`                      | `strict`           | Exact-binds the public-origin hostname and endpoint action; `disabled` is an explicit opt-out. |
+| `turnstile.verify`                              | built-in verifier  | Optional custom verifier.                                                                      |
+| `rateLimit.adapter`                             | `d1`               | Authoritative fixed-window limiter; only `d1` is supported in v1.                              |
+| `rateLimit.edgePrefilter`                       | `optional`         | `optional` calls `AUTH_RATE_LIMITER` when present; `disabled` skips it.                        |
 
 Same-origin unsafe browser requests pass origin validation after host
 validation. Credentialed CORS response headers are emitted only for origins
@@ -75,19 +76,19 @@ listed in `security.allowedRequestOrigins` or, in preview mode,
 
 Signup and login:
 
-| Key                                            | Default | Notes                                                                                      |
-| ---------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
-| `signup.enabled`                               | `true`  | Disables `POST /auth/signup` when false.                                                   |
-| `signup.requireEmailVerificationBeforeSession` | `false` | Signup returns no session until verification.                                              |
-| `signup.enumerationSafe`                       | `false` | Generic signup response; requires email verification before session and optional username. |
-| `signup.username.enabled`                      | `true`  | Allows usernames on signup.                                                                |
-| `signup.username.required`                     | `false` | Requires username when enabled.                                                            |
-| `signup.username.minLength`                    | `3`     | Minimum normalized username length.                                                        |
-| `signup.username.maxLength`                    | `32`    | Maximum normalized username length.                                                        |
-| `login.emailPassword`                          | `true`  | Enables email/password login.                                                              |
-| `login.usernamePassword`                       | `true`  | Enables username/password login.                                                           |
-| `login.magicLink`                              | `true`  | Enables magic-link request and consume routes.                                             |
-| `login.requireVerifiedEmail`                   | `false` | Blocks password login for unverified users.                                                |
+| Key                                            | Default | Notes                                                                                                                           |
+| ---------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `signup.enabled`                               | `true`  | Disables `POST /auth/signup` when false.                                                                                        |
+| `signup.requireEmailVerificationBeforeSession` | `false` | Signup returns no session until verification.                                                                                   |
+| `signup.enumerationSafe`                       | `false` | Generic floored response with deferred verification delivery; requires email verification before session and optional username. |
+| `signup.username.enabled`                      | `true`  | Allows usernames on signup.                                                                                                     |
+| `signup.username.required`                     | `false` | Requires username when enabled.                                                                                                 |
+| `signup.username.minLength`                    | `3`     | Minimum normalized username length.                                                                                             |
+| `signup.username.maxLength`                    | `32`    | Maximum normalized username length.                                                                                             |
+| `login.emailPassword`                          | `true`  | Enables email/password login.                                                                                                   |
+| `login.usernamePassword`                       | `true`  | Enables username/password login.                                                                                                |
+| `login.magicLink`                              | `true`  | Enables magic-link request and consume routes.                                                                                  |
+| `login.requireVerifiedEmail`                   | `false` | Blocks password login for unverified users.                                                                                     |
 
 Email-token flows:
 

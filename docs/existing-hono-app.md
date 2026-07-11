@@ -34,12 +34,17 @@ Protect app routes with the Hono helpers:
 ```ts
 import { getAuthUser, requireUser, requireVerifiedUser } from "@cf-auth/hono";
 
-app.get("/api/me", requireUser(), (c) => c.json({ user: getAuthUser(c) }));
+app.get("/api/me", requireUser(authConfig), (c) =>
+  c.json({ user: getAuthUser(c) }),
+);
 
-app.post("/api/verified-action", requireVerifiedUser(), async (c) => {
+app.post("/api/verified-action", requireVerifiedUser(authConfig), async (c) => {
   const user = getAuthUser(c);
   return c.json({ userId: user?.id });
 });
 ```
 
 `getAuthUser(c)` returns the public user shape, not the raw database user row.
+Each authentication middleware call requires its config explicitly, so multiple
+auth routers in one isolate cannot silently change another route's database or
+policy.

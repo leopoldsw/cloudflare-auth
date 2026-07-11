@@ -14,6 +14,7 @@ import {
   terminalEmail,
   type AuthConfig,
   type AuthConfigInput,
+  type AuthEmailAdapter,
 } from "@cf-auth/worker";
 import { describe, expect, it } from "vitest";
 
@@ -1000,6 +1001,128 @@ describe("auth HTTP runtime", () => {
     );
   });
 
+  it("preserves password-login subject limits as public 429 responses", async () => {
+    for (const loginCase of [
+      { identifier: "limited@example.com", username: "limited-user" },
+      { identifier: "limited-user", username: "limited-user" },
+    ]) {
+      const { authFetch } = await setup();
+      await authFetch("/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "limited@example.com",
+          username: loginCase.username,
+          password: "correct horse battery staple",
+        }),
+      });
+      const responses: Response[] = [];
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        responses.push(
+          await authFetch("/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "CF-Connecting-IP": loginCase.identifier.includes("@")
+                ? "203.0.113.40"
+                : "203.0.113.41",
+            },
+            body: JSON.stringify({
+              identifier: loginCase.identifier,
+              password: "wrong horse battery staple",
+            }),
+          }),
+        );
+      }
+      expect(
+        responses.slice(0, 5).every((response) => response.status === 401),
+      ).toBe(true);
+      expect(responses[5]?.status).toBe(429);
+      await expect(responses[5]?.json()).resolves.toMatchObject({
+        error: { code: "rate_limited" },
+      });
+    }
+  });
+
+  it("applies the common login IP limit before invalid or unmatched identifiers", async () => {
+    const { authFetch, db } = await setup();
+    const headers = {
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": "203.0.113.42",
+    };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await authFetch("/auth/login", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          identifier: `invalid-${attempt}@`,
+          password: "wrong horse battery staple",
+        }),
+      });
+      expect(response.status).toBe(401);
+    }
+    const limited = await authFetch("/auth/login", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        identifier: "new-subject@example.com",
+        password: "wrong horse battery staple",
+      }),
+    });
+    expect(limited.status).toBe(429);
+    await expect(limited.json()).resolves.toMatchObject({
+      error: { code: "rate_limited" },
+    });
+    await expect(
+      db
+        .prepare(
+          "SELECT count(*) AS count FROM rate_limits WHERE action = 'password_login'",
+        )
+        .first("count"),
+    ).resolves.toBe(1);
+  });
+
+  it("meters identifier shapes excluded by a configured login mode", async () => {
+    for (const loginCase of [
+      {
+        login: {
+          emailPassword: false,
+          usernamePassword: true,
+          magicLink: true,
+          requireVerifiedEmail: false,
+        },
+        identifier: "disabled-email@example.com",
+      },
+      {
+        login: {
+          emailPassword: true,
+          usernamePassword: false,
+          magicLink: true,
+          requireVerifiedEmail: false,
+        },
+        identifier: "disabled-username",
+      },
+    ] as const) {
+      const { authFetch, db } = await setup({ login: loginCase.login });
+      const response = await authFetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: loginCase.identifier,
+          password: "wrong horse battery staple",
+        }),
+      });
+      expect(response.status).toBe(401);
+      await expect(
+        db
+          .prepare(
+            "SELECT count(*) AS count FROM rate_limits WHERE action = 'password_login'",
+          )
+          .first("count"),
+      ).resolves.toBe(1);
+    }
+  });
+
   it("hides corrupted stored password hash faults from login responses", async () => {
     const { authFetch, db } = await setup();
     const now = Date.now();
@@ -1457,6 +1580,52 @@ describe("auth HTTP runtime", () => {
     expect(counts.password_reset).toMatchObject({ active: 1, revoked: 1 });
   });
 
+  it("keeps one active token per flow under concurrent issuance", async () => {
+    const { authFetch, db, handler, env, ctx, flushDeferred } = await setup();
+    await signup(authFetch, "concurrent-token@example.com");
+
+    const request = (path: string, body: Record<string, string>) =>
+      handler.fetch(
+        new Request(`${origin}${path}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: origin,
+          },
+          body: JSON.stringify(body),
+        }),
+        env,
+        ctx,
+      );
+    const responses = await Promise.all([
+      request("/auth/magic-link/request", {
+        email: "concurrent-token@example.com",
+      }),
+      request("/auth/magic-link/request", {
+        email: "concurrent-token@example.com",
+      }),
+      request("/auth/email/verify/request", {
+        email: "concurrent-token@example.com",
+      }),
+      request("/auth/email/verify/request", {
+        email: "concurrent-token@example.com",
+      }),
+      request("/auth/password/reset/request", {
+        email: "concurrent-token@example.com",
+      }),
+      request("/auth/password/reset/request", {
+        email: "concurrent-token@example.com",
+      }),
+    ]);
+    expect(responses.every((response) => response?.status === 200)).toBe(true);
+    await flushDeferred();
+
+    const counts = await tokenCounts(db);
+    expect(counts.magic_link.active).toBe(1);
+    expect(counts.email_verification.active).toBe(1);
+    expect(counts.password_reset.active).toBe(1);
+  });
+
   it("allows multiple active email tokens when configured", async () => {
     const { authFetch, db } = await setup({
       magicLink: {
@@ -1889,6 +2058,33 @@ describe("auth HTTP runtime", () => {
       }),
     });
     expect(unsafe.status).toBe(400);
+    const canonicalUnsafe = await authFetch("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "a@example.com",
+        redirectTo: "/a/..//evil.com",
+      }),
+    });
+    expect(canonicalUnsafe.status).toBe(400);
+    await expect(canonicalUnsafe.json()).resolves.toMatchObject({
+      error: { code: "unsafe_redirect" },
+    });
+    const resetCanonicalUnsafe = await authFetch(
+      "/auth/password/reset/request",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "a@example.com",
+          afterResetRedirectTo: "/a/..//evil.com",
+        }),
+      },
+    );
+    expect(resetCanonicalUnsafe.status).toBe(400);
+    await expect(resetCanonicalUnsafe.json()).resolves.toMatchObject({
+      error: { code: "unsafe_redirect" },
+    });
 
     const invalidJson = await authFetch("/auth/signup", {
       method: "POST",
@@ -1904,6 +2100,7 @@ describe("auth HTTP runtime", () => {
       turnstile: {
         mode: "required",
         endpoints: ["signup"],
+        contextBinding: "strict",
         verify: async () => true,
       },
     });
@@ -2092,6 +2289,7 @@ describe("auth HTTP runtime", () => {
       turnstile: {
         mode: "required",
         endpoints: ["magic_link_request"],
+        contextBinding: "strict",
       },
     });
     const missingTurnstileSecret = await turnstileConfig.authFetch(
@@ -2674,6 +2872,84 @@ describe("auth HTTP runtime", () => {
     });
     expect(await response.json()).toEqual({ ok: true });
     expect(response.headers.get("Set-Cookie")).toBeNull();
+  });
+
+  it("floors both enumeration-safe signup branches without awaiting delivery", async () => {
+    let releaseDelivery = () => {};
+    let deliveryCompleted = false;
+    const heldDelivery = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
+    });
+    const email: AuthEmailAdapter = {
+      kind: "held-verification",
+      async sendMagicLink() {},
+      async sendEmailVerification() {
+        await heldDelivery;
+        deliveryCompleted = true;
+      },
+      async sendPasswordReset() {},
+    };
+    const { handler, env } = await setup({
+      email,
+      request: {
+        maxBodyBytes: 16 * 1024,
+        requireOriginOnUnsafeMethods: true,
+        enumerationMinResponseMs: 30,
+        enumerationJitterMs: 0,
+      },
+      signup: {
+        enabled: true,
+        requireEmailVerificationBeforeSession: true,
+        enumerationSafe: true,
+        username: {
+          enabled: true,
+          required: false,
+          minLength: 3,
+          maxLength: 32,
+        },
+      },
+    });
+    const deferred: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil(promise: Promise<unknown>) {
+        deferred.push(Promise.resolve(promise));
+      },
+    } as unknown as ExecutionContext;
+    const signupRequest = () =>
+      new Request(`${origin}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          email: "timing-safe@example.com",
+          password: "correct horse battery staple",
+        }),
+      });
+
+    const startedAt = Date.now();
+    const firstOutcome = await Promise.race([
+      handler
+        .fetch(signupRequest(), env, ctx)
+        .then((response) => ({ response, timedOut: false })),
+      new Promise<{ response: null; timedOut: true }>((resolve) =>
+        setTimeout(() => resolve({ response: null, timedOut: true }), 200),
+      ),
+    ]);
+    const firstElapsed = Date.now() - startedAt;
+    expect(firstOutcome.timedOut).toBe(false);
+    expect(firstOutcome.response?.status).toBe(200);
+    expect(firstElapsed).toBeGreaterThanOrEqual(25);
+    expect(deliveryCompleted).toBe(false);
+
+    releaseDelivery();
+    await Promise.all(deferred.splice(0));
+    expect(deliveryCompleted).toBe(true);
+
+    const duplicateStartedAt = Date.now();
+    const duplicate = await handler.fetch(signupRequest(), env, ctx);
+    expect(duplicate?.status).toBe(200);
+    expect(Date.now() - duplicateStartedAt).toBeGreaterThanOrEqual(25);
+    await expect(duplicate?.json()).resolves.toEqual({ ok: true });
+    await Promise.all(deferred.splice(0));
   });
 
   it("creates at most one magic-link JIT signup session for concurrent consumes", async () => {

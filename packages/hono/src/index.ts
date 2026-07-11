@@ -11,10 +11,8 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 export const honoPackageName = "@cf-auth/hono";
 
 const authUserKey = "cfAuthUser";
-let defaultAuthConfig: AuthHelperConfig | null = null;
 
 export function createAuthRoutes(config: AuthHelperConfig) {
-  defaultAuthConfig = config;
   const app = new Hono();
   const handler = createAuthHandler(config);
   app.all("*", async (c) => {
@@ -29,9 +27,9 @@ export function getAuthUser(c: Context): PublicAuthUser | null {
   return (c.get(authUserKey) as PublicAuthUser | null | undefined) ?? null;
 }
 
-export function optionalUser(config?: AuthHelperConfig): MiddlewareHandler {
+export function optionalUser(config: AuthHelperConfig): MiddlewareHandler {
+  const resolvedConfig = requireHelperConfig(config);
   return async (c, next) => {
-    const resolvedConfig = resolveHelperConfig(config);
     const user = await getWorkerUser(
       c.req.raw,
       c.env,
@@ -43,9 +41,9 @@ export function optionalUser(config?: AuthHelperConfig): MiddlewareHandler {
   };
 }
 
-export function requireUser(config?: AuthHelperConfig): MiddlewareHandler {
+export function requireUser(config: AuthHelperConfig): MiddlewareHandler {
+  const resolvedConfig = requireHelperConfig(config);
   return async (c, next) => {
-    const resolvedConfig = resolveHelperConfig(config);
     const user = await getWorkerUser(
       c.req.raw,
       c.env,
@@ -63,10 +61,10 @@ export function requireUser(config?: AuthHelperConfig): MiddlewareHandler {
 }
 
 export function requireVerifiedUser(
-  config?: AuthHelperConfig,
+  config: AuthHelperConfig,
 ): MiddlewareHandler {
+  const resolvedConfig = requireHelperConfig(config);
   return async (c, next) => {
-    const resolvedConfig = resolveHelperConfig(config);
     const session = await getAuthSessionFromRequest(
       resolvedConfig,
       c.req.raw,
@@ -110,14 +108,11 @@ function publicAuthUser(user: UserRow): PublicAuthUser {
   };
 }
 
-function resolveHelperConfig(config?: AuthHelperConfig): AuthHelperConfig {
-  const resolved = config ?? defaultAuthConfig;
-  if (!resolved) {
-    throw new Error(
-      "createAuthRoutes(config) must be called before auth helper middleware without an explicit config",
-    );
+function requireHelperConfig(config: AuthHelperConfig): AuthHelperConfig {
+  if (!config) {
+    throw new Error("auth helper middleware requires an explicit config");
   }
-  return resolved;
+  return config;
 }
 
 function withMountedBasePath(request: Request, basePath: string): Request {

@@ -74,6 +74,15 @@ describe("security hardening helpers", () => {
         },
       }),
     ).toThrow(/unknown Turnstile endpoint/);
+    expect(() =>
+      defineAuthConfig({
+        appName: "Security Test",
+        basePath: "/auth",
+        turnstile: {
+          contextBinding: "unknown" as never,
+        },
+      }),
+    ).toThrow(/invalid Turnstile context binding/);
   });
 
   it("rejects invalid password hashing concurrency at config definition time", () => {
@@ -94,6 +103,7 @@ describe("security hardening helpers", () => {
       turnstile: {
         mode: "required",
         endpoints: ["magic_link_request"],
+        contextBinding: "strict",
         verify: async () => true,
       },
     });
@@ -110,6 +120,7 @@ describe("security hardening helpers", () => {
       turnstile: {
         mode: "required",
         endpoints: ["magic_link_request"],
+        contextBinding: "strict",
         verify: async () => false,
       },
     });
@@ -136,6 +147,7 @@ describe("security hardening helpers", () => {
       turnstile: {
         mode: "required",
         endpoints: ["password_reset_confirm"],
+        contextBinding: "strict",
         verify: async () => true,
       },
     });
@@ -183,15 +195,22 @@ describe("security hardening helpers", () => {
       token: "client-token",
       secret: "server-secret",
       remoteIp: "203.0.113.9",
+      expectedHostname: "app.example.com",
+      expectedAction: "password_login",
       fetcher: async (url, init) => {
         postedUrl = String(url);
         postedBody =
           init?.body instanceof URLSearchParams
             ? init.body.toString()
             : String(init?.body ?? "");
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            hostname: "app.example.com",
+            action: "password_login",
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
       },
     });
     const params = new URLSearchParams(postedBody);
@@ -202,6 +221,75 @@ describe("security hardening helpers", () => {
     expect(params.get("secret")).toBe("server-secret");
     expect(params.get("response")).toBe("client-token");
     expect(params.get("remoteip")).toBe("203.0.113.9");
+  });
+
+  it("rejects missing or mismatched Turnstile hostname and action", async () => {
+    const verify = (payload: Record<string, unknown>) =>
+      verifyTurnstileToken({
+        token: "client-token",
+        secret: "server-secret",
+        expectedHostname: "app.example.com",
+        expectedAction: "password_login",
+        fetcher: async () =>
+          new Response(JSON.stringify(payload), {
+            headers: { "Content-Type": "application/json" },
+          }),
+      });
+
+    await expect(verify({ success: true })).resolves.toBe(false);
+    await expect(
+      verify({
+        success: true,
+        hostname: "other.example.com",
+        action: "password_login",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      verify({
+        success: true,
+        hostname: "app.example.com",
+        action: "signup",
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("derives strict Turnstile context from public origin and endpoint", async () => {
+    const seen: Array<{
+      expectedHostname: string | undefined;
+      expectedAction: string | undefined;
+    }> = [];
+    for (const contextBinding of ["strict", "disabled"] as const) {
+      const configured = await setup({
+        turnstile: {
+          mode: "required",
+          endpoints: ["magic_link_request"],
+          contextBinding,
+          verify: async (input) => {
+            seen.push({
+              expectedHostname: input.expectedHostname,
+              expectedAction: input.expectedAction,
+            });
+            return true;
+          },
+        },
+      });
+      const response = await configured.authFetch("/auth/magic-link/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: `${contextBinding}@example.com`,
+          turnstileToken: "client-token",
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+    expect(seen).toEqual([
+      {
+        expectedHostname: "localhost",
+        expectedAction: "magic_link_request",
+      },
+      { expectedHostname: undefined, expectedAction: undefined },
+    ]);
   });
 
   it("treats Turnstile verifier transport and payload errors as failed challenges", async () => {
@@ -234,6 +322,7 @@ describe("security hardening helpers", () => {
       turnstile: {
         mode: "required",
         endpoints: ["magic_link_request"],
+        contextBinding: "strict",
         verify: async ({ token }) => {
           throw new Error(
             `verifier failed url=https://example.com/auth/magic-link/verify?token=${token}&next=/dashboard token=${token} identifier=raw-identifier username=raw-user email=person@example.com remoteIp=2001:db8::1 userAgent="Mozilla/5.0 Secret Browser" AUTH_SECRET=k1.${secretMaterial}; token: ${token} identifier: colon-identifier username: colon-user User-Agent: Mozilla/5.0 Colon Browser CF-Connecting-IP: [2001:db8::1] AUTH_SECRET_PREVIOUS: k0.${previousSecretMaterial}`,

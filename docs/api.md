@@ -140,10 +140,14 @@ Hono routes use the adapter middleware:
 ```ts
 import { getAuthUser, requireUser } from "@cf-auth/hono";
 
-app.get("/api/me", requireUser(), (c) => c.json({ user: getAuthUser(c) }));
+app.get("/api/me", requireUser(authConfig), (c) =>
+  c.json({ user: getAuthUser(c) }),
+);
 ```
 
-`getAuthUser(c)` returns the same public user object shape as `getUser()`.
+Hono authentication middleware requires an explicit config and captures that
+selection when the middleware is created. `getAuthUser(c)` returns the same
+public user object shape as `getUser()`.
 
 ## Package Entrypoints
 

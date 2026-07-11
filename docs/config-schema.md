@@ -77,6 +77,7 @@ Stable nested keys:
 - `emailVerification.activeTokenPolicy`
 - `turnstile.mode`
 - `turnstile.endpoints`
+- `turnstile.contextBinding`
 - `turnstile.verify`
 - `email`
 - `redirects.defaultAfterLogin`
@@ -115,6 +116,7 @@ Defaults:
 - `passwordHashing.queueTimeoutMs` defaults to `2000`
 - `turnstile.mode` defaults to `disabled`
 - `turnstile.endpoints` defaults to `[]` and unknown endpoint names are rejected
+- `turnstile.contextBinding` defaults to `strict`
 - `rateLimit.adapter` defaults to `d1`
 - `rateLimit.edgePrefilter` defaults to `optional`
 
