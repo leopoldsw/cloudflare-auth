@@ -32,6 +32,20 @@ export function containsSensitiveEvidence(text) {
   );
 }
 
+export function containsSensitiveEvidenceValue(value) {
+  if (typeof value === "string") return containsSensitiveEvidence(value);
+  if (Array.isArray(value)) {
+    return value.some((item) => containsSensitiveEvidenceValue(item));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).some(
+      ([key, item]) =>
+        containsSensitiveEvidence(key) || containsSensitiveEvidenceValue(item),
+    );
+  }
+  return false;
+}
+
 export function containsIpLiteral(text) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/u.test(text)) return true;
   const candidates =

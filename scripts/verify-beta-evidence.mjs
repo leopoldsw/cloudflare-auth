@@ -1,6 +1,9 @@
 import { access, readFile } from "node:fs/promises";
 
-import { containsSensitiveEvidence } from "./evidence-redaction.mjs";
+import {
+  containsSensitiveEvidence,
+  containsSensitiveEvidenceValue,
+} from "./evidence-redaction.mjs";
 import {
   documentedLocalSetupCommandOrder,
   documentedLocalSetupCommands,
@@ -17,6 +20,11 @@ import {
   isPlaceholderRepositoryUrl,
   isReservedEvidenceHostname,
 } from "./evidence-validation.mjs";
+import {
+  expectedGithubRepository,
+  requireExactPackageNames,
+  verifyGithubWorkflowRun,
+} from "./github-evidence.mjs";
 import { readReleasePackageState } from "./release-package-state.mjs";
 import { isBetaPackageTag } from "./release-version-policy.mjs";
 import {
@@ -68,7 +76,7 @@ if (parsedEvidence) {
         }`,
       );
     }
-    validateEvidence(evidence, text);
+    await validateEvidence(evidence, text);
   } else {
     failures.push(`${evidencePath}: top-level JSON value must be an object`);
   }
@@ -80,13 +88,30 @@ if (failures.length > 0) {
 
 console.log(`public-beta evidence verified: ${evidencePath}`);
 
-function validateEvidence(value, rawText) {
-  if (value.schemaVersion !== 1) {
-    failures.push(`${evidencePath}: schemaVersion must be 1`);
+async function validateEvidence(value, rawText) {
+  if (value.schemaVersion !== 2) {
+    failures.push(`${evidencePath}: schemaVersion must be 2`);
   }
   requireString(value.reviewedBy, "reviewedBy");
   rejectPlaceholderIdentity(value.reviewedBy, "reviewedBy");
   requireDate(value.reviewedAt, "reviewedAt");
+  requireFreshDate(value.reviewedAt, "reviewedAt", 30);
+
+  const expectedRepository = expectedGithubRepository();
+  requireString(value.repository, "repository");
+  if (!expectedRepository) {
+    failures.push(
+      `${evidencePath}: GITHUB_REPOSITORY or CF_AUTH_EXPECTED_REPOSITORY is required`,
+    );
+  } else if (value.repository !== expectedRepository) {
+    failures.push(`${evidencePath}: repository must be ${expectedRepository}`);
+  }
+  requireExactPackageNames({
+    actual: value.packageNames,
+    expected: packageState.packages.map((pkg) => pkg.name),
+    evidencePath,
+    failures,
+  });
 
   validatePublishedQuickstart(value.publishedQuickstart);
   validateManualQuickstart(value.manualQuickstart);
@@ -94,7 +119,29 @@ function validateEvidence(value, rawText) {
   validateDeployButton(value.deployButton);
   requireMatchingPackageTags(value);
 
-  if (containsSensitiveEvidence(rawText)) {
+  if (expectedRepository) {
+    await verifyGithubWorkflowRun({
+      binding: value.publishedQuickstart,
+      bindingPath: "publishedQuickstart",
+      evidencePath,
+      expectedRepository,
+      expectedWorkflowPath: ".github/workflows/published-quickstart-smoke.yml",
+      failures,
+    });
+    await verifyGithubWorkflowRun({
+      binding: value.productionSmoke,
+      bindingPath: "productionSmoke",
+      evidencePath,
+      expectedRepository,
+      expectedWorkflowPath: ".github/workflows/cloudflare-production-smoke.yml",
+      failures,
+    });
+  }
+
+  if (
+    containsSensitiveEvidence(rawText) ||
+    containsSensitiveEvidenceValue(value)
+  ) {
     failures.push(
       `${evidencePath}: must not include raw secrets, tokens, cookies, emails, IPs, user agents, or Cloudflare API tokens`,
     );
@@ -320,6 +367,20 @@ function requireDate(value, path) {
     failures.push(`${evidencePath}: ${path} must be an ISO date string`);
   } else if (typeof value === "string" && isFutureIsoDateString(value)) {
     failures.push(`${evidencePath}: ${path} must not be in the future`);
+  }
+}
+
+function requireFreshDate(value, path, maxAgeDays) {
+  if (typeof value !== "string" || !isIsoDateString(value)) return;
+  const configuredNow = process.env.CF_AUTH_EVIDENCE_NOW;
+  const nowMs = configuredNow ? Date.parse(configuredNow) : Date.now();
+  if (
+    Number.isNaN(nowMs) ||
+    nowMs - Date.parse(value) > maxAgeDays * 24 * 60 * 60 * 1000
+  ) {
+    failures.push(
+      `${evidencePath}: ${path} must be no more than ${maxAgeDays} days old`,
+    );
   }
 }
 

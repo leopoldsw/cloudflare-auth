@@ -1,9 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "repository": "OWNER/REPO",
+  "packageNames": [
+    "@cf-auth/cli",
+    "@cf-auth/client",
+    "@cf-auth/core",
+    "@cf-auth/email-cloudflare",
+    "@cf-auth/hono",
+    "@cf-auth/testing",
+    "@cf-auth/worker"
+  ],
   "reviewedAt": "2026-05-15T00:00:00.000Z",
   "reviewedBy": "maintainer-name",
   "publishedQuickstart": {
     "workflowRunUrl": "https://github.com/OWNER/REPO/actions/runs/0000000000",
+    "headSha": "0000000000000000000000000000000000000000",
     "packageTag": "beta",
     "passed": false,
     "cleanDirectory": false,
@@ -28,6 +39,7 @@
   },
   "productionSmoke": {
     "workflowRunUrl": "https://github.com/OWNER/REPO/actions/runs/0000000000",
+    "headSha": "0000000000000000000000000000000000000000",
     "packageTag": "beta",
     "origin": "https://example.com",
     "passed": false,

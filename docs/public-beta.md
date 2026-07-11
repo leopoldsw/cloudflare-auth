@@ -71,3 +71,16 @@ tokens:
 ```bash
 CF_AUTH_REQUIRE_BETA_EVIDENCE=1 pnpm verify:beta-evidence
 ```
+
+Schema version 2 binds evidence to the exact GitHub repository, the complete
+publishable package-name set, and successful workflow runs. Record the full
+`headSha` for both the published-quickstart and production-smoke runs. The
+verifier resolves each run through the GitHub API and requires the expected
+workflow path, repository, commit, completed status, and successful conclusion.
+Evidence must be no more than 30 days old.
+
+In GitHub Actions, the release workflow supplies its scoped `GITHUB_TOKEN`.
+For a required local verification, set `CF_AUTH_EXPECTED_REPOSITORY=owner/repo`
+and `GITHUB_TOKEN` with read access to Actions, issues, and repository security
+advisories. The JSON fixture override is test-only and is not exposed by any
+checked-in workflow.

@@ -8,11 +8,13 @@ import {
   isPublicBeta,
   isStableOneOrLater,
   isSupportedReleaseVersion,
+  isValidReleaseVersion,
 } from "./release-version-policy.mjs";
 
 export async function readReleasePackageState() {
   const failures = [];
   const versions = [];
+  const packages = [];
   const entries = await readdir("packages", { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -36,6 +38,10 @@ export async function readReleasePackageState() {
         failures.push(`${path}: version must be a non-empty string`);
         continue;
       }
+      if (!isValidReleaseVersion(pkg.version)) {
+        failures.push(`${path}: version must be valid SemVer`);
+        continue;
+      }
       if (isPlaceholderPrerelease(pkg.version)) {
         failures.push(
           `${path}: release version must not use placeholder 0.0.0 base`,
@@ -50,10 +56,14 @@ export async function readReleasePackageState() {
         );
       }
       versions.push(pkg.version);
+      if (typeof pkg.name === "string" && pkg.name.trim().length > 0) {
+        packages.push({ name: pkg.name, version: pkg.version });
+      }
     }
   }
   return {
     failures,
+    packages,
     hasBetaOrStable: versions.some(
       (version) => isPublicBeta(version) || isStableOneOrLater(version),
     ),

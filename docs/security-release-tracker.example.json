@@ -1,9 +1,23 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "repository": "OWNER/REPO",
+  "packageNames": [
+    "@cf-auth/cli",
+    "@cf-auth/client",
+    "@cf-auth/core",
+    "@cf-auth/email-cloudflare",
+    "@cf-auth/hono",
+    "@cf-auth/testing",
+    "@cf-auth/worker"
+  ],
   "reviewedAt": "2026-05-15T00:00:00.000Z",
   "reviewedBy": "maintainer-name",
   "issueSearchUrl": "https://github.com/OWNER/REPO/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical",
   "advisorySearchUrl": "https://github.com/OWNER/REPO/security/advisories",
+  "reviewWorkflow": {
+    "workflowRunUrl": "https://github.com/OWNER/REPO/actions/runs/0000000000",
+    "headSha": "0000000000000000000000000000000000000000"
+  },
   "openHighCriticalAuthSecurityIssues": [],
   "advisories": [
     {

@@ -1,6 +1,9 @@
 import { access, readFile } from "node:fs/promises";
 
-import { containsSensitiveEvidence } from "./evidence-redaction.mjs";
+import {
+  containsSensitiveEvidence,
+  containsSensitiveEvidenceValue,
+} from "./evidence-redaction.mjs";
 import {
   isFutureIsoDateString,
   isIsoDateString,
@@ -134,7 +137,10 @@ function validateEvidence(value, rawText) {
     }
   }
 
-  if (containsSensitiveEvidence(rawText)) {
+  if (
+    containsSensitiveEvidence(rawText) ||
+    containsSensitiveEvidenceValue(value)
+  ) {
     failures.push(
       `${evidencePath}: must not include raw secrets, tokens, cookies, emails, IPs, user agents, or Cloudflare API tokens`,
     );

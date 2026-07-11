@@ -1367,6 +1367,56 @@ describe("release evidence verifiers", () => {
     expect(result.stdout).toContain("public-beta evidence verified");
   });
 
+  it("rejects beta evidence whose decoded JSON values contain escaped tokens", async () => {
+    const evidence = validBetaEvidence();
+    const token = `cfauth.ses.kid.${"A".repeat(24)}`;
+    (evidence as Record<string, unknown>).reviewNotes = token;
+    const path = await writeEvidence("beta-escaped-token", evidence);
+    const encoded = token.replaceAll(".", "\\u002e");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8")).replace(token, encoded),
+    );
+
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must not include raw secrets");
+  });
+
+  it("binds beta evidence to verified workflow run commit SHAs", async () => {
+    const evidence = validBetaEvidence();
+    evidence.publishedQuickstart.headSha = "d".repeat(40);
+    const path = await writeEvidence("beta-wrong-run-sha", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "publishedQuickstart.headSha must match the verified workflow run",
+    );
+  });
+
+  it("rejects stale beta evidence", async () => {
+    const evidence = validBetaEvidence();
+    evidence.reviewedAt = "2026-01-01T00:00:00.000Z";
+    const path = await writeEvidence("beta-stale", evidence);
+    const result = runScript("scripts/verify-beta-evidence.mjs", {
+      CF_AUTH_REQUIRE_BETA_EVIDENCE: "1",
+      CF_AUTH_BETA_EVIDENCE_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "reviewedAt must be no more than 30 days old",
+    );
+  });
+
   it("rejects beta production smoke evidence without command proof", async () => {
     const evidence = validBetaEvidence();
     evidence.productionSmoke.commands = [];
@@ -2518,6 +2568,126 @@ describe("release evidence verifiers", () => {
     expect(result.stdout).toContain("security release tracker verified");
   });
 
+  it("rejects security tracker decoded values containing escaped tokens", async () => {
+    const tracker = validSecurityTracker();
+    const token = `cfauth.ses.kid.${"A".repeat(24)}`;
+    (tracker as Record<string, unknown>).reviewNotes = token;
+    const path = await writeEvidence("tracker-escaped-token", tracker);
+    const encoded = token.replaceAll(".", "\\u002e");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8")).replace(token, encoded),
+    );
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must not include raw secrets");
+  });
+
+  it("binds the security tracker to the expected repository and live state", async () => {
+    const tracker = validSecurityTracker();
+    tracker.repository = "other-owner/other-repository";
+    const path = await writeEvidence("tracker-wrong-repository", tracker);
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "repository must be cf-auth-release/cloudflare-auth",
+    );
+  });
+
+  it("rejects stale security tracker evidence", async () => {
+    const tracker = validSecurityTracker();
+    tracker.reviewedAt = "2026-01-01T00:00:00.000Z";
+    const path = await writeEvidence("tracker-stale", tracker);
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "reviewedAt must be no more than 7 days old",
+    );
+  });
+
+  it("fails closed on malformed GitHub security API responses", async () => {
+    const tracker = validSecurityTracker();
+    const path = await writeEvidence("tracker-malformed-api", tracker);
+    const fixture = githubEvidenceFixture() as {
+      issueSearch: Record<string, unknown>;
+      advisories: Record<string, unknown>;
+    };
+    const issueSearchUrl = tracker.issueSearchUrl;
+    fixture.issueSearch[issueSearchUrl] = {};
+    fixture.advisories[tracker.repository] = {};
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+      CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(fixture),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "GitHub issue search response must include a non-negative total_count",
+    );
+    expect(result.stderr).toContain(
+      "GitHub advisories response must be an array",
+    );
+  });
+
+  it("fails closed on malformed GitHub advisory entries", async () => {
+    const tracker = validSecurityTracker();
+    const path = await writeEvidence("tracker-malformed-advisory", tracker);
+    const fixture = githubEvidenceFixture() as {
+      advisories: Record<string, unknown>;
+    };
+    fixture.advisories[tracker.repository] = [null, { severity: "high" }];
+
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+      CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(fixture),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "GitHub advisories response item 0 must be an object",
+    );
+    expect(result.stderr).toContain(
+      "GitHub advisories response item 1 is malformed",
+    );
+  });
+
+  it("fails closed when GitHub reports an incomplete issue search", async () => {
+    const tracker = validSecurityTracker();
+    const path = await writeEvidence("tracker-incomplete-search", tracker);
+    const fixture = githubEvidenceFixture() as {
+      issueSearch: Record<string, unknown>;
+    };
+    fixture.issueSearch[tracker.issueSearchUrl] = {
+      totalCount: 0,
+      incompleteResults: true,
+    };
+
+    const result = runScript("scripts/verify-security-release-tracker.mjs", {
+      CF_AUTH_REQUIRE_SECURITY_TRACKER: "1",
+      CF_AUTH_SECURITY_TRACKER_PATH: path,
+      CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(fixture),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "GitHub issue search response must be complete",
+    );
+  });
+
   it("rejects security tracker evidence without search URLs", async () => {
     const evidence = validSecurityTracker() as Partial<
       ReturnType<typeof validSecurityTracker>
@@ -2932,7 +3102,13 @@ function runScript(
   return spawnSync(process.execPath, [join(process.cwd(), script)], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      CF_AUTH_EXPECTED_REPOSITORY: "cf-auth-release/cloudflare-auth",
+      CF_AUTH_EVIDENCE_NOW: "2026-05-16T00:00:00.000Z",
+      CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(githubEvidenceFixture()),
+      ...env,
+    },
   });
 }
 
@@ -2987,12 +3163,15 @@ function validAlphaEvidence() {
 
 function validBetaEvidence() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    repository: "cf-auth-release/cloudflare-auth",
+    packageNames: publishablePackageNames,
     reviewedAt: "2026-05-15T00:00:00.000Z",
     reviewedBy: "release-captain-ada",
     publishedQuickstart: {
       workflowRunUrl:
         "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/123",
+      headSha: "a".repeat(40),
       packageTag: "beta",
       passed: true,
       cleanDirectory: true,
@@ -3018,6 +3197,7 @@ function validBetaEvidence() {
     productionSmoke: {
       workflowRunUrl:
         "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/124",
+      headSha: "b".repeat(40),
       packageTag: "beta",
       origin: "https://auth.cf-auth-release.dev",
       passed: true,
@@ -3113,13 +3293,20 @@ function validPackageEvidence() {
 
 function validSecurityTracker() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    repository: "cf-auth-release/cloudflare-auth",
+    packageNames: publishablePackageNames,
     reviewedAt: "2026-05-15T00:00:00.000Z",
     reviewedBy: "release-captain-ada",
     issueSearchUrl:
       "https://github.com/cf-auth-release/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical",
     advisorySearchUrl:
       "https://github.com/cf-auth-release/cloudflare-auth/security/advisories",
+    reviewWorkflow: {
+      workflowRunUrl:
+        "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/125",
+      headSha: "c".repeat(40),
+    },
     openHighCriticalAuthSecurityIssues: [],
     advisories: [
       {
@@ -3128,5 +3315,52 @@ function validSecurityTracker() {
         status: "resolved",
       },
     ],
+  };
+}
+
+const publishablePackageNames = [
+  "@cf-auth/cli",
+  "@cf-auth/client",
+  "@cf-auth/core",
+  "@cf-auth/email-cloudflare",
+  "@cf-auth/hono",
+  "@cf-auth/testing",
+  "@cf-auth/worker",
+];
+
+function githubEvidenceFixture() {
+  const repository = "cf-auth-release/cloudflare-auth";
+  const issueSearchUrl =
+    "https://github.com/cf-auth-release/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical";
+  return {
+    runs: {
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/123": {
+        repository,
+        headSha: "a".repeat(40),
+        workflowPath: ".github/workflows/published-quickstart-smoke.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/124": {
+        repository,
+        headSha: "b".repeat(40),
+        workflowPath: ".github/workflows/cloudflare-production-smoke.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/125": {
+        repository,
+        headSha: "c".repeat(40),
+        workflowPath: ".github/workflows/codeql.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+    },
+    issueSearch: {
+      [issueSearchUrl]: { totalCount: 0, incompleteResults: false },
+    },
+    advisories: {
+      [repository]: [],
+    },
   };
 }

@@ -17,7 +17,7 @@ evidence plus API/config/security signoffs before stable 1.0.
 - `pnpm build`
 - `pnpm package:check`
 - `pnpm version-matrix:check`
-- `pnpm audit --audit-level high` reviewed as advisory evidence, not as the sole security gate
+- `pnpm audit --audit-level high` passes as a blocking high-severity dependency gate and remains advisory evidence, not as the sole security gate
 - `pnpm verify:alpha-evidence`
 - `pnpm verify:deploy-button-evidence`
 - `pnpm verify:beta-evidence`
@@ -88,3 +88,14 @@ run the explicit `CF_AUTH_REQUIRE_*` command for that blocker.
 - `pnpm smoke:wrangler-dev` passes in the opt-in Wrangler dev smoke workflow for the release candidate
 - `pnpm smoke:cloudflare-production` passes in the opt-in Cloudflare production smoke workflow for the release candidate
 - README, LICENSE, export maps, package contents, and provenance settings pass `pnpm package:check`
+
+The beta evidence and security tracker use schema version 2. They must name the
+exact repository and publishable package set, bind workflow URLs to verified
+successful GitHub runs and full commit SHAs, and pass their freshness windows
+(30 days for beta evidence, 7 days for the security tracker). The tracker also
+checks live open high/critical auth issues and repository advisories through the
+GitHub API.
+
+Before dispatching credentialed workflows, configure the protected environments
+and default-branch deployment rules documented in
+[github-actions-security.md](github-actions-security.md).

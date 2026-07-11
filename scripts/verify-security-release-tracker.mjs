@@ -1,6 +1,9 @@
 import { access, readFile } from "node:fs/promises";
 
-import { containsSensitiveEvidence } from "./evidence-redaction.mjs";
+import {
+  containsSensitiveEvidence,
+  containsSensitiveEvidenceValue,
+} from "./evidence-redaction.mjs";
 import {
   isFutureIsoDateString,
   isIsoDateString,
@@ -8,6 +11,12 @@ import {
   isPlaceholderEvidenceIdentity,
   isPlaceholderRepositoryUrl,
 } from "./evidence-validation.mjs";
+import {
+  expectedGithubRepository,
+  requireExactPackageNames,
+  verifyGithubSecurityState,
+  verifyGithubWorkflowRun,
+} from "./github-evidence.mjs";
 import { readReleasePackageState } from "./release-package-state.mjs";
 
 const trackerPath =
@@ -49,7 +58,7 @@ try {
 
 if (parsedTracker) {
   if (isJsonObject(tracker)) {
-    validateTracker(tracker, text);
+    await validateTracker(tracker, text);
   } else {
     failures.push(`${trackerPath}: top-level JSON value must be an object`);
   }
@@ -61,13 +70,29 @@ if (failures.length > 0) {
 
 console.log(`security release tracker verified: ${trackerPath}`);
 
-function validateTracker(value, rawText) {
-  if (value.schemaVersion !== 1) {
-    failures.push(`${trackerPath}: schemaVersion must be 1`);
+async function validateTracker(value, rawText) {
+  if (value.schemaVersion !== 2) {
+    failures.push(`${trackerPath}: schemaVersion must be 2`);
   }
   requireString(value.reviewedBy, "reviewedBy");
   rejectPlaceholderIdentity(value.reviewedBy, "reviewedBy");
   requireDate(value.reviewedAt, "reviewedAt");
+  requireFreshDate(value.reviewedAt, "reviewedAt", 7);
+  const expectedRepository = expectedGithubRepository();
+  requireString(value.repository, "repository");
+  if (!expectedRepository) {
+    failures.push(
+      `${trackerPath}: GITHUB_REPOSITORY or CF_AUTH_EXPECTED_REPOSITORY is required`,
+    );
+  } else if (value.repository !== expectedRepository) {
+    failures.push(`${trackerPath}: repository must be ${expectedRepository}`);
+  }
+  requireExactPackageNames({
+    actual: value.packageNames,
+    expected: packageState.packages.map((pkg) => pkg.name),
+    evidencePath: trackerPath,
+    failures,
+  });
   requireUrl(value.issueSearchUrl, "issueSearchUrl");
   requireIssueSearchUrl(value.issueSearchUrl);
   requireUrl(value.advisorySearchUrl, "advisorySearchUrl");
@@ -77,6 +102,14 @@ function validateTracker(value, rawText) {
   if (issueRepo && advisoryRepo && issueRepo !== advisoryRepo) {
     failures.push(
       `${trackerPath}: issueSearchUrl and advisorySearchUrl must target the same GitHub repository`,
+    );
+  }
+  if (
+    expectedRepository &&
+    (issueRepo !== expectedRepository || advisoryRepo !== expectedRepository)
+  ) {
+    failures.push(
+      `${trackerPath}: issueSearchUrl and advisorySearchUrl must target ${expectedRepository}`,
     );
   }
 
@@ -136,12 +169,33 @@ function validateTracker(value, rawText) {
     }
   }
 
+  if (expectedRepository) {
+    await verifyGithubWorkflowRun({
+      binding: value.reviewWorkflow,
+      bindingPath: "reviewWorkflow",
+      evidencePath: trackerPath,
+      expectedRepository,
+      expectedWorkflowPath: ".github/workflows/codeql.yml",
+      failures,
+    });
+    await verifyGithubSecurityState({
+      issueSearchUrl: value.issueSearchUrl,
+      repository: expectedRepository,
+      advisories,
+      evidencePath: trackerPath,
+      failures,
+    });
+  }
+
   if (containsPlaceholderEvidence(rawText)) {
     failures.push(
       `${trackerPath}: replace placeholder reviewer or advisory values before stable 1.0`,
     );
   }
-  if (containsSensitiveEvidence(rawText)) {
+  if (
+    containsSensitiveEvidence(rawText) ||
+    containsSensitiveEvidenceValue(value)
+  ) {
     failures.push(
       `${trackerPath}: must not include raw secrets, tokens, cookies, emails, IPs, user agents, or Cloudflare API tokens`,
     );
@@ -174,6 +228,20 @@ function requireDate(value, path) {
     failures.push(`${trackerPath}: ${path} must be an ISO date string`);
   } else if (typeof value === "string" && isFutureIsoDateString(value)) {
     failures.push(`${trackerPath}: ${path} must not be in the future`);
+  }
+}
+
+function requireFreshDate(value, path, maxAgeDays) {
+  if (typeof value !== "string" || !isIsoDateString(value)) return;
+  const configuredNow = process.env.CF_AUTH_EVIDENCE_NOW;
+  const nowMs = configuredNow ? Date.parse(configuredNow) : Date.now();
+  if (
+    Number.isNaN(nowMs) ||
+    nowMs - Date.parse(value) > maxAgeDays * 24 * 60 * 60 * 1000
+  ) {
+    failures.push(
+      `${trackerPath}: ${path} must be no more than ${maxAgeDays} days old`,
+    );
   }
 }
 

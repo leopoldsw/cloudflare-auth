@@ -2722,12 +2722,15 @@ function validDeployButtonEvidence() {
 
 function validBetaEvidence() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    repository: "cf-auth-release/cloudflare-auth",
+    packageNames: ["@cf-auth/cli"],
     reviewedAt: "2026-05-15T00:00:00.000Z",
     reviewedBy: "release-captain-ada",
     publishedQuickstart: {
       workflowRunUrl:
         "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/123",
+      headSha: "a".repeat(40),
       packageTag: "beta",
       passed: true,
       cleanDirectory: true,
@@ -2753,6 +2756,7 @@ function validBetaEvidence() {
     productionSmoke: {
       workflowRunUrl:
         "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/124",
+      headSha: "b".repeat(40),
       packageTag: "beta",
       origin: "https://auth.cf-auth-release.dev",
       passed: true,
@@ -2780,13 +2784,20 @@ function validBetaEvidence() {
 
 function validSecurityTracker() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    repository: "cf-auth-release/cloudflare-auth",
+    packageNames: ["@cf-auth/cli"],
     reviewedAt: "2026-05-15T00:00:00.000Z",
     reviewedBy: "release-captain-ada",
     issueSearchUrl:
       "https://github.com/cf-auth-release/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical",
     advisorySearchUrl:
       "https://github.com/cf-auth-release/cloudflare-auth/security/advisories",
+    reviewWorkflow: {
+      workflowRunUrl:
+        "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/125",
+      headSha: "c".repeat(40),
+    },
     openHighCriticalAuthSecurityIssues: [],
     advisories: [
       {
@@ -2825,9 +2836,51 @@ function runReleaseGates(cwd: string, env: Record<string, string> = {}) {
       encoding: "utf8",
       env: {
         ...process.env,
+        CF_AUTH_EXPECTED_REPOSITORY: "cf-auth-release/cloudflare-auth",
+        CF_AUTH_EVIDENCE_NOW: "2026-05-16T00:00:00.000Z",
+        CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(
+          githubEvidenceFixture(),
+        ),
         ...env,
         PATH: `${join(cwd, "bin")}${delimiter}${process.env.PATH ?? ""}`,
       },
     },
   );
+}
+
+function githubEvidenceFixture() {
+  const repository = "cf-auth-release/cloudflare-auth";
+  const issueSearchUrl =
+    "https://github.com/cf-auth-release/cloudflare-auth/issues?q=is%3Aissue%20is%3Aopen%20label%3Aauth%20label%3Ahigh%2Ccritical";
+  return {
+    runs: {
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/123": {
+        repository,
+        headSha: "a".repeat(40),
+        workflowPath: ".github/workflows/published-quickstart-smoke.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/124": {
+        repository,
+        headSha: "b".repeat(40),
+        workflowPath: ".github/workflows/cloudflare-production-smoke.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+      "https://github.com/cf-auth-release/cloudflare-auth/actions/runs/125": {
+        repository,
+        headSha: "c".repeat(40),
+        workflowPath: ".github/workflows/codeql.yml",
+        status: "completed",
+        conclusion: "success",
+      },
+    },
+    issueSearch: {
+      [issueSearchUrl]: { totalCount: 0, incompleteResults: false },
+    },
+    advisories: {
+      [repository]: [],
+    },
+  };
 }
