@@ -1336,8 +1336,8 @@ async function verifyWorkflowToolchainControls() {
     ".github/workflows/cloudflare-production-smoke.yml",
   ]) {
     const text = await readFile(file, "utf8");
-    if (!text.includes("pnpm/action-setup@v5")) {
-      failures.push(`${file}: missing pnpm/action-setup@v5`);
+    if (!text.includes("pnpm/action-setup@v6")) {
+      failures.push(`${file}: missing pnpm/action-setup@v6`);
     }
     if (!text.includes(`version: ${matrix.pnpm}`)) {
       failures.push(
