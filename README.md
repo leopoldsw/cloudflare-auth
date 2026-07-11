@@ -2,6 +2,9 @@
 
 Cloudflare Auth is an independent open-source authentication kit for Cloudflare Workers applications. It provides self-deployed email/password auth, username login, magic links, email verification, password reset, D1-backed opaque sessions, local terminal email, and adapters for Hono and plain Workers. Developers own the Worker, D1 database, secrets, email configuration, and user data in their own Cloudflare account. This project is not affiliated with, endorsed by, or sponsored by Cloudflare.
 
+See [docs/architecture.md](docs/architecture.md) for package boundaries, the
+request/data lifecycle, deployment model, and trust boundaries.
+
 ## 5-Minute Quickstart
 
 ```bash
@@ -35,13 +38,22 @@ Development uses the terminal email adapter by default. Magic-link, verification
 
 ## Deploy To Cloudflare
 
+`wrangler login` works for an interactive deploy. Automation should export
+`CLOUDFLARE_ACCOUNT_ID` and a scoped `CLOUDFLARE_API_TOKEN` using the exact
+permissions in [docs/cloudflare-permissions.md](docs/cloudflare-permissions.md).
+
 ```bash
-npx --package @cf-auth/cli@latest cf-auth doctor --env production
+npx --package @cf-auth/cli@latest cf-auth provision --env production
 npx --package @cf-auth/cli@latest cf-auth migrate --remote --env production
+npx --package @cf-auth/cli@latest cf-auth rotate-secret --apply --env production
+npx --package @cf-auth/cli@latest cf-auth doctor --env production
 npx --package @cf-auth/cli@latest cf-auth deploy --env production
 ```
 
-Use `npx --package @cf-auth/cli@latest cf-auth deploy --migrate --env production` when you want the CLI to run migration checks during deployment.
+`provision` discovers an existing exact-name D1 database before creating one
+and patches the selected binding, so the setup is safe to rerun. Use
+`npx --package @cf-auth/cli@latest cf-auth deploy --migrate --env production`
+for later migration-and-deploy cycles.
 
 Run `npx --package @cf-auth/cli@latest cf-auth doctor --report --env production` when you need redaction-safe JSON for support or release records.
 
@@ -62,6 +74,10 @@ The full command surface is documented in [docs/cli.md](docs/cli.md).
 See [docs/troubleshooting.md](docs/troubleshooting.md) for missing D1 bindings, unapplied migrations, secret setup, cookie issues, email binding failures, and package-name fallback commands.
 
 Known v1 limitations are listed in [docs/known-limitations.md](docs/known-limitations.md).
+
+Autonomous coding agents and maintainers should start with
+[AGENTS.md](AGENTS.md) for the architecture map, complete validation ladder,
+deployment order, security invariants, and common recovery paths.
 
 ## Non-Goals
 

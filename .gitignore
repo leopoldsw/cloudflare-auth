@@ -11,3 +11,4 @@ coverage/
 .DS_Store
 auth-doctor-report.json
 pnpm-publish-summary.json
+.claude/settings.local.json

@@ -643,9 +643,9 @@ Hono adapter.
 Responsibilities:
 
 - `createAuthRoutes(authConfig)` with relative routes only
-- `requireUser()` middleware
-- `requireVerifiedUser()` middleware
-- `optionalUser()` middleware
+- `requireUser(authConfig)` middleware
+- `requireVerifiedUser(authConfig)` middleware
+- `optionalUser(authConfig)` middleware
 - `getAuthUser(c)` helper
 - typed Hono bindings
 
@@ -1153,11 +1153,11 @@ Email verification settings have separate meanings:
 - `signup.requireEmailVerificationBeforeSession` controls whether signup may create an initial session before verification.
 - `login.requireVerifiedEmail` controls whether password login requires `email_verified_at`.
 - `session.requireVerifiedEmail` controls whether session lookup itself rejects unverified users.
-- `requireVerifiedUser()` is the recommended route-level helper when only some routes require verified email.[^verified-user]
+- `requireVerifiedUser(authConfig)` is the recommended route-level helper when only some routes require verified email.[^verified-user]
 
 Do not treat `emailVerification.enabled` alone as “block all sessions until verified.” That behavior must be explicit.
 
-Static config validation must reject combinations that require verified email while disabling all verification routes. `requireVerifiedUser()` may still be used with imported or manually maintained users, but the generated config must not create a default path where ordinary users can be required to verify without any verification endpoint available.
+Static config validation must reject combinations that require verified email while disabling all verification routes. `requireVerifiedUser(authConfig)` may still be used with imported or manually maintained users, but the generated config must not create a default path where ordinary users can be required to verify without any verification endpoint available.
 
 ---
 
@@ -1473,6 +1473,7 @@ Required functions:
 
 ```ts
 createVerificationToken(input): Promise<VerificationTokenRow>;
+replaceActiveVerificationToken(input): Promise<VerificationTokenRow>;
 revokeActiveVerificationTokens(input): Promise<number>;
 consumeVerificationToken(input): Promise<VerificationTokenRow | null>;
 consumeMagicLinkAndCreateSession(input): Promise<{ user: UserRow; session: SessionRow; redirectTo: string } | null>;
@@ -1482,7 +1483,7 @@ incrementTokenAttempts(tokenId): Promise<void>;
 deleteExpiredVerificationTokens(now): Promise<number>;
 ```
 
-Repository functions never generate raw tokens, raw session cookies, password hashes, or token-hash envelopes. `createVerificationToken` receives a precomputed `token_hash`; flow-specific consume functions receive any precomputed session rows, session token hashes, and password hashes needed for their batch. `createVerificationToken` must reject subject shapes that are invalid for the token type. A token row must never contain both `user_id` and `normalized_email`; magic-link JIT-signup tokens start with a normalized-email subject and switch to a user subject only inside the successful consume transaction. `consumeVerificationToken` is useful for tests and simple flows. Route handlers must use flow-specific consume functions so token consumption and state mutation happen in one `db.batch()` transaction. Token request flows must revoke previous active tokens of the same type for the same subject namespace when the active-token policy is `invalidate-previous`; revocation writes both `revoked_at` and a non-null `revoked_reason`.[^active-token-policy][^repo-token-boundary]
+Repository functions never generate raw tokens, raw session cookies, password hashes, or token-hash envelopes. `createVerificationToken` and `replaceActiveVerificationToken` receive a precomputed `token_hash`; flow-specific consume functions receive any precomputed session rows, session token hashes, and password hashes needed for their batch. Token creation must reject subject shapes that are invalid for the token type. A token row must never contain both `user_id` and `normalized_email`; magic-link JIT-signup tokens start with a normalized-email subject and switch to a user subject only inside the successful consume transaction. `consumeVerificationToken` is useful for tests and simple flows. Route handlers must use flow-specific consume functions so token consumption and state mutation happen in one `db.batch()` transaction. When the active-token policy is `invalidate-previous`, token request flows must use `replaceActiveVerificationToken` to revoke prior active tokens and insert the replacement atomically in one D1 batch; revocation writes both `revoked_at` and a non-null `revoked_reason`.[^active-token-policy][^repo-token-boundary]
 
 ### 13.4 Event repository
 
@@ -1858,6 +1859,8 @@ Rules:
 
 - `__Host-` requires `Secure`, HTTPS, `Path=/`, and no `Domain`.
 - `__Secure-` requires `Secure` and HTTPS.
+- Custom secure host-only names must use `__Host-`; custom secure names with a configured `Domain` must use `__Secure-`.
+- Relaxed custom names are permitted only for local development without `Secure`.
 - Cross-subdomain mode must be explicit.
 - `doctor` must reject invalid prefix/flag/domain combinations.
 
@@ -2380,7 +2383,7 @@ Response:
 Default behavior:
 
 - always return `{ "ok": true }`
-- if user exists, is not disabled, and is unverified, revoke previous active verification tokens, create a new verification token, and send email
+- if user exists, is not disabled, and is unverified, atomically replace the previous active verification token and send email
 - if user does not exist or is already verified, do not reveal that fact
 - rate-limit by IP and normalized email
 
@@ -2437,7 +2440,7 @@ Default behavior:
 
 - always return `{ "ok": true }`;
 - validate and store `afterResetRedirectTo` as the post-reset redirect target;
-- if user exists and is not disabled, revoke previous active reset tokens, create a password reset token, and email a link;
+- if user exists and is not disabled, atomically replace the previous active reset token and email a link;
 - default reset email link points to built-in `/auth/password/reset?token=...`;
 - token is not consumed when the reset page is opened;
 - rate-limit by IP and normalized email;
@@ -3052,7 +3055,7 @@ const app = new Hono<Env>();
 
 app.route(authConfig.basePath, createAuthRoutes(authConfig));
 
-app.get("/api/me", requireUser(), async (c) => {
+app.get("/api/me", requireUser(authConfig), async (c) => {
   const user = getAuthUser(c);
   return c.json({ user });
 });
@@ -3084,9 +3087,9 @@ Expose:
 
 - `getSession(request, env, ctx, config)`
 - `getUser(request, env, ctx, config)`
-- `requireUser()`
-- `requireVerifiedUser()`[^verified-user]
-- `optionalUser()`
+- `requireUser(authConfig)`
+- `requireVerifiedUser(authConfig)`[^verified-user]
+- `optionalUser(authConfig)`
 - `getAuthUser(c)` for Hono
 
 ---
@@ -3514,12 +3517,12 @@ Metrics must avoid raw PII. Use HMACed or aggregate dimensions only.
 
 ### 28.10 Verified-user access control
 
-Provide a first-class `requireVerifiedUser()` middleware and equivalent plain Worker helper.[^verified-user]
+Provide a first-class `requireVerifiedUser(authConfig)` middleware and equivalent plain Worker helper.[^verified-user]
 
 Rules:
 
-- `requireUser()` requires a valid session;
-- `requireVerifiedUser()` requires a valid session and `email_verified_at IS NOT NULL`;
+- `requireUser(authConfig)` requires a valid session;
+- `requireVerifiedUser(authConfig)` requires a valid session and `email_verified_at IS NOT NULL`;
 - docs must show when to use each helper;
 - route-level authorization remains the application’s responsibility in v1.
 
@@ -4221,7 +4224,7 @@ const app = new Hono();
 
 app.route(authConfig.basePath, createAuthRoutes(authConfig));
 
-app.get("/api/me", requireUser(), async (c) => {
+app.get("/api/me", requireUser(authConfig), async (c) => {
   const user = getAuthUser(c);
   return c.json({ user });
 });
