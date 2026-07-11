@@ -13,7 +13,10 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-describe("package checks", () => {
+// Most tests spawn the real package-check script, which shells out to
+// `pnpm pack` for every publishable package (~6s on slower machines), so the
+// default 5s vitest timeout is not enough headroom off CI.
+describe("package checks", { timeout: 60_000 }, () => {
   it("accepts the release workflow fixture", async () => {
     const root = await packageCheckFixture();
     const result = runPackageCheck(root);
@@ -1054,7 +1057,7 @@ describe("package checks", () => {
         `@cf-auth/cli@${packageVersion}: release version must not use placeholder 0.0.0 base`,
       );
     }
-  }, 20_000);
+  });
 
   it("rejects unsupported publishable package release channels", async () => {
     for (const packageVersion of [
@@ -1078,7 +1081,7 @@ describe("package checks", () => {
         `@cf-auth/cli@${packageVersion}: release versions must use alpha, beta, or stable 1.0+`,
       );
     }
-  }, 20_000);
+  });
 
   it("rejects workspace dependency ranges in packed manifests", async () => {
     const root = await packageCheckFixture();
