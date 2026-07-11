@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 
 const defaultSmokeEndpointSource = new URL(
   "smoke-production-cloudflare.mjs",

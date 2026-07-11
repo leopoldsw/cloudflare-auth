@@ -1,7 +1,7 @@
 {
   "node": ">=22.13.0",
   "pnpm": "11.1.1",
-  "typescript": "6.0.3",
+  "typescript": "7.0.2",
   "wrangler": "4.110.0",
   "hono": "4.12.29",
   "tsup": "8.5.1",

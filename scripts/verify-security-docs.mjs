@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 
 const docs = {
   metrics: await readFile("docs/metrics.md", "utf8"),
