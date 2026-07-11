@@ -1,6 +1,7 @@
 # Cloudflare Auth — Implementation-Ready Plan for AI Coding Agents
 
 **Date:** May 13, 2026  
+**Amended:** July 11, 2026 — one-command production path: Sections 4.3/4.4 reworked, Section 27.1 command list extended, new Sections 27.11 (`provision`, retroactive) and 27.12 (`setup`), Stage 10 deliverables/acceptance, Section 31.5 setup tests, Sections 33.2/33.3 rows, new Section 37 (agent packaging; footnotes renumbered to Section 38).  
 **Status:** Implementation-ready specification  
 **Target outcome:** A polished open-source GitHub repo that can be installed, tested, deployed, and consumed as packages by Cloudflare Workers developers.  
 **Working project name:** Cloudflare Auth  
@@ -303,13 +304,25 @@ npx --package @cf-auth/cli@latest cf-auth init
 
 ### 4.3 Production deploy path
 
+The supported production path is one command from an initialized app:
+
 ```bash
-npx cf-auth@latest doctor --env production
+npx cf-auth@latest setup --env production
+```
+
+`setup` composes, in order: preflight checks, public-origin validation, D1 provisioning, remote migrations with schema verification, remote `AUTH_SECRET` creation only when the secret is missing, `doctor`, `wrangler deploy`, and HTTP verification of the deployed auth endpoints. `setup --report` emits machine-readable JSON for automation. Section 27.12 is the authoritative contract.
+
+The equivalent granular decomposition remains supported and documented:
+
+```bash
+npx cf-auth@latest provision --env production
+npx cf-auth@latest rotate-secret --apply --env production
 npx cf-auth@latest migrate --remote --env production
+npx cf-auth@latest doctor --env production
 npx cf-auth@latest deploy --env production
 ```
 
-or:
+or, after resources and secrets exist:
 
 ```bash
 npx cf-auth@latest deploy --migrate --env production
@@ -325,9 +338,9 @@ Expected result:
 - Worker deploys through Wrangler.
 - CLI prints deployed auth endpoints and any remaining external Cloudflare Email/DNS setup steps.
 
-### 4.4 Future one-line production path
+### 4.4 Future create-package deploy path
 
-This command is not a v1 requirement and must not appear in public quickstarts until it is implemented and tested:
+`cf-auth setup --env production` (Section 27.12) is the supported one-line production path inside an initialized app. A create-package variant is not a v1 requirement and must not appear in public quickstarts until it is implemented and tested:
 
 ```bash
 npm create cloudflare-auth@latest my-app -- --deploy
@@ -337,12 +350,9 @@ When a later spec enables it, the command must:
 
 1. scaffold the app;
 2. install dependencies;
-3. create or provision D1;
-4. generate local and remote secrets;
-5. run local migrations;
-6. run remote migrations only when an explicit deployment environment is selected;
-7. deploy through Wrangler;
-8. print any Cloudflare Email/DNS steps that cannot be automated.
+3. run local migrations for the development environment;
+4. delegate provisioning, remote migrations, remote secrets, deploy, and verification to `cf-auth setup --env <name>` only when an explicit deployment environment is selected;
+5. print any Cloudflare Email/DNS steps that cannot be automated.
 
 Cloudflare browser login may still be required.
 
@@ -3104,6 +3114,8 @@ Required v1 commands:
 
 ```bash
 cf-auth init
+cf-auth setup
+cf-auth provision
 cf-auth migrate
 cf-auth deploy
 cf-auth doctor
@@ -3162,6 +3174,7 @@ Outputs:
 - route mount snippet or safe route patch
 - `.dev.vars.example`
 - `.env.example` if applicable
+- `AGENTS.md` agent runbook per Section 37.2, written only when the file does not already exist
 - README next steps
 
 Patch rules:
@@ -3381,6 +3394,73 @@ Default retention:
 | used/revoked/expired verification tokens | delete after 7 days |
 | expired rate limit rows | delete after 24 hours |
 | auth events | keep 90 days by default |
+
+### 27.11 `cf-auth provision`
+
+Flags:
+
+```bash
+cf-auth provision --env production
+cf-auth provision --env production --location weur
+cf-auth provision --env production --jurisdiction eu
+cf-auth provision --dry-run --env production
+```
+
+Rules:
+
+- require `--env <name>` and a preview/production `AUTH_ENV` in the selected environment;
+- require exactly one `AUTH_DB` binding in the selected environment;
+- resolve one accessible Cloudflare account deterministically: `env.<selected>.account_id`, then root `account_id`, then `CLOUDFLARE_ACCOUNT_ID`, then Wrangler's account list only when exactly one account is accessible, recording that account in the root config;
+- list D1 databases in the selected account, adopt the single exact `database_name` match, or create the database and re-discover its UUID;
+- refuse to choose implicitly when multiple databases share the configured name;
+- write a sibling `.cf-auth-backup` before atomically patching `database_id`; repeated runs are idempotent;
+- reject a configured, usable `database_id` that disagrees with the selected account instead of silently retargeting;
+- `--location` and `--jurisdiction` are mutually exclusive first-creation placement hints;
+- `--dry-run` prints the list/create/patch plan without calling Wrangler or changing files.
+
+### 27.12 `cf-auth setup`
+
+`setup` is the one-command production path: one idempotent, non-interactive command that converges an initialized app to a deployed, verified auth Worker.
+
+Flags:
+
+```bash
+cf-auth setup --env production
+cf-auth setup --report --env production
+cf-auth setup --report --env production --output setup-report.json
+cf-auth setup --dry-run --env production
+cf-auth setup --env production --origin https://app.example.com
+cf-auth setup --env production --skip-verify
+```
+
+Ordered steps, each recorded with a stable id:
+
+1. `preflight`: Wrangler availability and version, readable Wrangler config, valid selected named environment with preview/production `AUTH_ENV`, and Cloudflare login/account access, including a hard stop when multiple accounts are accessible without an explicit `account_id`.
+2. `origin`: `vars.AUTH_PUBLIC_ORIGIN` for the selected environment must be an exact `https` origin; the generated placeholder counts as missing. `--origin` validates the value and patches the selected environment after writing a sibling `.cf-auth-backup`.
+3. `provision`: Section 27.11 behavior.
+4. `migrate`: Section 27.3 remote behavior plus applied-schema verification, so the schema exists before any Worker version can go live.
+5. `secret`: probe remote `AUTH_SECRET` with `wrangler secret list`; create it through `wrangler secret bulk` only when it is missing (Wrangler creates a draft Worker when the Worker does not exist yet, and a bulk update on an existing Worker deploys a new version immediately). `setup` must never rotate an existing secret.
+6. `doctor`: Section 27.4 checks; the full doctor report is embedded in the setup report.
+7. `deploy`: Section 27.5 behavior, reusing the step-6 doctor result so doctor runs exactly once per setup. A missing workers.dev subdomain failure must surface the dashboard onboarding URL as the fix.
+8. `verify`: unless `--skip-verify`, exercise the deployed `/auth` signup, login, current-user, and logout flows with host-only session-cookie assertions, using a throwaway user that is disabled afterwards.
+
+Failure contract:
+
+- No step may prompt interactively.
+- The first failed step stops the run; later steps are recorded as `skipped`.
+- Every failed step carries exactly one `fix` string: either a single runnable command in the documented scoped `npx --package @cf-auth/cli@latest cf-auth ...` form, or one exact configuration/dashboard instruction. Human-only steps must reference `docs/manual-steps.md`.
+- Non-report mode prints exactly one final `Next action:` line on failure and exits nonzero.
+
+Report contract:
+
+- `--report` emits redaction-safe JSON validating against `schemas/setup-report.schema.json`: `steps[]` with `id`/`status`/`message`/`fix`, a `summary`, `nextAction` equal to the first failure's fix, and the embedded doctor report when the doctor step ran.
+- `--output` writes the report with mode `0600` on POSIX platforms, rejects symbolic-link targets, and replaces atomically.
+
+Convergence contract:
+
+- Reruns are safe; a rerun after success performs no resource creation, secret writes, or config rewrites.
+- Automation converges by executing each failed step's `fix` verbatim and rerunning `setup --report`, bounded per Section 37.1.
+- `--dry-run` prints the full planned step sequence and performs no Wrangler calls, file changes, or network requests.
 
 ---
 
@@ -3844,12 +3924,15 @@ Deliverables:
 - alpha instructions
 - issue templates
 - `doctor --report`
+- `cf-auth setup` one-command production path with `schemas/setup-report.schema.json` (Section 27.12)
+- `docs/automation.md` automation contract and `docs/manual-steps.md` human-steps runbook
+- scaffolded `AGENTS.md` agent runbook and the repository Claude Code skill (Section 37)
 - patched docs based on feedback
 
 Acceptance criteria:
 
 - at least 5 alpha users complete local setup from a clean directory using the alpha instructions without maintainer-supplied shell commands outside the docs
-- at least 3 alpha users complete production deploy using `cf-auth doctor --env production`, `cf-auth migrate --remote --env production`, and `cf-auth deploy --env production`
+- at least 3 alpha users complete production deploy using either `cf-auth setup --env production` or the documented granular sequence (`cf-auth doctor --env production`, `cf-auth migrate --remote --env production`, and `cf-auth deploy --env production`)
 - median reported local setup time is under 10 minutes, measured from first scaffold command to successful signup/login
 - `doctor --report --env production` emits redaction-safe JSON, validates against the checked-in report schema, and omits raw secrets, tokens, cookies, emails, IPs, and user agents
 - at least 80% of alpha setup/deploy failures have either a `doctor` diagnostic or a troubleshooting entry with an exact fix before public beta starts
@@ -3999,6 +4082,13 @@ Test:
 - migration command generation, including required `--env` for named remote environments
 - doctor output
 - deploy dry run
+- setup orchestration order, including doctor-once composition with deploy
+- setup idempotent rerun performs no resource creation, secret writes, or config rewrites
+- setup report validates against `schemas/setup-report.schema.json`, redacts sensitive values, and honors `--output` permission and symbolic-link rules
+- every failed setup step carries exactly one fix and `nextAction` equals the first failure's fix
+- setup never prompts and never rotates an existing remote secret
+- setup dry-run performs no Wrangler calls, file changes, or network requests
+- init `AGENTS.md` runbook emission matches the checked-in template copies and preserves existing files
 - package command docs consistency
 - admin recovery helper dry runs
 
@@ -4109,6 +4199,8 @@ Do not lead with architecture theory. The README must clearly state that Cloudfl
 | `docs/turnstile.md` | Optional Turnstile setup. |
 | `docs/migrations.md` | Migration lifecycle and upgrades. |
 | `docs/troubleshooting.md` | Common errors and exact fixes. |
+| `docs/automation.md` | Automation contract: inputs, one-command setup, report convergence loop, guarantees, and boundaries. |
+| `docs/manual-steps.md` | Human-only Cloudflare steps with dashboard navigation and per-step verification. |
 | `docs/roadmap.md` | What is next and what is not planned. |
 
 ### 33.3 Troubleshooting matrix
@@ -4135,6 +4227,9 @@ Do not lead with architecture theory. The README must clearly state that Cloudfl
 | JSON request returns `415` | Send `Content-Type: application/json`; charset parameters are allowed. |
 | Cross-site frontend cannot stay logged in | Use same-origin or explicit same-site cross-origin mode; v1 does not support `SameSite=None` cross-site auth. |
 | Reset token appears in analytics/referrer logs | Use the built-in reset page or remove all third-party resources and strip the token before loading app code. |
+| Setup did not converge | Rerun `npx cf-auth@latest setup --report --env production`, execute each failed step's `fix`, and follow `docs/manual-steps.md` for human-only steps. |
+| workers.dev subdomain not registered | Register it once at the dashboard onboarding URL printed by the deploy failure, then rerun setup. |
+| Email Sending requires Workers Paid | Enable Workers Paid and complete sender/domain onboarding per `docs/manual-steps.md`, then rerun `npx cf-auth@latest doctor --env production`. |
 
 ---
 
@@ -4349,7 +4444,35 @@ A GitHub repo is ready for public beta when:
 
 ---
 
-## 37. Implementation Rationale Footnotes
+## 37. Agent Packaging and Automation Contract
+
+### 37.1 Convergence loop
+
+The supported automation loop over the CLI is normative:
+
+1. Run `npx --package @cf-auth/cli@latest cf-auth setup --report --env <name>` and parse the JSON against `schemas/setup-report.schema.json`.
+2. If `ok` is `true`, stop; setup is complete.
+3. Otherwise execute each failed step's `fix` string exactly as printed.
+4. When a failure references a human-only step (`docs/manual-steps.md`), stop and hand the exact numbered step to a human operator. Automation must never drive the Cloudflare dashboard.
+5. Rerun step 1. Bound the loop to 5 iterations and stop early when two consecutive runs report identical failure sets, summarizing what remains.
+
+The same loop applies to `doctor --report` for diagnosis-only flows.
+
+### 37.2 Scaffolded agent runbook
+
+`cf-auth init` writes an `AGENTS.md` runbook into generated apps and never overwrites an existing file. The checked-in template copies must stay byte-identical to the generated runbook, enforced by a regression test. The runbook must be fully self-contained — no repository-relative links — and must cover: the local development loop, the one-command production path, the Section 37.1 convergence loop, the minimum API token scopes, human-only steps with completion checks, post-deploy verification, common failures with exact fixes, and operating invariants (never print or commit secrets, never rotate an existing secret without previous-secret flags, dry-run first in unfamiliar accounts, never automate the Cloudflare dashboard, append-only migrations).
+
+### 37.3 Claude Code skill
+
+The repository ships one project-level skill at `.claude/skills/cf-auth-setup/SKILL.md` implementing the Section 37.1 loop with preflight and manual-step handoff rules. v1 does not emit per-project skill copies from `init`; the cross-agent baseline is the AGENTS.md runbook. Publishing the skill as a plugin or marketplace entry is a post-beta follow-up.
+
+### 37.4 MCP boundary
+
+No MCP server is planned for v1 or public beta. Terminal agents already hold the required capability through the CLI, and Cloudflare ships official MCP servers for platform access. A future MCP server, if ever built, must wrap the same setup/report contract rather than reimplement provisioning. No other MCP work is authorized by this specification.
+
+---
+
+## 38. Implementation Rationale Footnotes
 
 [^token-storage]: Storing only HMACed token material keeps D1 from becoming a bearer-token database. If D1 rows are exposed, the attacker still needs the root secret to turn stored hashes into usable tokens.
 
