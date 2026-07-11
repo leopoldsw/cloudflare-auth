@@ -209,7 +209,7 @@ for (const dir of packageDirs) {
   } else if (pkg.private) {
     failures.push(`${pkg.name}: publishable packages must not be private`);
   }
-  if (pkg.engines?.node !== ">=22.12.0")
+  if (pkg.engines?.node !== ">=22.13.0")
     failures.push(`${pkg.name}: node engine mismatch`);
   if (expected?.bin && !pkg.bin?.[expected.bin]) {
     failures.push(`${pkg.name}: missing ${expected.bin} bin`);

@@ -735,7 +735,7 @@ Initial v1 floor:
 
 | Tool or runtime | Minimum support target |
 |---|---|
-| Node.js for CLI/build tooling | `>=22.12.0`; generated `package.json` files must use the same engine floor. |
+| Node.js for CLI/build tooling | `>=22.13.0`; generated `package.json` files must use the same engine floor. |
 | pnpm | pnpm `11.x`; Stage 1 must pin the exact patch version in root `packageManager`, and generated projects must use the same major version. |
 | Wrangler | Wrangler v4 `>=4.36.0` for all generated projects and examples, including projects that do not enable the optional Workers Rate Limiting API binding. |
 | TypeScript | `>=6.0 <7` until CI explicitly validates TypeScript 7 declarations, generated examples, and package boundary tests. |
