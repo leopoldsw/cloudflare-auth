@@ -131,7 +131,7 @@ function withMountedBasePath(request: Request, basePath: string): Request {
 
 function executionContext(c: Context): ExecutionContext {
   try {
-    return c.executionCtx;
+    return c.executionCtx as unknown as ExecutionContext;
   } catch {
     return { waitUntil() {} } as unknown as ExecutionContext;
   }

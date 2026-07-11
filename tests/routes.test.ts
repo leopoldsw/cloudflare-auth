@@ -2791,8 +2791,7 @@ function inconsistentBatchD1Database(db: D1Database): D1Database {
     async batch(statements) {
       const results = await db.batch(statements);
       const sessionInsert = results[1] as
-        | { meta?: { changes?: number } }
-        | undefined;
+        { meta?: { changes?: number } } | undefined;
       if (sessionInsert?.meta) sessionInsert.meta.changes = 0;
       return results;
     },

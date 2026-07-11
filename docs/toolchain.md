@@ -7,11 +7,11 @@ package artifacts are tested against one known set of versions.
 | -------------------------------- | ---------------------------------------------------- |
 | Node.js                          | `>=22.13.0`                                          |
 | pnpm                             | `11.1.1`; generated projects require pnpm `>=11 <12` |
-| TypeScript                       | `6.0.3`                                              |
-| Wrangler                         | `4.90.1`                                             |
-| Hono                             | `4.12.18`                                            |
+| TypeScript                       | `7.0.2`                                              |
+| Wrangler                         | `4.110.0`                                            |
+| Hono                             | `4.12.29`                                            |
 | tsup                             | `8.5.1`                                              |
-| Vitest                           | `4.1.6`                                              |
+| Vitest                           | `4.1.10`                                             |
 | Zod                              | `4.4.3`                                              |
 | Changesets                       | `2.31.0`                                             |
 | Workers compatibility date       | `2026-05-15`                                         |

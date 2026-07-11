@@ -79,9 +79,7 @@ function redactIpLiterals(value: string): string {
 }
 
 export type VerificationTokenType =
-  | "magic_link"
-  | "email_verification"
-  | "password_reset";
+  "magic_link" | "email_verification" | "password_reset";
 export type ActiveTokenPolicy = "invalidate-previous" | "allow-multiple-active";
 
 export interface UserRow {
@@ -564,10 +562,7 @@ export function validateRedirectTarget(input: {
 
 export type AuthTokenPurpose = "ses" | "magic" | "verify" | "reset";
 export type TokenHashPurpose =
-  | "session"
-  | "magic_link"
-  | "email_verification"
-  | "password_reset";
+  "session" | "magic_link" | "email_verification" | "password_reset";
 export type HkdfPurpose =
   | "session-token-hmac"
   | "email-token-hmac"
@@ -618,9 +613,7 @@ export interface ParsedPasswordHashEnvelope extends PasswordHashParams {
 }
 
 export type PasswordHashProfileName =
-  | "development-fast"
-  | "workers-balanced"
-  | "high-cost";
+  "development-fast" | "workers-balanced" | "high-cost";
 
 export interface PasswordHashOptions {
   profile?: PasswordHashProfileName;
