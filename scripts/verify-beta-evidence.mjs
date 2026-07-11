@@ -5,6 +5,7 @@ import {
   containsSensitiveEvidenceValue,
 } from "./evidence-redaction.mjs";
 import {
+  commandsIncludeSetup,
   documentedLocalSetupCommandOrder,
   documentedLocalSetupCommands,
   documentedProductionDeployCommandOrder,
@@ -239,21 +240,29 @@ function validateProductionSmoke(value) {
       failures.push(`${evidencePath}: ${path}.${field} must be true`);
     }
   }
-  requireCommandContains(
-    value.commands,
-    "cf-auth doctor --env production",
-    `${path}.commands`,
-  );
-  requireCommandContains(
-    value.commands,
-    "cf-auth migrate --remote --env production",
-    `${path}.commands`,
-  );
-  requireCommandContains(
-    value.commands,
-    "cf-auth deploy --env production",
-    `${path}.commands`,
-  );
+  if (commandsIncludeSetup(value.commands)) {
+    requireCommandIncludesAll(
+      value.commands,
+      ["cf-auth setup", "--env production"],
+      `${path}.commands`,
+    );
+  } else {
+    requireCommandContains(
+      value.commands,
+      "cf-auth doctor --env production",
+      `${path}.commands`,
+    );
+    requireCommandContains(
+      value.commands,
+      "cf-auth migrate --remote --env production",
+      `${path}.commands`,
+    );
+    requireCommandContains(
+      value.commands,
+      "cf-auth deploy --env production",
+      `${path}.commands`,
+    );
+  }
   if (typeof value.packageTag === "string") {
     requireCommandContains(
       value.commands,
@@ -432,6 +441,23 @@ function requireCommandContains(commands, expected, path) {
     )
   ) {
     failures.push(`${evidencePath}: ${path} must include ${expected}`);
+  }
+}
+
+function requireCommandIncludesAll(commands, expectedParts, path) {
+  const commandList = Array.isArray(commands) ? commands : [];
+  if (
+    !commandList.some(
+      (command) =>
+        typeof command === "string" &&
+        expectedParts.every((part) => command.includes(part)),
+    )
+  ) {
+    failures.push(
+      `${evidencePath}: ${path} must include a command containing ${expectedParts.join(
+        ", ",
+      )}`,
+    );
   }
 }
 

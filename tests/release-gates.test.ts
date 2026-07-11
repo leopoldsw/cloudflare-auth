@@ -1146,6 +1146,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
 
   const requiredFiles = [
     "AGENTS.md",
+    ".claude/skills/cf-auth-setup/SKILL.md",
     ".github/dependabot.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
@@ -1162,6 +1163,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     "docs/alpha-evidence.example.json",
     "docs/alpha.md",
     "docs/architecture.md",
+    "docs/automation.md",
     "docs/beta-evidence.example.json",
     "docs/cloudflare-permissions.md",
     "docs/decisions/password-benchmark.md",
@@ -1169,12 +1171,17 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
     "docs/deploy-to-cloudflare.md",
     "docs/github-actions-security.md",
     "docs/known-limitations.md",
+    "docs/manual-steps.md",
     "docs/package-ownership.example.json",
     "docs/platform-assumptions.md",
     "docs/public-beta.md",
     "docs/release-readiness-audit.md",
     "docs/security-release-tracker.example.json",
     "schemas/doctor-report.schema.json",
+    "schemas/setup-report.schema.json",
+    "templates/hono-basic/AGENTS.md",
+    "templates/worker-basic/AGENTS.md",
+    "templates/react-vite-worker/AGENTS.md",
     "scripts/evidence-commands.mjs",
     "scripts/export-deploy-template.mjs",
     "scripts/check-package-names.mjs",
@@ -1199,7 +1206,35 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
   ];
 
   const requiredText = new Map<string, string[]>([
-    ["README.md", ["SECURITY.md", "docs/known-limitations.md"]],
+    [
+      "README.md",
+      [
+        "SECURITY.md",
+        "docs/known-limitations.md",
+        "docs/automation.md",
+        "docs/manual-steps.md",
+      ],
+    ],
+    ["AGENTS.md", ["cf-auth setup --env production", "docs/automation.md"]],
+    [
+      "docs/automation.md",
+      [
+        "cf-auth setup --report --env production",
+        "schemas/setup-report.schema.json",
+        "manual-steps.md",
+        "cloudflare-permissions.md",
+      ],
+    ],
+    [
+      "docs/manual-steps.md",
+      [
+        "CLOUDFLARE_API_TOKEN",
+        "workers.dev",
+        "Workers Paid",
+        "AUTH_PUBLIC_ORIGIN",
+        "cf-auth doctor --env production",
+      ],
+    ],
     [
       "SECURITY.md",
       [
@@ -1284,6 +1319,7 @@ async function releaseGateFixture(options: ReleaseGateFixtureOptions) {
         "pnpm check:package-names",
         "Cloudflare API tokens",
         "doctor --report",
+        "cf-auth setup --report --env production",
       ],
     ],
     [
@@ -1881,6 +1917,7 @@ async function writeDocsCoverageFixtures(root: string) {
       '    case "-h":',
       "      return 0;",
       '    case "init":',
+      '    case "setup":',
       '    case "migrate":',
       '    case "doctor":',
       '    case "deploy":',
@@ -2084,6 +2121,10 @@ async function writeDocsCoverageFixtures(root: string) {
     "docs/cli.md",
     [
       "cf-auth init",
+      "cf-auth setup",
+      "cf-auth setup --env production",
+      "cf-auth setup --report --env production",
+      "cf-auth setup --dry-run --env production",
       "cf-auth migrate",
       "cf-auth doctor",
       "cf-auth deploy",
@@ -2200,6 +2241,7 @@ async function writeDocsCoverageFixtures(root: string) {
     root,
     "docs/deployment.md",
     [
+      "cf-auth setup --env production",
       "cf-auth doctor --env production",
       "cf-auth migrate --remote --env production",
       "cf-auth deploy --env production",
