@@ -35,6 +35,6 @@
     "@cf-auth/worker": "workspace:*"
   },
   "devDependencies": {
-    "hono": "4.12.18"
+    "hono": "4.12.29"
   }
 }
