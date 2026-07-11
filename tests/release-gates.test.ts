@@ -2268,7 +2268,7 @@ async function writeExamplesFixtures(root: string) {
           wrangler: "4.90.1",
         },
         engines: {
-          node: ">=22.12.0",
+          node: ">=22.13.0",
         },
       }),
     );
@@ -2359,7 +2359,7 @@ async function writeDeployTemplateFixtures(root: string) {
     root,
     "scripts/version-matrix.json",
     JSON.stringify({
-      node: ">=22.12.0",
+      node: ">=22.13.0",
       pnpm: "11.1.1",
       hono: "4.12.18",
       typescript: "6.0.3",

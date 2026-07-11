@@ -179,7 +179,7 @@ async function deployTemplateFixture(
     "-- index migration\n",
   );
   await writeJson(join(root, "scripts", "version-matrix.json"), {
-    node: ">=22.12.0",
+    node: ">=22.13.0",
     pnpm: "11.1.1",
     hono: "4.12.18",
     typescript: "6.0.3",

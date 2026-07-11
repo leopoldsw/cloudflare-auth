@@ -5,7 +5,7 @@ package artifacts are tested against one known set of versions.
 
 | Tool or runtime                  | Supported version                                    |
 | -------------------------------- | ---------------------------------------------------- |
-| Node.js                          | `>=22.12.0`                                          |
+| Node.js                          | `>=22.13.0`                                          |
 | pnpm                             | `11.1.1`; generated projects require pnpm `>=11 <12` |
 | TypeScript                       | `6.0.3`                                              |
 | Wrangler                         | `4.90.1`                                             |

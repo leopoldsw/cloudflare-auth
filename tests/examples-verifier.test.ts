@@ -70,7 +70,7 @@ describe("examples verifier", () => {
         wrangler: "4.90.1",
       },
       engines: {
-        node: ">=22.12.0",
+        node: ">=22.13.0",
       },
     });
     await writeJson(join(root, "templates", "worker-basic", "package.json"), {
@@ -88,7 +88,7 @@ describe("examples verifier", () => {
         wrangler: "4.90.1",
       },
       engines: {
-        node: ">=22.12.0",
+        node: ">=22.13.0",
       },
     });
     const result = runExamplesVerifier(root);
@@ -226,7 +226,7 @@ async function examplesFixture(
   await mkdir(join(root, "migrations"), { recursive: true });
   await writeFakePnpm(root, options);
   await writeJson(join(root, "scripts", "version-matrix.json"), {
-    node: ">=22.12.0",
+    node: ">=22.13.0",
     pnpm: "11.1.1",
     hono: "4.12.18",
     typescript: "6.0.3",
@@ -278,7 +278,7 @@ async function writeProject(root: string, dir: string) {
       wrangler: "4.90.1",
     },
     engines: {
-      node: ">=22.12.0",
+      node: ">=22.13.0",
     },
   });
   await writeJson(join(project, "wrangler.jsonc"), {
