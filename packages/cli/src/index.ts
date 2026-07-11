@@ -3595,7 +3595,7 @@ function templatePackageJson(name: string, template: InitTemplate) {
     },
     dependencies,
     devDependencies: {
-      typescript: "6.0.3",
+      typescript: "7.0.2",
       wrangler: "4.90.1",
       vitest: "4.1.6",
     },

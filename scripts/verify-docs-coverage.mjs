@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 
 import { isJsonObject } from "./evidence-validation.mjs";
 import { requiredAuthSmokeEndpoints } from "./smoke-endpoints.mjs";
