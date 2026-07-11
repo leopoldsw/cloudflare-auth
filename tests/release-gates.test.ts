@@ -732,8 +732,8 @@ describe("release gates", () => {
         if: \${{ !inputs.package_names_confirmed }}
         run: |
           exit 1
-      - uses: actions/checkout@v5`,
-      `      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7`,
+      `      - uses: actions/checkout@v7
       - name: Require package-name gate
         if: \${{ false }}
         run: |
@@ -1550,7 +1550,7 @@ function releaseWorkflowFixtureText() {
     "        if: ${{ !inputs.package_names_confirmed }}",
     "        run: |",
     "          exit 1",
-    "      - uses: actions/checkout@v5",
+    "      - uses: actions/checkout@v7",
     "      - run: pnpm install --frozen-lockfile",
     "      - run: pnpm package:check",
     "      - run: pnpm release:gates",

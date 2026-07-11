@@ -989,8 +989,8 @@ describe("package checks", () => {
         run: |
           echo "Set package_names_confirmed=true only after npm package names and public docs are verified."
           exit 1
-      - uses: actions/checkout@v5`,
-      `      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7`,
+      `      - uses: actions/checkout@v7
       - name: Require package-name gate
         if: \${{ !inputs.package_names_confirmed }}
         run: |
