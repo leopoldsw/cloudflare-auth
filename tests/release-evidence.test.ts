@@ -3099,11 +3099,16 @@ function runScript(
   env: Record<string, string>,
   cwd = process.cwd(),
 ) {
+  // GitHub Actions injects GITHUB_REPOSITORY, which outranks the fixture
+  // repository inside the verifiers; scrub it so fixtures behave identically
+  // locally and in CI.
+  const baseEnv = { ...process.env };
+  delete baseEnv.GITHUB_REPOSITORY;
   return spawnSync(process.execPath, [join(process.cwd(), script)], {
     cwd,
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...baseEnv,
       CF_AUTH_EXPECTED_REPOSITORY: "cf-auth-release/cloudflare-auth",
       CF_AUTH_EVIDENCE_NOW: "2026-05-16T00:00:00.000Z",
       CF_AUTH_GITHUB_API_FIXTURE_JSON: JSON.stringify(githubEvidenceFixture()),
