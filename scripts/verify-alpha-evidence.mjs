@@ -5,6 +5,7 @@ import {
   containsSensitiveEvidenceValue,
 } from "./evidence-redaction.mjs";
 import {
+  commandsIncludeSetup,
   documentedLocalSetupCommandOrder,
   documentedLocalSetupCommands,
   documentedProductionDeployCommandOrder,
@@ -187,21 +188,29 @@ function validateEvidence(value, rawText) {
         failures.push(`${evidencePath}: ${path}.${field} must be true`);
       }
     }
-    requireCommandIncludesAll(
-      deploy.commands,
-      ["cf-auth doctor", "--report", "--env production"],
-      `${path}.commands`,
-    );
-    requireCommandContains(
-      deploy.commands,
-      "cf-auth migrate --remote --env production",
-      `${path}.commands`,
-    );
-    requireCommandContains(
-      deploy.commands,
-      "cf-auth deploy --env production",
-      `${path}.commands`,
-    );
+    if (commandsIncludeSetup(deploy.commands)) {
+      requireCommandIncludesAll(
+        deploy.commands,
+        ["cf-auth setup", "--report", "--env production"],
+        `${path}.commands`,
+      );
+    } else {
+      requireCommandIncludesAll(
+        deploy.commands,
+        ["cf-auth doctor", "--report", "--env production"],
+        `${path}.commands`,
+      );
+      requireCommandContains(
+        deploy.commands,
+        "cf-auth migrate --remote --env production",
+        `${path}.commands`,
+      );
+      requireCommandContains(
+        deploy.commands,
+        "cf-auth deploy --env production",
+        `${path}.commands`,
+      );
+    }
     requireCommandContains(
       deploy.commands,
       "@cf-auth/cli@alpha",

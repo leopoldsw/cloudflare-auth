@@ -10,6 +10,7 @@ const docs = {
   api: await readFile("docs/api.md", "utf8"),
   apiReport: await readFile("docs/api-report.md", "utf8"),
   architecture: await readFile("docs/architecture.md", "utf8"),
+  automation: await readFile("docs/automation.md", "utf8"),
   cli: await readFile("docs/cli.md", "utf8"),
   configSchema: await readFile("docs/config-schema.md", "utf8"),
   config: await readFile("docs/configuration.md", "utf8"),
@@ -22,6 +23,7 @@ const docs = {
     "docs/github-actions-security.md",
     "utf8",
   ),
+  manualSteps: await readFile("docs/manual-steps.md", "utf8"),
   migrations: await readFile("docs/migrations.md", "utf8"),
   readme: await readFile("README.md", "utf8"),
 };
@@ -38,6 +40,9 @@ for (const generator of cliGenerators) {
 }
 
 for (const command of [
+  "cf-auth setup --env production",
+  "cf-auth setup --report --env production",
+  "cf-auth setup --dry-run --env production",
   "cf-auth rotate-secret --print",
   "cf-auth rotate-secret --apply --env production",
   "cf-auth clean --local",
@@ -103,6 +108,7 @@ for (const text of ["cleanCfAuth", "ctx.waitUntil", "non-negative integer"]) {
 }
 
 for (const text of [
+  "cf-auth setup --env production",
   "cf-auth doctor --env production",
   "cf-auth migrate --remote --env production",
   "cf-auth deploy --env production",
@@ -120,6 +126,31 @@ for (const endpoint of await requiredAuthSmokeEndpoints(
 }
 
 requireText("README.md", docs.readme, "SECURITY.md");
+requireText("README.md", docs.readme, "docs/manual-steps.md");
+requireText("README.md", docs.readme, "docs/automation.md");
+
+for (const text of [
+  "cf-auth setup --report --env production",
+  "schemas/setup-report.schema.json",
+  "manual-steps.md",
+  "cloudflare-permissions.md",
+]) {
+  requireText("docs/automation.md", docs.automation, text);
+}
+
+for (const text of [
+  "CLOUDFLARE_API_TOKEN",
+  "workers.dev",
+  "Workers Paid",
+  "AUTH_PUBLIC_ORIGIN",
+  "cf-auth doctor --env production",
+]) {
+  requireText("docs/manual-steps.md", docs.manualSteps, text);
+}
+
+for (const text of ["cf-auth setup --env production", "docs/automation.md"]) {
+  requireText("AGENTS.md", docs.agents, text);
+}
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));

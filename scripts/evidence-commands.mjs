@@ -99,11 +99,27 @@ export function documentedLocalSetupCommandOrder() {
   ];
 }
 
+export function commandsIncludeSetup(commands) {
+  return (
+    Array.isArray(commands) &&
+    commands.some(
+      (command) =>
+        typeof command === "string" && command.includes("cf-auth setup"),
+    )
+  );
+}
+
 export function documentedProductionDeployCommands(
   packageTag,
   { doctorReport },
 ) {
+  const setupFlags =
+    "(?: --report| --skip-verify| --dry-run| --output [A-Za-z0-9][A-Za-z0-9._-]*| --origin https://[A-Za-z0-9.-]+(?::\\d+)?)*";
   return [
+    npxCfAuthCommand(
+      packageTag,
+      `setup${setupFlags} --env production${setupFlags}`,
+    ),
     npxCfAuthCommand(
       packageTag,
       doctorReport

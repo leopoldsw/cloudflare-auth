@@ -46,9 +46,8 @@
     "documentedProductionPath": false,
     "optInCloudflareAccountFixture": false,
     "commands": [
-      "npx --package @cf-auth/cli@beta cf-auth doctor --env production",
-      "npx --package @cf-auth/cli@beta cf-auth migrate --remote --env production",
-      "npx --package @cf-auth/cli@beta cf-auth deploy --env production"
+      "npx --package @cf-auth/cli@beta cf-auth setup --report --env production --output setup-report.json",
+      "npx --package @cf-auth/cli@beta cf-auth setup --env production --skip-verify"
     ],
     "smokedEndpoints": [
       "/auth/signup",
