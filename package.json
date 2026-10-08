@@ -41,20 +41,20 @@
     "benchmark:password": "tsx scripts/benchmark-password-worker.ts"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
+    "@changesets/cli": "3.0.3",
     "@cloudflare/vitest-pool-workers": "0.18.4",
-    "@cloudflare/workers-types": "5.20260711.1",
-    "@types/node": "26.1.1",
+    "@cloudflare/workers-types": "5.20261005.1",
+    "@types/node": "26.6.4",
     "@typescript/typescript6": "6.0.2",
-    "eslint": "10.7.0",
-    "hono": "4.12.29",
-    "prettier": "3.9.5",
+    "eslint": "10.12.0",
+    "hono": "4.13.13",
+    "prettier": "3.9.9",
     "tsup": "8.5.1",
-    "tsx": "4.23.0",
+    "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vitest": "4.1.10",
-    "wrangler": "4.110.0",
-    "zod": "4.4.3"
+    "vitest": "5.0.3",
+    "wrangler": "4.147.0",
+    "zod": "4.6.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
